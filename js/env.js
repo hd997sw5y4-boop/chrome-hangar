@@ -6,7 +6,7 @@ import { PARTS } from './rocket.js';
 import { applyPBR, setTexTier } from './tex.js';
 import { setModelTier } from './models.js';
 import { Outdoor } from './outdoor.js';
-import { Earth, GLOBE_FADE } from './earth.js';
+import { Earth, GLOBE_FADE, GLOBE_EDGE } from './earth.js';
 
 export const SPOTS = {
   stand: new THREE.Vector3(0, 0, 0),
@@ -102,7 +102,7 @@ export class World {
     const k = THREE.MathUtils.smoothstep(this.alt || 0, 1500, 40000), sp = 1 - 0.92 * k;
     const sc = this.scene; sc.backgroundIntensity = this.skyNorm * sp;
     if (!this.indoor) sc.environmentIntensity = Math.min(2.5, Math.sqrt(this.skyNorm)) * S.env * (1 - 0.6 * k);
-    sc.fog.density = S.fog * (1 - k);
+    sc.fog.density = S.fog * Math.exp(-(this.alt || 0) / 5000);   // thinner air, less haze
     sc.fog.color.copy(this.skyHorizon).multiplyScalar(this.skyNorm * 0.85 * sp);
     this.sun.intensity = S.sun * (1 + 0.3 * k); this.hemi.intensity = S.hemi * sp;
     this.renderer.toneMappingExposure = S.exp;
@@ -141,8 +141,8 @@ export class World {
   }
   render() {
     const r = this.renderer, cam = this.camera, now = performance.now(), dt = Math.min(0.1, (now - this._rt) / 1000); this._rt = now;
-    const alt = cam.position.y, gf = THREE.MathUtils.smoothstep(alt, 25000, 80000);
-    GLOBE_FADE.value = gf; if (this.outdoor) this.outdoor.group.visible = gf < 0.999;
+    const alt = cam.position.y, gf = THREE.MathUtils.smoothstep(alt, 6000, 22000);
+    GLOBE_FADE.value = gf; GLOBE_EDGE.value = this.earth.ready && !this.indoor ? THREE.MathUtils.smoothstep(alt, 1200, 4000) : 0; if (this.outdoor) this.outdoor.group.visible = gf < 0.999;
     if (alt > 600 && !this.indoor && this.earth.render(r, cam, dt)) {
       // planet pass drew sky + globe; local scene goes on top with fresh depth
       const bg = this.scene.background; this.scene.background = null;

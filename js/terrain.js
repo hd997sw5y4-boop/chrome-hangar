@@ -2,7 +2,7 @@
 // hills rising to mountains in the west, a sandy coastline and open ocean to the east.
 // Pure height function (no three.js) so placement code and tests can share it.
 import * as THREE from 'three';
-import { GLOBE_FADE } from './earth.js';
+import { GLOBE_FADE, GLOBE_EDGE } from './earth.js';
 
 export let SEA = -0.9;             // sea level (site ground is 0); set from the DEM when one loads
 export const SITE = { x0: -200, x1: 175, z0: -250, z1: 95, blend: 150 };
@@ -206,7 +206,7 @@ export function terrainMaterial(tex, nor = null, macro = null) {
     tSand: { value: tex.sand }, tDirt: { value: tex.dirt }, tGrass: { value: tex.grass }, tRock: { value: tex.rock },
     nSand: { value: nor?.sand }, nDirt: { value: nor?.dirt }, nGrass: { value: nor?.grass }, nRock: { value: nor?.rock },
     tMacHi: { value: macro?.hi }, tMacLo: { value: macro?.lo }, uHiR: { value: macro?.hiR || new THREE.Vector3() }, uLoR: { value: macro?.loR || new THREE.Vector3() },
-    uGF: GLOBE_FADE, uSea: { value: SEA }, uCoast: { value: shoreX(-80) }, uSite: { value: new THREE.Vector4(SITE.x0, SITE.x1, SITE.z0, SITE.z1) },
+    uGF: GLOBE_FADE, uGE: GLOBE_EDGE, uSea: { value: SEA }, uCoast: { value: shoreX(-80) }, uSite: { value: new THREE.Vector4(SITE.x0, SITE.x1, SITE.z0, SITE.z1) },
   };
   m.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, U);
@@ -214,7 +214,7 @@ export function terrainMaterial(tex, nor = null, macro = null) {
       .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz; vWN = normalize(mat3(modelMatrix) * objectNormal);');
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
 varying vec3 vWP; varying vec3 vWN;
-uniform sampler2D tSand, tDirt, tGrass, tRock; uniform float uSea, uCoast, uGF; uniform vec4 uSite;
+uniform sampler2D tSand, tDirt, tGrass, tRock; uniform float uSea, uCoast, uGF, uGE; uniform vec4 uSite;
 #ifdef DETAIL_NORMALS
 uniform sampler2D nSand, nDirt, nGrass, nRock;
 #endif
@@ -230,7 +230,7 @@ float fb(vec2 p){ return vn(p)*0.5 + vn(p*2.03)*0.25 + vn(p*4.1)*0.125 + vn(p*8.
 vec3 two(sampler2D t, vec2 p, float far){ vec3 a = texture2D(t, p / 5.0).rgb, b = texture2D(t, p / 41.0 + 0.37).rgb, c = texture2D(t, p / 290.0).rgb;
   return mix(mix(a, b, 0.35), mix(b, c, 0.5), far); }`)
       .replace('#include <map_fragment>', `
-if (uGF > 0.0 && h21(floor(gl_FragCoord.xy)) < uGF) discard;     // dissolve into the globe pass at high altitude
+if (uGF + uGE > 0.0 && h21(floor(gl_FragCoord.xy)) < max(uGF, uGE * smoothstep(7000.0, 11000.0, max(abs(vWP.x), abs(vWP.z))))) discard;     // dissolve into the globe pass at high altitude
 {
   vec2 p = vWP.xz; float dist = length(vWP - cameraPosition); float far = smoothstep(80.0, 1400.0, dist);
   float n = fb(p / 90.0), n2 = fb(p / 900.0 + 3.1);

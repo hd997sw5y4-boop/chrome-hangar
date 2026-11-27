@@ -3,7 +3,7 @@
 // control bunker, viewing stand, vehicles, power line, windsocks, and instanced rocks, scrub and
 // grass in distance-culled chunks (the cheap LOD that keeps iPhone at 60 fps).
 import * as THREE from 'three';
-import { GLOBE_FADE } from './earth.js';
+import { GLOBE_FADE, GLOBE_EDGE } from './earth.js';
 import { mergeGeometries } from '../vendor/three/addons/utils/BufferGeometryUtils.js';
 import { height, slopeAt, SEA, shoreX, buildTerrainLOD, terrainMaterial, waterNormals, siteDist, loadDEM, hasDEM, demRect } from './terrain.js';
 import { pieces, prop } from './models.js';
@@ -98,7 +98,7 @@ export class Outdoor {
     if (hasDEM()) {   // aerial imagery that matches the elevation grids (mirrored the same way in tools/make_dem.py)
       const im = n => L.loadAsync(`assets/terrain/${n}.webp`).then(t => { t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; t.flipY = false; t.needsUpdate = true; return t; });   // row 0 = south = grid z0
       const [hi, lo] = await Promise.all([im(this.lite ? 'albedo_hi_1k' : 'albedo_hi_2k'), im('albedo_lo_1k')]).catch(() => []);
-      if (hi && lo) macro = { hi, lo, hiR: demRect(false), loR: demRect(true) };
+      if (hi && lo) { macro = { hi, lo, hiR: demRect(false), loR: demRect(true) }; this.w.earth?.setRegion(lo, macro.loR); }
     }
     const t = buildTerrainLOD(terrainMaterial({ sand, dirt, grass, rock }, nor, macro), this.lite);
     t.refine(new THREE.Vector3(0, 2, -60), Infinity);   // settle around the hangar and pad before the first frame
@@ -112,17 +112,17 @@ export class Outdoor {
       uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, {
         tN: { value: nm }, uT: { value: 0 }, uSun: { value: new THREE.Vector3(-300, 260, -420).normalize() },
         uDeep: { value: new THREE.Color(0x06283c) }, uShallow: { value: new THREE.Color(0x1c6a7c) },
-        uHorizon: { value: new THREE.Color(0xc3ccd4) }, uZenith: { value: new THREE.Color(0x5f8fc0) }, uSunCol: { value: new THREE.Color(1, 0.92, 0.8) }, uGF: GLOBE_FADE,
+        uHorizon: { value: new THREE.Color(0xc3ccd4) }, uZenith: { value: new THREE.Color(0x5f8fc0) }, uSunCol: { value: new THREE.Color(1, 0.92, 0.8) }, uGF: GLOBE_FADE, uGE: GLOBE_EDGE,
       }]),
       vertexShader: `varying vec3 vW; varying float vD;
         #include <fog_pars_vertex>
         void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; vec4 mvPosition = viewMatrix * w; gl_Position = projectionMatrix * mvPosition;
         #include <fog_vertex>
         }`,
-      fragmentShader: `uniform sampler2D tN; uniform float uT; uniform vec3 uSun, uDeep, uShallow, uHorizon, uZenith, uSunCol; uniform float uGF; varying vec3 vW;
+      fragmentShader: `uniform sampler2D tN; uniform float uT; uniform vec3 uSun, uDeep, uShallow, uHorizon, uZenith, uSunCol; uniform float uGF, uGE; varying vec3 vW;
         #include <fog_pars_fragment>
         void main(){
-          if (uGF > 0.0 && fract(sin(dot(floor(gl_FragCoord.xy), vec2(127.1, 311.7))) * 43758.5453) < uGF) discard;
+          if (uGF + uGE > 0.0 && fract(sin(dot(floor(gl_FragCoord.xy), vec2(127.1, 311.7))) * 43758.5453) < max(uGF, uGE * smoothstep(7000.0, 11000.0, max(abs(vW.x), abs(vW.z))))) discard;
           vec2 p = vW.xz;
           vec3 n1 = texture2D(tN, p / 61.0 + vec2(uT * 0.011, uT * 0.007)).xyz * 2.0 - 1.0;
           vec3 n2 = texture2D(tN, p / 17.0 - vec2(uT * 0.017, -uT * 0.013)).xyz * 2.0 - 1.0;
@@ -142,6 +142,7 @@ export class Outdoor {
           #include <fog_fragment>
         }`,
     });
+    mat.uniforms.uGF = GLOBE_FADE; mat.uniforms.uGE = GLOBE_EDGE;   // shared, not cloned by UniformsUtils.merge
     this.oceanMat = mat;
     const sea = new THREE.Mesh(new THREE.PlaneGeometry(60000, 60000), mat); sea.rotation.x = -Math.PI / 2; sea.position.y = SEA; sea.receiveShadow = false; sea.name = 'ocean';
     this.group.add(sea);

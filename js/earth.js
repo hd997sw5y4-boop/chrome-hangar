@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 
 export const GLOBE_FADE = { value: 0 };          // 0 = local terrain solid, 1 = terrain fully dissolved into the globe
+export const GLOBE_EDGE = { value: 0 };          // dissolves the far edge of the local terrain (7-11 km out) once the globe shows behind it
 const R = 6371.0;                                 // km
 const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
@@ -31,27 +32,31 @@ export class Earth {
     this.loading = Promise.all([tx(`earth_day_${k}k`, true), tx(`earth_night_${Math.min(k, 4)}k`, false), tx('earth_clouds_2k', false)]).then(([day, night, clouds]) => this.build(day, night, clouds)).catch(e => console.warn('earth', e));
     return this.loading;
   }
+  setRegion(tex, rect) { this.region = { tex, rect }; if (this.U) { this.U.tReg.value = tex; this.U.uRegR.value.copy(rect); this.U.uRegK.value = 1; } }
   build(day, night, clouds) {
     const lite = this.tier() === 2, M = this.frame(this.w.seaLevel || 0);
     this.U = {
       tDay: { value: day }, tNight: { value: night }, tCloud: { value: clouds }, uSun: { value: new THREE.Vector3(0, 1, 0) }, uSunI: { value: 3 },
       uCam: { value: new THREE.Vector3() }, uC: { value: new THREE.Vector3().setFromMatrixPosition(M) }, uT: { value: 0 }, uCloudK: { value: 0 },
-      uFogC: { value: new THREE.Color() }, uFogD: { value: 0 }, uR: { value: R }, uAtmK: { value: 0 },
+      uFogC: { value: new THREE.Color() }, tReg: { value: null }, uRegR: { value: new THREE.Vector3(0, 0, 1) }, uRegK: { value: 0 }, uFogD: { value: 0 }, uR: { value: R }, uAtmK: { value: 0 },
     };
     const vs = `varying vec3 vW; varying vec3 vN; varying vec2 vUv;
       void main(){ vUv = uv; vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; vN = normalize(mat3(modelMatrix) * normal); gl_Position = projectionMatrix * viewMatrix * w; }`;
     const ground = new THREE.ShaderMaterial({
       uniforms: this.U, vertexShader: vs,
-      fragmentShader: `uniform sampler2D tDay, tNight, tCloud; uniform vec3 uSun, uCam, uC, uFogC; uniform float uSunI, uT, uCloudK, uFogD, uR, uAtmK;
+      fragmentShader: `uniform sampler2D tDay, tNight, tCloud, tReg; uniform vec3 uRegR; uniform float uRegK; uniform vec3 uSun, uCam, uC, uFogC; uniform float uSunI, uT, uCloudK, uFogD, uR, uAtmK;
       varying vec3 vW; varying vec3 vN; varying vec2 vUv;
       void main(){
         vec3 N = normalize(vN), V = normalize(uCam - vW), L = normalize(uSun);
         float ndl = dot(N, L), lit = max(ndl, 0.0);
         vec3 day = texture2D(tDay, vUv).rgb;
+        // sharp regional aerial image (the same 24 km USGS mosaic the local terrain uses) inset around the site
+        if (uRegK > 0.0) { vec2 ru = (vW.xz * 1000.0 - uRegR.xy) / uRegR.z; float e = min(min(ru.x, 1.0 - ru.x), min(ru.y, 1.0 - ru.y));
+          if (e > 0.0) { vec4 rg = texture2D(tReg, ru); day = mix(day, rg.rgb * 0.8, smoothstep(0.0, 0.12, e) * uRegK * rg.a); } }
         float water = smoothstep(0.02, 0.0, day.r - day.b * 0.6) * smoothstep(0.12, 0.03, dot(day, vec3(0.33)));
         vec3 col = day * (lit * uSunI * 0.55 + 0.012);
         vec3 H = normalize(L + V); col += water * vec3(1.0, 0.92, 0.8) * pow(max(dot(N, H), 0.0), 90.0) * uSunI * 0.6 * lit;
-        float c = texture2D(tCloud, vUv + vec2(uT * 0.000004, 0.0)).r; c = smoothstep(0.12, 0.85, c) * uCloudK;
+        float c = texture2D(tCloud, vUv + vec2(uT * 0.000004, 0.0)).r; c = smoothstep(0.3, 0.92, c) * uCloudK * 0.9;
         col = mix(col, vec3(1.0) * (lit * uSunI * 0.62 + 0.015), c * 0.92);
         float nightK = smoothstep(0.08, -0.18, ndl);
         float lights = pow(texture2D(tNight, vUv).r, 1.6);
@@ -99,6 +104,7 @@ export class Earth {
     this.starMat = new THREE.PointsMaterial({ size: lite ? 1.6 : 1.8, sizeAttenuation: false, vertexColors: true, transparent: true, opacity: 0, depthWrite: false, fog: false });
     this.stars = new THREE.Points(sg, this.starMat); this.stars.frustumCulled = false; this.stars.renderOrder = -1;
     this.scene.add(this.stars, g, a); this.ready = true;
+    if (this.region) this.setRegion(this.region.tex, this.region.rect);
   }
   // altitude in metres of the camera; returns true if this pass should draw
   active(alt) { return alt > 1200; }
@@ -109,7 +115,7 @@ export class Earth {
     const c = this.cam; c.position.copy(camera.position).multiplyScalar(0.001); c.quaternion.copy(camera.quaternion);
     c.fov = camera.fov; c.aspect = camera.aspect; c.near = Math.max(0.005, alt * 0.0005 * 0.4); c.far = 1e5; c.updateProjectionMatrix();
     const U = this.U; U.uCam.value.copy(c.position); U.uSun.value.copy(w.sunDir || new THREE.Vector3(0, 1, 0)); U.uSunI.value = Math.max(0.6, w.sun.intensity);
-    U.uT.value = this.t; U.uCloudK.value = sstep(6000, 30000, alt); U.uAtmK.value = sstep(2000, 25000, alt);
+    U.uT.value = this.t; U.uCloudK.value = sstep(15000, 120000, alt); U.uAtmK.value = sstep(2000, 25000, alt);
     U.uFogC.value.copy(w.scene.fog.color); U.uFogD.value = w.scene.fog.density;
     this.stars.position.copy(c.position); this.starMat.opacity = sstep(18000, 70000, alt);
     this.scene.background = w.skyTexForEarth; this.scene.backgroundIntensity = w.scene.backgroundIntensity;
