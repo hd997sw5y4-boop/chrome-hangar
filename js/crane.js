@@ -26,6 +26,51 @@ function splitY(geo, hi, lo) {
   return { above: mk(out.above), below: mk(out.below) };
 }
 
+
+// Procedural hook block: sheave case, pulleys, forged hook and a spring safety latch.
+// The model winch rarely has usable hook triangles, so this is the visible hoist.
+function hookBlock() {
+  const g = new THREE.Group();
+  const steel = new THREE.MeshStandardMaterial({ color: 0x8b9298, metalness: 0.88, roughness: 0.28 });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x2a2e33, metalness: 0.75, roughness: 0.4 });
+  const yellow = new THREE.MeshStandardMaterial({ color: 0xd4a017, metalness: 0.45, roughness: 0.42 });
+  const add = (mesh, parent = g) => { mesh.castShadow = true; mesh.receiveShadow = true; parent.add(mesh); return mesh; };
+  // bail / cable pins at the top of the block
+  add(new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.07, 0.18), steel)).position.y = -0.02;
+  for (const x of [-0.07, 0.07]) {
+    const pin = add(new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.16, 8), dark));
+    pin.rotation.x = Math.PI / 2; pin.position.set(x, 0.02, 0);
+  }
+  // yellow sheave case
+  add(new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.42, 0.16), yellow)).position.y = -0.28;
+  for (const z of [-0.095, 0.095]) {
+    const plate = add(new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.46, 0.03), dark));
+    plate.position.set(0, -0.28, z);
+  }
+  // sheaves (pulleys) on a cross shaft
+  const shaft = add(new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.22, 8), steel));
+  shaft.rotation.x = Math.PI / 2; shaft.position.y = -0.2;
+  for (const z of [-0.04, 0.04]) {
+    const sh = add(new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.05, 16), steel));
+    sh.rotation.x = Math.PI / 2; sh.position.set(0, -0.2, z);
+    const groove = add(new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.014, 6, 16), dark));
+    groove.position.set(0, -0.2, z);
+  }
+  // shank down to the hook
+  add(new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 0.16, 10), steel)).position.y = -0.56;
+  const nut = add(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.05, 8), dark)); nut.position.y = -0.5;
+  // forged hook: throat bearing sits at y = -0.78 (the load ring hangs here)
+  const hook = add(new THREE.Mesh(new THREE.TorusGeometry(0.13, 0.042, 10, 22, Math.PI * 1.55), steel));
+  hook.rotation.set(0, 0, Math.PI * 0.22); hook.position.set(0.02, -0.78, 0);
+  const tip = add(new THREE.Mesh(new THREE.SphereGeometry(0.042, 10, 8), steel)); tip.position.set(0.12, -0.68, 0);
+  // spring safety latch, open by default, snaps shut when a load is on the hook
+  const latch = new THREE.Group(); latch.position.set(-0.02, -0.62, 0); g.add(latch);
+  const bar = add(new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.22, 0.03), dark), latch); bar.position.set(0.07, -0.1, 0); bar.rotation.z = -0.55;
+  g.userData.latch = latch;
+  g.userData.hookH = 0.78;
+  return g;
+}
+
 export class Crane {
   constructor(ix) {
     this.ix = ix; this.g = ix.g; this.ready = false;
@@ -42,17 +87,15 @@ export class Crane {
     const bridgeMeshes = [...rails, ...bridge].map(p => mesh(p, bg));
     const tg = this.trolley = new THREE.Group(); bg.add(tg);
     // winch: body stays on the trolley, the hook block hangs on code cables
-    const hookParts = []; let hb = new THREE.Box3();
     for (const p of winch) {
       const { above, below } = splitY(p.geometry, -1.32 * S, -2.5 * S);
       if (above) mesh({ geometry: above, material: p.material }, tg);
-      if (below) { below.computeBoundingBox(); hb.union(below.boundingBox); hookParts.push({ geometry: below, material: p.material }); }
+      below?.dispose?.();
     }
-    const hc = hb.isEmpty() ? new THREE.Vector3(-0.47 * S, -2.5 * S, 0) : new THREE.Vector3((hb.min.x + hb.max.x) / 2, hb.max.y, (hb.min.z + hb.max.z) / 2);
-    this.hookH = hb.isEmpty() ? 2.2 : hb.max.y - hb.min.y;
-    const swing = this.swing = new THREE.Group(); swing.position.set(hc.x, ATTACH, hc.z); tg.add(swing);
-    const hook = this.hook = new THREE.Group(); swing.add(hook);
-    for (const p of hookParts) { p.geometry.translate(-hc.x, -hc.y, -hc.z); mesh(p, hook); }
+    const swing = this.swing = new THREE.Group(); swing.position.set(0, ATTACH, 0); tg.add(swing);
+    const hook = this.hook = hookBlock(); swing.add(hook);
+    this.hookH = hook.userData.hookH;
+    this.latch = hook.userData.latch;
     const cableM = new THREE.MeshStandardMaterial({ color: 0x9aa0a6, metalness: 0.9, roughness: 0.35 });
     this.cables = [-0.07, 0.07].map(dx => { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 1, 6), cableM); c.position.x = dx; swing.add(c); return c; });
     // runway beams + hangers to the roof trusses
@@ -112,7 +155,7 @@ export class Crane {
   onRelease() { this.panel().style.display = 'none'; this.held = {}; this.motor?.stop(); this.motor = null; this.panelEl?.querySelectorAll('.held').forEach(b => b.classList.remove('held')); }
   panel() {
     if (this.panelEl) return this.panelEl;
-    const d = this.panelEl = document.createElement('div'); d.className = 'ixPanel'; d.style.cssText = 'left:50%;bottom:18px;transform:translateX(-50%);flex-wrap:wrap;justify-content:center;max-width:96vw';
+    const d = this.panelEl = document.createElement('div'); d.className = 'ixPanel ixCrane'; d.style.cssText = '';
     const tip = this.g.input.lastDevice === 'pad' ? 'LS move · RT/LT hoist · Ⓐ grab · Ⓑ done' : 'WASD move · Q/E hoist · Space grab · drag to look · Esc done';
     d.innerHTML = `<button data-k="l">◀</button><button data-k="f">▲</button><button data-k="b">▼</button><button data-k="r">▶</button><span style="width:14px"></span><button data-k="up">Hoist ▲</button><button data-k="down">Hoist ▼</button><button data-c="grab" style="min-width:84px">Grab</button><button data-c="exit">Done</button>${IS_TOUCH ? '' : `<span class="tip">${tip}</span>`}`;
     d.querySelectorAll('[data-k]').forEach(b => { const k = b.dataset.k; const on = e => { e.preventDefault(); this.held[k] = true; b.classList.add('held'); this.g.audio.unlock(); }; const off = () => { this.held[k] = false; b.classList.remove('held'); }; b.addEventListener('pointerdown', on); for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, off); });
@@ -162,6 +205,7 @@ export class Crane {
     this.hook.position.y = -this.L;
     for (const c of this.cables) { c.scale.y = this.L; c.position.y = -this.L / 2; }
     this.swing.rotation.set(-this.sw.z, 0, this.sw.x);
+    if (this.latch) this.latch.rotation.z = this.loadObj ? 0.85 : 0;
   }
   update(dt, controlling) {
     if (!this.ready) return;

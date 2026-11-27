@@ -139,10 +139,12 @@ export class World {
   setIndoor(v) {
     this.indoor = v;
     if (this.envs.hangar && this.envs.sky) { this.scene.environment = v ? this.envs.hangar : this.envs.sky; this.scene.environmentIntensity = v ? 0.6 : 0.95; if (!v) this.applySky?.(); }
-    this.spot.castShadow = v && this.shadowSize > 0;
+    this.spot.visible = false;   // the old hangar spot threw a hard circular cookie on the floor
+    if (this.bayDir) { this.bayDir.visible = v; this.bayDir.castShadow = v && this.shadowSize > 0; }
     this.sun.castShadow = !v && this.shadowSize > 0;
     this.sun.visible = !v;   // no unshadowed sunlight leaking through the hangar roof
-    for (const l of this.bays || []) l.visible = v && this.quality !== 'phone' && this.quality !== 'low';
+    if (!v) this.hemi.intensity = this.sky ? this.sky.hemi * (1 - THREE.MathUtils.smoothstep(this.alt || 0, 1500, 40000)) : this.hemi.intensity;
+    for (const l of this.bays || []) l.visible = v;
   }
 
   applyQuality(q, w, h) {
@@ -152,7 +154,8 @@ export class World {
     this.shadowSize = p.shadow;
     this.renderer.shadowMap.enabled = p.shadow > 0;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
-    for (const l of [this.sun, this.spot]) {
+    for (const l of [this.sun, this.bayDir, this.spot]) {
+      if (!l?.shadow) continue;
       l.shadow.mapSize.set(p.shadow || 512, p.shadow || 512); l.shadow.radius = q === 'high' || q === 'ultra' ? 4 : 2; l.shadow.blurSamples = 12;
       if (l.shadow.map) { l.shadow.map.dispose(); l.shadow.map = null; }
     }
@@ -174,8 +177,6 @@ export class World {
     const nearHangar = this.indoor || Math.hypot(cam.position.x, cam.position.y, cam.position.z) < 90;
     this._props ??= this.hangar.getObjectByName('props'); if (this._props) this._props.visible = nearHangar;
     this._shell ??= this.hangar.getObjectByName('shell'); if (this._shell) this._shell.visible = nearHangar;
-    this._shafts ??= this.hangar.getObjectByName('shafts'); if (this._shafts) this._shafts.visible = nearHangar && this.quality !== 'phone' && this.quality !== 'low';
-    this._pools ??= this.hangar.getObjectByName('pools'); if (this._pools) this._pools.visible = nearHangar;
     GLOBE_FADE.value = gf; GLOBE_EDGE.value = this.earth.ready && !this.indoor ? THREE.MathUtils.smoothstep(alt, 2500, 9000) : 0;
     const blend = GLOBE_FADE.value + GLOBE_EDGE.value > 0;   // terrain + sea alpha-blend into the planet pass only while it shows
     for (const m of [this.outdoor?.terrainMat, this.outdoor?.oceanMat]) if (m && m.transparent !== blend) { m.transparent = blend; m.needsUpdate = true; } if (this.outdoor) this.outdoor.group.visible = gf < 0.999;
@@ -207,13 +208,19 @@ export class World {
     sun.shadow.camera.left = -40; sun.shadow.camera.right = 40; sun.shadow.camera.top = 40; sun.shadow.camera.bottom = -40;
     sun.shadow.camera.near = 50; sun.shadow.camera.far = 1200; sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.04;
     s.add(sun, sun.target);
-    const spot = this.spot = new THREE.SpotLight(0xfff1dc, 900, 70, 0.62, 0.55, 1.6);
-    spot.position.set(5, 26, 9); spot.target.position.set(0, 4, 0);
-    spot.shadow.camera.near = 4; spot.shadow.camera.far = 70; spot.shadow.bias = -0.0003; spot.shadow.normalBias = 0.03;
-    s.add(spot, spot.target);
-    const fill = new THREE.PointLight(0xcfe3ff, 120, 40, 1.8); fill.position.set(-12, 10, -6); s.add(fill);
-    // two warm high-bay pools on the hangar floor (no shadows; hidden outdoors and on the phone preset)
-    this.bays = [[-12, -6], [12, 7]].map(([x, z]) => { const l = new THREE.SpotLight(0xffe0b8, 1400, 40, 0.75, 0.8, 1.7); l.position.set(x, 21.5, z); l.target.position.set(x, 0, z); s.add(l, l.target); return l; });
+    // kept for applyQuality compatibility; hidden — a tight cone left a hard ring on the floor
+    const spot = this.spot = new THREE.SpotLight(0xfff1dc, 0, 70, 0.62, 1, 1.6);
+    spot.visible = false; s.add(spot, spot.target);
+    // even indoor fill: a wide downward directional, no circular cookie, plus a few soft point fills
+    const bay = this.bayDir = new THREE.DirectionalLight(0xfff3e0, 1.45);
+    bay.position.set(4, 36, 6); bay.target.position.set(0, 0, 0);
+    bay.shadow.camera.left = -24; bay.shadow.camera.right = 24; bay.shadow.camera.top = 20; bay.shadow.camera.bottom = -20;
+    bay.shadow.camera.near = 4; bay.shadow.camera.far = 70; bay.shadow.bias = -0.0003; bay.shadow.normalBias = 0.04;
+    s.add(bay, bay.target);
+    const fill = new THREE.PointLight(0xe8f0ff, 40, 50, 1.1); fill.position.set(-10, 14, -4); s.add(fill);
+    this.bays = [[-11, -7], [11, 6], [0, 2]].map(([x, z]) => {
+      const l = new THREE.PointLight(0xffeed8, 55, 48, 1.15); l.position.set(x, 18, z); s.add(l); return l;
+    });
   }
   // keep the sun's shadow box centred on what we're looking at
   followSun(p) {
@@ -237,7 +244,7 @@ export class World {
     // square steel assembly stand, floor markings, uplights and the fold-out work tower
     buildAssemblyStand(this, g, H, this.M, this.quality === 'phone' || this.quality === 'low');
     this.standDeck = STAND_DECK; this.standHalf = STAND_HALF;
-    // interior architecture (walls, truss roof, lamps, shafts, cables, scaffold) lives in hangar.js
+    // interior architecture (walls, truss roof, lamp fixtures, cables, scaffold) lives in hangar.js
     this.interior = buildInterior(this, g, H, this.M, this.quality === 'phone' || this.quality === 'low');
     this._liteHangar = this.quality === 'phone' || this.quality === 'low';
     // exterior shell: painted corrugated cladding, gable roof, big lettering (seen from the apron and the air)

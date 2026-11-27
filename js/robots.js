@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from '../vendor/three/addons/utils/BufferGeometryUtils.js';
 import { SPOTS } from './env.js';
+import { C, R_ROBOT, detour, resolve, hangarFrame, padObstacles } from './collide.js';
 
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const UP = V3(0, 1, 0);
@@ -248,13 +249,17 @@ class Robot {
   fwd(yaw = this.yaw) { return V3(Math.sin(yaw), 0, Math.cos(yaw)); }
 
   // ---- locomotion: steer toward a goal, turn in place when the heading is far off ----
-  steer(dt, goal, speed) {
-    let wantV = 0, wantYaw = this.yaw;
-    if (goal) {
-      const dx = goal.x - this.pos.x, dz = goal.z - this.pos.z, d = Math.hypot(dx, dz);
-      if (goal.face != null && d < 0.06) wantYaw = goal.face;
+  steer(dt, goal, speed, obs) {
+    let wantV = 0, wantYaw = this.yaw, aim = goal;
+    if (goal && obs?.length) {
+      const wp = detour(this.pos.x, this.pos.z, goal.x, goal.z, R_ROBOT, obs);
+      if (wp) aim = wp;
+    }
+    if (aim) {
+      const dx = aim.x - this.pos.x, dz = aim.z - this.pos.z, d = Math.hypot(dx, dz);
+      if (goal.face != null && d < 0.06 && aim === goal) wantYaw = goal.face;
       else if (d > 0.04) { wantYaw = Math.atan2(dx, dz); const err = Math.abs(wrapA(wantYaw - this.yaw)); wantV = err < 0.5 ? speed * clamp(d / 0.6, 0.25, 1) * (1 - err) : 0; }
-      else if (goal.face != null) wantYaw = goal.face;
+      else if (goal.face != null && aim === goal) wantYaw = goal.face;
     }
     // speed ramps gently, and the body never outruns a planted foot (keeps every stance leg within reach)
     this.v = wantV > this.v ? Math.min(wantV, this.v + 0.9 * dt) : Math.max(wantV, this.v - 1.8 * dt);
@@ -266,6 +271,7 @@ class Robot {
     this.yawRate = damp(this.yawRate, rate, 6, dt);
     this.yaw += this.yawRate * dt;
     const f = this.fwd(); this.pos.addScaledVector(f, this.v * dt);
+    if (obs?.length) { const p = resolve(this.pos.x, this.pos.z, R_ROBOT, obs); this.pos.x = p.x; this.pos.z = p.z; }
     return Math.hypot((goal?.x ?? this.pos.x) - this.pos.x, (goal?.z ?? this.pos.z) - this.pos.z);
   }
 
@@ -353,7 +359,7 @@ class Robot {
       if (job.type === 'inspect') look = job.target;
     }
 
-    this.steer(dt, goal, speed);
+    this.steer(dt, goal, speed, ctx?.obs);
     this.gait(dt);
 
     // idle breathing + sway, occasional glances
@@ -456,7 +462,7 @@ export class Robots {
     R(this.hangar, { pos: [8.3, 6], yaw: Math.PI, silver: true, job: { type: 'patrol', path: [{ x: 8.3, z: 6, look: rocketPt }, { x: 8.3, z: -11.5 }, { x: 4, z: -11.8, look: rocketPt }, { x: 8.3, z: -6 }] } });
     if (!this.lite) {
       R(this.hangar, { pos: [-8.3, -10], yaw: 0, job: { type: 'patrol', path: [{ x: -8.3, z: -10 }, { x: -8.3, z: 9, look: rocketPt }, { x: -4, z: 9.6 }, { x: -8.3, z: 3 }] } });
-      R(this.hangar, { pos: [10.0, 5.0], yaw: Math.PI / 2, silver: true, job: { type: 'console', at: [10.0, 5.05], face: Math.PI / 2 } });
+      R(this.hangar, { pos: [10.0, 6.15], yaw: Math.PI, silver: true, job: { type: 'console', at: [10.0, 6.15], face: Math.PI } });
     }
     // pad crew, laid out in the launch complex frame (local +x along the flame trench, tower toward local -z)
     const pad = w.pad, P = SPOTS.pad;
@@ -467,8 +473,12 @@ export class Robots {
       { pos: toW(4.2, -6.4), silver: true, job: (a = toW(4.2, -6.4)) => ({ type: 'console', at: a, face: Math.atan2(tower.x - a[0], tower.z - a[1]) }) },
     ].slice(0, this.lite ? 1 : 2);
     for (const s of padSpecs) { const r = R(this.padG, { pos: s.pos, ground: 0.02, silver: s.silver, job: s.job() }); r.home = { pos: s.pos.slice(), job: s.job }; }
-    // walk-clear points: off the deck on the stand side
+    // walk-clear: side waypoints so the countdown walk-off goes around the launch stand
     this.exitPts = [toW(-14, 18), toW(-4, 21)];
+    this.leavePaths = [
+      [toW(-14, 8), toW(-14, 18)],
+      [toW(12, -6.4), toW(12, 16), toW(-4, 21)],
+    ];
     this.padG.visible = false;
     // click / tap a robot: it stops, turns, looks at you and waves
     const c = w.renderer.domElement; let down = null;
@@ -519,14 +529,29 @@ export class Robots {
     if (!onPad) { if (this.padState !== 'idle') this.resetPad(); this.padState = 'idle'; this.padG.visible = false; }
     else {
       if (this.padState === 'idle') this.padState = 'work';
-      if (counting && this.padState === 'work') { this.padState = 'leave'; this.list.filter(r => r.where === 'pad').forEach((r, i) => { r.greet = null; r.wp = 0; r.job = { type: 'leave', speed: 1.45, path: [{ x: this.exitPts[i % 2][0], z: this.exitPts[i % 2][1] }] }; }); }
+      if (counting && this.padState === 'work') {
+        this.padState = 'leave';
+        this.list.filter(r => r.where === 'pad').forEach((r, i) => {
+          r.greet = null; r.wp = 0;
+          const pts = (this.leavePaths[i % this.leavePaths.length] || [this.exitPts[i % 2]]).map(p => ({ x: p[0], z: p[1] }));
+          r.job = { type: 'leave', speed: 1.45, path: pts };
+        });
+      }
       this.padG.visible = padNear;
     }
-    const ctx = { cam };
+    const hangObs = this.hangar.visible ? hangarFrame(g) : [];
+    const padObs = this.padG.visible ? padObstacles(w) : [];
     for (const r of this.list) {
       const vis = r.where === 'hangar' ? this.hangar.visible : this.padG.visible;
       if (!vis) continue;
-      r.update(dt, ctx);
+      const base = r.where === 'hangar' ? hangObs : padObs;
+      const peers = [];
+      for (const o of this.list) {
+        if (o === r || o.where !== r.where) continue;
+        if (!(o.where === 'hangar' ? this.hangar.visible : this.padG.visible)) continue;
+        peers.push(C(o.pos.x, o.pos.z, R_ROBOT));
+      }
+      r.update(dt, { cam, obs: base.concat(peers) });
     }
   }
   resetPad() {

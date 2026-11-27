@@ -269,7 +269,7 @@ class Game {
     const rows = IS_TOUCH ? [
       ['Look', 'Drag anywhere on the screen'], ['Walk', 'Left stick'], ['Pick a part', 'Tap it in the tray'], ['Place', 'Tap a glowing ring (or near it)'], ['Remove', 'Pick Delete in the tray, then tap a part'],
       ['Stand', '⟲ ⟳ turn (the stand is bolted to the floor)'], ['Fly', 'Throttle slider on the right, steer with the left stick'], ['Flight views', 'Drag to orbit · pinch to zoom · View button cycles · Views ▾ opens the picker']]
-      : [['Look / walk', 'Mouse (click to grab the mouse) · WASD'], ['Pick a part', 'Click it in the tray, or keys 1–9 · Delete tool: 0'], ['Place', 'Aim at a glowing ring and click'], ['Remove', 'Right-click a part, or the Delete tool'],
+      : [['Look / walk', 'Mouse (click to grab the mouse) · WASD'], ['Walk outside', 'Open the bay doors with the wall lever and walk out onto the apron'], ['Pick a part', 'Click it in the tray, or keys 1–9 · Delete tool: 0'], ['Place', 'Aim at a glowing ring and click'], ['Remove', 'Right-click a part, or the Delete tool'],
         ['Undo / redo', 'Z / Y (or Ctrl+Z / Ctrl+Y)'], ['Stand', 'Q / E turn (the stand is bolted to the floor)'], ['Test stand', 'Space fire / shut down · Shift / R and F throttle'],
         ['Flight', 'Space launch · Shift or R throttle up, F down, Z full, X cut · WASD / arrows steer · drag mouse to orbit · wheel zoom · 1–8 pick view · C next view · V view menu · H assist'], ['Menu', 'Esc']];
     const pad = [['DualSense', 'Left stick walk / steer · Right stick look · ✕ place / launch · □ delete tool · ○ undo · △ redo · L1/R1 pick part · D-pad stand · R2 throttle · in flight: right stick orbit, L2 zoom in, L1 zoom out, △ or D-pad ◀▶ change view, D-pad ▲ view menu · Options menu']];

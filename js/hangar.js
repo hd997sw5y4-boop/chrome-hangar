@@ -1,6 +1,6 @@
 // Hangar interior architecture: insulated wall panels on steel columns, a deep Pratt-truss roof with purlins,
-// high-bay lamps with soft volumetric light shafts and floor light pools, overhead cable runs, a mobile scaffold
-// tower and a sealed, worn concrete floor. Everything static is merged into a handful of draw calls.
+// high-bay lamp fixtures, overhead cable runs, a mobile scaffold tower and a sealed, worn concrete floor.
+// Everything static is merged into a handful of draw calls. Floor lighting is even scene lights, not pool decals.
 import * as THREE from 'three';
 import { mergeGeometries } from '../vendor/three/addons/utils/BufferGeometryUtils.js';
 import { applyPBR } from './tex.js';
@@ -15,22 +15,6 @@ class Kit {
   build(group, { cast = true, receive = true } = {}) { for (const [mat, list] of this.by) { const m = new THREE.Mesh(mergeGeometries(list, false), mat); m.castShadow = cast; m.receiveShadow = receive; m.matrixAutoUpdate = false; group.add(m); } this.by.clear(); return group; }
 }
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
-
-function grad(stops, w = 64, h = 64, radial = true) {
-  const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d');
-  const gr = radial ? g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2) : g.createLinearGradient(0, 0, 0, h);
-  stops.forEach(([o, col]) => gr.addColorStop(o, col)); g.fillStyle = gr; g.fillRect(0, 0, w, h);
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
-}
-
-// soft additive light shaft: brightest at the lamp, fading with distance and toward the silhouette edge
-const shaftMat = () => new THREE.ShaderMaterial({
-  transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
-  uniforms: { uCol: { value: new THREE.Color(1.0, 0.88, 0.7) }, uK: { value: 0.11 } },
-  vertexShader: `varying float vY; varying vec3 vN, vV; void main(){ vY = uv.y; vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`,
-  fragmentShader: `uniform vec3 uCol; uniform float uK; varying float vY; varying vec3 vN, vV;
-    void main(){ float edge = pow(abs(dot(normalize(vN), normalize(vV))), 1.6); float fall = pow(vY, 2.2); gl_FragColor = vec4(uCol * uK * edge * fall, 1.0); }`,
-});
 
 export function buildInterior(w, g, H, M, lite) {
   const k = new Kit(), shell = new THREE.Group(); shell.name = 'shell'; g.add(shell);
@@ -82,7 +66,7 @@ export function buildInterior(w, g, H, M, lite) {
   const sky = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 1.75, 2.0) });
   for (const x of [-11, 11]) k.add(new THREE.PlaneGeometry(2.2, H.z * 2 - 4), sky, xf([x, H.h - 0.02, 0], [Math.PI / 2, 0, 0]));
 
-  // ---- high-bay lamps: shades + glowing lenses, shafts, floor pools ----
+  // ---- high-bay lamps: shades + glowing lenses (even lighting comes from scene lights, not floor cookies) ----
   const lamps = [];
   for (let i = 0; i < nT; i += 1) { if (i === 3) continue; const z = -H.z + (i + 0.5) * (H.z * 2 / nT); for (const x of [-14, -5, 5, 14]) lamps.push([x, z]); }
   const shade = new THREE.LatheGeometry([V(0.08, 0.95, 0), V(0.2, 0.8, 0), V(0.32, 0.55, 0), V(0.62, 0.05, 0), V(0.66, 0, 0)].map(v => new THREE.Vector2(v.x, v.y)), 24);
@@ -93,17 +77,6 @@ export function buildInterior(w, g, H, M, lite) {
     k.rod(V(x, lampY + 0.95, z), V(x, yB, z), 0.015, steelDark, 4);
   }
   k.build(shell, { cast: false });
-  // shafts (one merged additive mesh) + floor pools (one merged decal)
-  const sh = [], pools = [];
-  for (const [x, z] of lamps) {
-    const c = new THREE.CylinderGeometry(0.62, 4.6, lampY, 20, 1, true); c.translate(x, lampY / 2, z);
-    // uv.y = 1 at the lamp, 0 on the floor (CylinderGeometry already does this)
-    sh.push(c);
-    const p = new THREE.PlaneGeometry(9, 9); p.rotateX(-Math.PI / 2); p.translate(x, 0.012, z); pools.push(p);
-  }
-  const shafts = new THREE.Mesh(mergeGeometries(sh), shaftMat()); shafts.userData.noAO = true; shafts.renderOrder = 5; shafts.name = 'shafts'; shafts.visible = !lite; g.add(shafts);
-  const poolMat = new THREE.MeshBasicMaterial({ map: grad([[0, 'rgba(255,236,205,0.30)'], [0.45, 'rgba(255,230,190,0.12)'], [1, 'rgba(255,230,190,0)']]), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -4 });
-  const pool = new THREE.Mesh(mergeGeometries(pools), poolMat); pool.userData.noAO = true; pool.name = 'pools'; g.add(pool);
 
   // ---- cables: overhead catenaries to the stand, floor runs, umbilical tray ----
   const cab = new Kit();
@@ -123,5 +96,5 @@ export function buildInterior(w, g, H, M, lite) {
     if (y) { cab.rod(V(sx, y - 1.7, sz), V(sx + sw, y + 0.3, sz), 0.02, yellow); cab.box(sw, 0.05, sd, steelDark, [sx + sw / 2, y + 0.32, sz + sd / 2]); cab.rod(V(sx, y + 1.3, sz), V(sx + sw, y + 1.3, sz), 0.022, yellow); }
   }
   cab.build(shell, { cast: true });
-  return { shafts };
+  return {};
 }

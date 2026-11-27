@@ -5,6 +5,8 @@ import { PARTS, PART_IDS, layout, stats, stability, problems, candidates, applyP
 import { rocketMesh, partMesh, finPair, legSet, ghostify, disposeTree, initMaterials } from './parts3d.js';
 import { HANGAR, IS_TOUCH } from './env.js';
 import { DECK } from './stand.js';
+import { height } from './terrain.js';
+import { walk as collideWalk, playerFrame, R_PLAYER, insideHangar } from './collide.js';
 
 const $ = id => document.getElementById(id);
 const EYE = 1.65;
@@ -190,7 +192,7 @@ export class BuildMode {
   idle() {
     this.applyCam(); this.w.stand.position.y = 0; this.w.stand.rotation.y = this.standYaw;
   }
-  applyCam() { const P = this.player; this.w.camera.position.set(P.x, EYE, P.z); this.w.camera.rotation.set(P.pitch, P.yaw, 0, 'YXZ'); }
+  applyCam() { const P = this.player; this.w.camera.position.set(P.x, EYE + height(P.x, P.z), P.z); this.w.camera.rotation.set(P.pitch, P.yaw, 0, 'YXZ'); }
 
   camRay() {
     const cam = this.w.camera;
@@ -311,8 +313,9 @@ export class BuildMode {
     // forward = (fx, fz), right = (-fz, fx); move.x > 0 strafes right, move.y < 0 walks forward
     const nx = P.x + (fx * -inp.move.y + -fz * inp.move.x) * sp, nz = P.z + (fz * -inp.move.y + fx * inp.move.x) * sp;
     const moved = Math.hypot(nx - P.x, nz - P.z);
-    P.x = THREE.MathUtils.clamp(nx, -HANGAR.x + 1, HANGAR.x - 1); P.z = THREE.MathUtils.clamp(nz, -HANGAR.z + 1, HANGAR.z - 1);
-    const keep = (this.w.standHalf || 2.5) + 1.15, pr = Math.hypot(P.x, P.z); if (pr < keep) { P.x *= keep / pr; P.z *= keep / pr; }
+    const p = collideWalk(nx, nz, R_PLAYER, playerFrame(this.g)); P.x = p.x; P.z = p.z;
+    const wantIn = insideHangar(P.x, P.z, this.w.indoor ? -0.4 : 1.0);
+    if (wantIn !== this.w.indoor) this.w.setIndoor(wantIn);
     if (moved > 0.001) { this.stepT += moved; if (this.stepT > 0.75) { this.stepT = 0; this.g.audio.step(); } }
     this.applyCam();
     // stand: R/F raise/lower, Q/E turn (also d-pad and on-screen buttons)

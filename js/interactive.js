@@ -4,6 +4,7 @@
 // The crane, console and fueling live in crane.js, console.js and fueling.js.
 import * as THREE from 'three';
 import { HANGAR, IS_TOUCH } from './env.js';
+import { height } from './terrain.js';
 import { applyPBR } from './tex.js';
 import { prop } from './models.js';
 import { Crane } from './crane.js';
@@ -21,7 +22,8 @@ const CSS = `
 .ixRipple{position:absolute;z-index:31;pointer-events:none;width:46px;height:46px;margin:-23px 0 0 -23px;border-radius:50%;border:2px solid rgba(127,231,255,.9);animation:ixR .45s ease-out forwards}
 @keyframes ixR{from{transform:scale(.3);opacity:1}to{transform:scale(1.4);opacity:0}}
 #ixCursor{position:absolute;z-index:31;pointer-events:none;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;border:2px solid #7fe7ff;box-shadow:0 0 10px #2fb7ff;display:none}
-.ixPanel{position:absolute;z-index:29;display:none;gap:8px;align-items:center;font:600 13px system-ui,sans-serif;color:#e8f8ff}
+.ixPanel{position:fixed;z-index:40;display:none;gap:8px;align-items:center;font:600 13px system-ui,sans-serif;color:#e8f8ff}
+.ixPanel.ixCrane{left:50%;right:auto;top:auto;bottom:calc(18px + var(--sb, 0px));transform:translateX(-50%);flex-wrap:wrap;justify-content:center;max-width:96vw;margin:0}
 .ixPanel button{min-width:54px;min-height:54px;border-radius:14px;border:1px solid rgba(127,231,255,.4);background:rgba(12,18,26,.72);color:#e8f8ff;font:700 15px system-ui;touch-action:none;user-select:none;-webkit-user-select:none;backdrop-filter:blur(6px)}
 .ixPanel button:active,.ixPanel button.held{background:rgba(47,183,255,.45)}
 .ixPanel .tip{padding:6px 12px;border-radius:10px;background:rgba(12,18,26,.6);font-size:12px;font-weight:500;opacity:.9}
@@ -154,7 +156,7 @@ export class Interactive {
     if (this.returning) {
       const r = this.returning, P = this.g.build.player; r.t = Math.min(1, r.t + dt / 0.6); const k = ease(r.t);
       q.setFromEuler(new THREE.Euler(P.pitch, P.yaw, 0, 'YXZ'));
-      cam.position.lerpVectors(r.p, new THREE.Vector3(P.x, 1.65, P.z), k); cam.quaternion.slerpQuaternions(r.q, q, k);
+      cam.position.lerpVectors(r.p, new THREE.Vector3(P.x, 1.65 + height(P.x, P.z), P.z), k); cam.quaternion.slerpQuaternions(r.q, q, k);
       if (r.t >= 1) this.returning = null;
       return true;
     }
@@ -296,8 +298,7 @@ class Lights {
     w.scene.traverse(o => { if (o.isPointLight && !r.fill) r.fill = o; });
     r.fillI = r.fill?.intensity || 0;
     w.hangar.traverse(o => { if (o.isMesh && o.material?.isMeshBasicMaterial && o.material.color.r > 5) r.lens.push({ m: o.material, c: o.material.color.clone() }); });
-    const sh = w.interior?.shafts; r.shaft = sh?.material?.uniforms?.uK; r.shaftK = r.shaft?.value ?? 0;
-    r.pools = w.hangar.getObjectByName('pools')?.material;
+    r.bayDir = w.bayDir; r.bayDirI = w.bayDir?.intensity ?? 0;
     return r;
   }
   build() {
@@ -333,8 +334,8 @@ class Lights {
   apply() {
     const r = this.grab(), b = this.k.bay, a = this.k.area, w = this.ix.w;
     r.spot.intensity = r.spotI * b; r.bays.forEach((l, i) => l.intensity = r.baysI[i] * b);
+    if (r.bayDir) r.bayDir.intensity = r.bayDirI * b;
     for (const { m, c } of r.lens) m.color.copy(c).multiplyScalar(0.03 + 0.97 * b);
-    if (r.shaft) r.shaft.value = r.shaftK * b; if (r.pools) r.pools.color.setScalar(b);
     if (r.fill) r.fill.intensity = r.fillI * a;
     if (w.indoor) w.scene.environmentIntensity = 0.6 * (0.3 + 0.45 * b + 0.25 * a);
   }

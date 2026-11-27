@@ -1,5 +1,5 @@
 // Post-processing pipeline (three.js addons): world (+ planet) pass -> GTAO -> depth of field -> HDR bloom
-// -> filmic tone map -> grade (vignette, chromatic aberration, lens dirt, grain, sun shafts, heat shimmer,
+// -> filmic tone map -> grade (vignette, lens dirt, grain, sun shafts, heat shimmer,
 // chase-cam motion blur) -> SMAA. Phone keeps bloom + grade on MSAA; low renders straight to screen.
 import * as THREE from 'three';
 import { EffectComposer } from '../vendor/three/addons/postprocessing/EffectComposer.js';
@@ -38,13 +38,13 @@ function dirtTex() {
 const GradeShader = {
   uniforms: {
     tDiffuse: { value: null }, tDirt: { value: null }, uRes: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 },
-    uVig: { value: 0.32 }, uCA: { value: 0.0008 }, uGrain: { value: 0.035 }, uDirtK: { value: 0.22 },
+    uVig: { value: 0.32 }, uGrain: { value: 0.035 }, uDirtK: { value: 0.22 },
     uBlur: { value: 0 }, uHeat: { value: new THREE.Vector4(0, 0, 0, 0) }, uHeatDir: { value: new THREE.Vector2(0, -1) },
     uSun: { value: new THREE.Vector3(0.5, 0.5, 0) }, uShaft: { value: 0 }, uShaftN: { value: 20 }, uLift: { value: new THREE.Vector3(0.012, 0.010, 0.018) },
     uGain: { value: new THREE.Vector3(1.03, 1.0, 0.95) }, uSat: { value: 1.12 }, uContrast: { value: 1.08 },
   },
   vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-  fragmentShader: `uniform sampler2D tDiffuse, tDirt; uniform vec2 uRes, uHeatDir; uniform float uTime, uVig, uCA, uGrain, uDirtK, uBlur, uShaft, uShaftN, uSat, uContrast;
+  fragmentShader: `uniform sampler2D tDiffuse, tDirt; uniform vec2 uRes, uHeatDir; uniform float uTime, uVig, uGrain, uDirtK, uBlur, uShaft, uShaftN, uSat, uContrast;
     uniform vec4 uHeat; uniform vec3 uSun, uLift, uGain; varying vec2 vUv;
     float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
     float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f); return mix(mix(h(i), h(i+vec2(1,0)), f.x), mix(h(i+vec2(0,1)), h(i+vec2(1,1)), f.x), f.y); }
@@ -58,9 +58,7 @@ const GradeShader = {
         uv += n * 0.012 * m * uHeat.w;
       }
       vec2 c = uv - 0.5; float r2 = dot(c * asp, c * asp);
-      // chromatic aberration grows toward the frame edge
-      vec2 off = c * uCA * smoothstep(0.08, 0.6, r2) * 3.0;
-      vec3 col = vec3(texture2D(tDiffuse, uv + off).r, texture2D(tDiffuse, uv).g, texture2D(tDiffuse, uv - off).b);
+      vec3 col = texture2D(tDiffuse, uv).rgb;
       // chase-cam motion blur: radial streaks from the centre
       if (uBlur > 0.0) { vec3 acc = col; for (int i = 1; i < 8; i++) { float k = float(i) / 8.0; acc += texture2D(tDiffuse, uv - c * k * uBlur).rgb; } col = acc / 8.0; }
       // sun shafts: march toward the sun through bright sky pixels
