@@ -107,9 +107,9 @@ export class Post {
     C.addPass(new WorldPass(this.w));
     if (this.tier === 2) {
       const ao = this.ao = new AOPass(this.w.scene, this.w.camera, W, H);
-      ao.updateGtaoMaterial({ radius: 1.4, distanceExponent: 1.6, thickness: 2.2, scale: 1.0, samples: 12, distanceFallOff: 1.0 });
+      ao.updateGtaoMaterial({ radius: 2.2, distanceExponent: 1.6, thickness: 2.2, scale: 1.0, samples: 12, distanceFallOff: 1.0 });
       ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 12 });
-      ao.blendIntensity = 0.9; C.addPass(ao);
+      ao.blendIntensity = 1.0; C.addPass(ao);
       const bk = this.bokeh = new BokehPass(this.w.scene, this.w.camera, { focus: 30, aperture: 0.00012, maxblur: 0.008 });
       bk.enabled = false; C.addPass(bk);
     }

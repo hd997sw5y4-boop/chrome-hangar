@@ -41,7 +41,7 @@ function hullMaps(style, len, heat) {
   hg.fillStyle = '#808080'; hg.fillRect(0, 0, W, H);
   const base = dark ? 0.42 : style === 'mirror' ? 0.13 : style === 'nose' ? 0.16 : 0.27;
   rg.fillStyle = `rgb(${base * 255 | 0},0,0)`; rg.fillStyle = `rgb(0,${base * 255 | 0},0)`; rg.fillRect(0, 0, W, H);
-  cg.fillStyle = dark ? '#2b2e33' : style === 'mirror' ? '#d4d6d9' : style === 'nose' ? '#cfd1d4' : '#c2c5c9';   // stainless F0, not paper white cg.fillRect(0, 0, W, H);
+  cg.fillStyle = dark ? '#2b2e33' : style === 'mirror' ? '#d4d6d9' : style === 'nose' ? '#cfd1d4' : '#c2c5c9'; cg.fillRect(0, 0, W, H);   // stainless F0, not paper white
   if (dark) {   // wound carbon over a liner: diagonal weave
     for (let y = 0; y < H; y += 8) for (let x = 0; x < W; x += 8) { const on = ((x + y) / 8) % 2 < 1; hg.fillStyle = on ? '#8a8a8a' : '#767676'; hg.fillRect(x, y, 8, 8); rg.fillStyle = `rgb(0,${on ? 96 : 120},0)`; rg.fillRect(x, y, 8, 8); }
   } else {
@@ -100,7 +100,7 @@ function hullMaps(style, len, heat) {
     for (let i = 0; i < 40; i++) { const x = rnd() * W, y = rnd() * H * 0.7, l = 30 + rnd() * 160; const gr = cg.createLinearGradient(0, y, 0, y + l); gr.addColorStop(0, 'rgba(90,85,78,0)'); gr.addColorStop(0.5, `rgba(90,85,78,${0.05 + rnd() * 0.06})`); gr.addColorStop(1, 'rgba(90,85,78,0)'); cg.fillStyle = gr; cg.fillRect(x, y, 1 + rnd() * 3, l); }
   }
   if (heat) {   // temper colours and soot creeping up from the engine
-    const hh = Math.min(H, 2.2 * py), gr = cg.createLinearGradient(0, H, 0, H - hh);
+    const hh = Math.min(H * 0.4, 1.3 * py), gr = cg.createLinearGradient(0, H, 0, H - hh);
     gr.addColorStop(0, 'rgba(40,30,26,0.85)'); gr.addColorStop(0.18, 'rgba(70,55,95,0.55)'); gr.addColorStop(0.38, 'rgba(70,95,160,0.42)'); gr.addColorStop(0.62, 'rgba(205,160,90,0.35)'); gr.addColorStop(1, 'rgba(220,190,140,0)');
     cg.fillStyle = gr; cg.fillRect(0, H - hh, W, hh);
     const rr = rg.createLinearGradient(0, H, 0, H - hh); rr.addColorStop(0, 'rgba(0,200,0,0.7)'); rr.addColorStop(1, 'rgba(0,200,0,0)'); rg.fillStyle = rr; rg.fillRect(0, H - hh, W, hh);

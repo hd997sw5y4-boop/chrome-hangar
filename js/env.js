@@ -8,6 +8,7 @@ import { setModelTier } from './models.js';
 import { Outdoor } from './outdoor.js';
 import { Earth, GLOBE_FADE, GLOBE_EDGE } from './earth.js';
 import { Post } from './post.js';
+import { buildInterior } from './hangar.js';
 
 export const SPOTS = {
   stand: new THREE.Vector3(0, 0, 0),
@@ -135,10 +136,11 @@ export class World {
   }
   setIndoor(v) {
     this.indoor = v;
-    if (this.envs.hangar && this.envs.sky) { this.scene.environment = v ? this.envs.hangar : this.envs.sky; this.scene.environmentIntensity = v ? 1.0 : 0.95; if (!v) this.applySky?.(); }
+    if (this.envs.hangar && this.envs.sky) { this.scene.environment = v ? this.envs.hangar : this.envs.sky; this.scene.environmentIntensity = v ? 0.6 : 0.95; if (!v) this.applySky?.(); }
     this.spot.castShadow = v && this.shadowSize > 0;
     this.sun.castShadow = !v && this.shadowSize > 0;
     this.sun.visible = !v;   // no unshadowed sunlight leaking through the hangar roof
+    for (const l of this.bays || []) l.visible = v && this.quality !== 'phone' && this.quality !== 'low';
   }
 
   applyQuality(q, w, h) {
@@ -202,6 +204,8 @@ export class World {
     spot.shadow.camera.near = 4; spot.shadow.camera.far = 70; spot.shadow.bias = -0.0003; spot.shadow.normalBias = 0.03;
     s.add(spot, spot.target);
     const fill = new THREE.PointLight(0xcfe3ff, 120, 40, 1.8); fill.position.set(-12, 10, -6); s.add(fill);
+    // two warm high-bay pools on the hangar floor (no shadows; hidden outdoors and on the phone preset)
+    this.bays = [[-12, -6], [12, 7]].map(([x, z]) => { const l = new THREE.SpotLight(0xffe0b8, 1400, 40, 0.75, 0.8, 1.7); l.position.set(x, 21.5, z); l.target.position.set(x, 0, z); s.add(l, l.target); return l; });
   }
   // keep the sun's shadow box centred on what we're looking at
   followSun(p) {
@@ -224,7 +228,7 @@ export class World {
     const floorGeo = new THREE.ShapeGeometry(shape, 48);
     const floor = new THREE.Mesh(floorGeo, new THREE.MeshStandardMaterial({ map: floorTex, color: 0xb8b8b8, roughness: 0.3, metalness: 0.0, envMapIntensity: 0.8 }));
     floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; g.add(floor); this.floor = floor;
-    applyPBR(floor.material, 'hangar_concrete_floor', [1 / 5, 1 / 5], { normalScale: 0.5 }).then(m => { m.color.set(0xd8d8d8); m.roughness = 0.85; }).catch(() => {});
+    applyPBR(floor.material, 'hangar_concrete_floor', [1 / 5, 1 / 5], { normalScale: 0.5 }).then(m => { m.color.set(0xd2d2d0); m.roughness = 0.55; m.envMapIntensity = 1.0; })   // sealed, lightly polished.catch(() => {});
     // pit
     const pit = new THREE.Mesh(new THREE.CylinderGeometry(H.pitR, H.pitR, H.pitDepth, 48, 1, true), new THREE.MeshStandardMaterial({ color: 0x2a2d31, metalness: 0.7, roughness: 0.5, side: THREE.BackSide }));
     pit.position.y = -H.pitDepth / 2; g.add(pit);
@@ -244,17 +248,8 @@ export class World {
     const table = new THREE.Mesh(new THREE.CylinderGeometry(2.3, 2.4, 0.3, 64), this.M.dark); table.position.y = -0.15; table.receiveShadow = true; table.castShadow = true; stand.add(table);
     const glow = this.standGlow = new THREE.Mesh(new THREE.TorusGeometry(2.36, 0.025, 6, 96), new THREE.MeshBasicMaterial({ color: 0x7fe7ff }));
     glow.rotation.x = Math.PI / 2; glow.position.y = 0.01; stand.add(glow);
-    // walls: corrugated steel (bump from canvas), door opening on -Z
-    const corr = canvasTex(256, 16, (c, w) => { for (let x = 0; x < w; x++) { const v = 128 + 120 * Math.sin(x / w * Math.PI * 16) | 0; c.fillStyle = `rgb(${v},${v},${v})`; c.fillRect(x, 0, 1, 16); } }, 1, false);
-    const wallMat = new THREE.MeshStandardMaterial({ color: 0x9da2a8, metalness: 0.55, roughness: 0.5, envMapIntensity: 0.55, bumpMap: corr, bumpScale: 3, side: THREE.DoubleSide });
-    const wall = (w, h, x, y, z, ry) => { const t = wallMat.clone(); t.bumpMap = corr.clone(); t.bumpMap.repeat.set(w / 6, 1); t.bumpMap.needsUpdate = true; applyPBR(t, 'corrugated_iron_02', [w / 4, h / 4], { metal: true, normalScale: 1.2 }).then(mm => { if (mm.normalMap) mm.bumpMap = null; mm.color.set(0xc4c8cc); }).catch(() => {}); const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), t); m.position.set(x, y, z); m.rotation.y = ry; m.receiveShadow = true; g.add(m); };
-    wall(H.x * 2, H.h, 0, H.h / 2, H.z, Math.PI);
-    wall(H.z * 2, H.h, -H.x, H.h / 2, 0, Math.PI / 2);
-    wall(H.z * 2, H.h, H.x, H.h / 2, 0, -Math.PI / 2);
-    const side = H.x - H.door;
-    wall(side, H.h, -H.door - side / 2, H.h / 2, -H.z, 0);
-    wall(side, H.h, H.door + side / 2, H.h / 2, -H.z, 0);
-    wall(H.door * 2, H.h - H.doorH, 0, H.doorH + (H.h - H.doorH) / 2, -H.z, 0);
+    // interior architecture (walls, truss roof, lamps, shafts, cables, scaffold) lives in hangar.js
+    this.interior = buildInterior(this, g, H, this.M, this.quality === 'phone' || this.quality === 'low');
     // exterior shell: painted corrugated cladding, gable roof, big lettering (seen from the apron and the air)
     {
       const ext = new THREE.MeshStandardMaterial({ color: 0xe6e9ec, metalness: 0.35, roughness: 0.45 });
@@ -285,20 +280,6 @@ export class World {
     const frameMat = new THREE.MeshStandardMaterial({ color: 0x30343a, metalness: 0.8, roughness: 0.4 });
     for (const x of [-H.door, H.door]) { const f = new THREE.Mesh(new THREE.BoxGeometry(0.6, H.doorH, 0.8), frameMat); f.position.set(x, H.doorH / 2, -H.z); g.add(f); }
     const top = new THREE.Mesh(new THREE.BoxGeometry(H.door * 2 + 0.6, 0.6, 0.8), frameMat); top.position.set(0, H.doorH, -H.z); g.add(top);
-    // ceiling + trusses + light panels
-    const ceil = new THREE.Mesh(new THREE.PlaneGeometry(H.x * 2, H.z * 2), new THREE.MeshStandardMaterial({ color: 0x3b3f45, roughness: 0.8, side: THREE.DoubleSide }));
-    ceil.rotation.x = Math.PI / 2; ceil.position.y = H.h; g.add(ceil);
-    const beam = new THREE.BoxGeometry(H.x * 2, 0.5, 0.35);
-    const beams = new THREE.InstancedMesh(beam, frameMat, 7);
-    const lightMat = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xfff4e0, emissiveIntensity: 16 });
-    const lights = new THREE.InstancedMesh(new THREE.BoxGeometry(3.2, 0.12, 0.9), lightMat, 18);
-    const m4 = new THREE.Matrix4(); let li = 0;
-    for (let i = 0; i < 7; i++) {
-      const z = -H.z + (i + 0.5) * (H.z * 2 / 7);
-      m4.makeTranslation(0, H.h - 1.2, z); beams.setMatrixAt(i, m4);
-      if (i % 2 === 0 || i === 3) for (const x of [-12, 0, 12]) if (li < 18) { m4.makeTranslation(x, H.h - 1.6, z); lights.setMatrixAt(li++, m4); }
-    }
-    lights.count = li; g.add(beams, lights);
     // mezzanine along the back wall (for the view)
     const mez = new THREE.Mesh(new THREE.BoxGeometry(H.x * 2 - 2, 0.3, 4), frameMat); mez.position.set(0, 7, H.z - 2); mez.castShadow = true; mez.receiveShadow = true; g.add(mez);
     const mrail = new THREE.Mesh(new THREE.BoxGeometry(H.x * 2 - 2, 0.06, 0.06), this.M.chromeTrim); mrail.position.set(0, 8.1, H.z - 4); g.add(mrail);
