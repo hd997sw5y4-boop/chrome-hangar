@@ -12,8 +12,8 @@
  "minThrottle": 0.3,
  "gimbalDeg": 4,
  "heat": {
-  "safeThrottle": 0.95,
-  "risePerSec": 6,
+  "safeThrottle": 1.0,
+  "risePerSec": 0,
   "coolPerSec": 7,
   "baseTemp": 630,
   "spanTemp": 2150,

@@ -1,6 +1,6 @@
 // Chrome Hangar: boot, game state, menus, missions, saves, settings, results.
 import * as THREE from 'three';
-import { loadParts, PARTS, PART_IDS, emptyRocket, starterRocket, cloneRocket, stats, partCount } from './rocket.js';
+import { loadParts, PARTS, PART_IDS, emptyRocket, starterRocket, stockRocket, cloneRocket, stats, partCount } from './rocket.js';
 import { World, PRESETS, SKIES, defaultQuality, IS_TOUCH, IS_IOS } from './env.js';
 import { Audio } from './audio.js';
 import { Input } from './input.js';
@@ -20,7 +20,7 @@ class Game {
     this.settings = { ...DEFAULTS(), ...LS.get('settings', {}) };
     this.progress = LS.get('progress', { stars: {}, best: {} });
     this.saves = LS.get('saves', []);
-    this.rocket = LS.get('rocket', null) || starterRocket();
+    this.rocket = LS.get('rocket', null) || stockRocket();
     this.fill = LS.get('fill', 1);
     this.mission = null; // mission object or null = sandbox
     this.mode = 'loading';
@@ -184,7 +184,7 @@ class Game {
     else this.setMode('build');
     this.audio.tap();
   }
-  startSandbox() { this.mission = null; this.showMenu(false); this.closePanel(); this.setMode('build'); this.build.makeTray(); }
+  startSandbox() { this.mission = null; if (!this.rocket.stack.length || JSON.stringify(this.rocket) === JSON.stringify(starterRocket())) { this.rocket = stockRocket(); this.build.resetHistory(); } this.showMenu(false); this.closePanel(); this.setMode('build'); this.build.makeTray(); }
   continueGame() {
     // first time: tutorial. Otherwise the first mission without all its stars, or sandbox.
     if (!this.missionDone('m0')) return this.startMission(0);

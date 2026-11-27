@@ -17,6 +17,8 @@ export const emptyRocket = () => ({ stack: [], engine: null });
 export const cloneRocket = r => JSON.parse(JSON.stringify(r));
 export const starterRocket = () => ({ stack: [{ p: 'mount' }, { p: 'tank_short', fins: 1, legs: true }, { p: 'nose' }], engine: 'spark' });
 
+// sandbox stock: stable through max-q in a crosswind and reaches space at full throttle
+export const stockRocket = () => ({ stack: [{ p: 'mount' }, { p: 'tank_short', fins: 2, legs: true }, { p: 'tank_mini' }, { p: 'nose_needle' }], engine: 'vesper' });
 export function lowestTankIndex(r) { return r.stack.findIndex(s => PARTS[s.p]?.kind === 'tank'); }
 export function hasLegs(r) { return r.stack.some(s => s.legs); }
 export function partCount(r) {
