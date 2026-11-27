@@ -42,15 +42,18 @@ body.build:not(.touch) #crosshair{display:block}
 @keyframes pop{from{transform:translateX(-50%) scale(.9);opacity:0}to{opacity:1}}
 /* build */
 #buildUI{position:fixed;inset:0;pointer-events:none;z-index:4}
-#tray{position:absolute;left:calc(10px + var(--sl));right:calc(10px + var(--sr));bottom:calc(10px + var(--sb));display:flex;gap:10px;justify-content:safe center;pointer-events:auto;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+#tray{position:absolute;left:calc(10px + var(--sl));right:calc(10px + var(--sr));bottom:calc(10px + var(--sb));display:flex;gap:10px;justify-content:safe center;pointer-events:auto;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;touch-action:none;overscroll-behavior:contain;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;padding:6px 2px 2px;cursor:grab}
+#tray.dragging{cursor:grabbing}#tray.dragging .tile{pointer-events:none}
+.traySec{transform:translateX(var(--trayOv,0px))}
 #tray::-webkit-scrollbar{display:none}
 .traySec{display:flex;flex-direction:column;gap:4px;background:var(--glass);border:1px solid var(--line);border-radius:16px;padding:6px 8px}
 .traySec h4{margin:0;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);font-weight:600;padding-left:4px}
 .traySec .tiles{display:flex;gap:6px}
-.tile{width:84px;height:92px;border-radius:12px;background:rgba(255,255,255,.05);border:1px solid var(--line);display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding:4px;cursor:pointer;position:relative;transition:box-shadow .15s,background .15s,transform .1s}
-.tile img{width:62px;height:56px;object-fit:contain;pointer-events:none}
-.tile .nm{font-size:12px;font-weight:600;white-space:nowrap}.tile .kb{position:absolute;top:3px;left:6px;font-size:10px;color:var(--dim)}
-.tile:hover{background:rgba(127,231,255,.12);box-shadow:0 0 0 1px rgba(127,231,255,.6),0 0 18px rgba(127,231,255,.35)}
+.tile{flex:0 0 auto;width:84px;height:92px;border-radius:12px;background:rgba(255,255,255,.05);border:1px solid var(--line);display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding:4px;cursor:pointer;position:relative;transition:box-shadow .15s,background .15s,transform .12s}
+.tile:active{transform:scale(.96)}
+.tile img{width:72px;height:60px;object-fit:contain;pointer-events:none;-webkit-user-drag:none}
+.tile .nm{font-size:12px;font-weight:600;white-space:nowrap;max-width:76px;overflow:hidden;text-overflow:ellipsis}.tile .kb{position:absolute;top:3px;left:6px;font-size:10px;color:var(--dim)}
+@media (hover:hover){.tile:hover{background:rgba(127,231,255,.12);box-shadow:0 0 0 1px rgba(127,231,255,.6),0 0 18px rgba(127,231,255,.35)}}
 .tile.sel{background:rgba(127,231,255,.2);box-shadow:0 0 0 2px var(--accent),0 0 22px rgba(127,231,255,.5)}
 .tile.del.sel{box-shadow:0 0 0 2px var(--bad),0 0 22px rgba(255,107,94,.5);background:rgba(255,107,94,.2)}
 .tile.locked{opacity:.38}.tile.locked::after{content:attr(data-lock);position:absolute;top:30px;font-size:12px;background:#0009;padding:2px 6px;border-radius:8px}
@@ -130,7 +133,7 @@ body.touch #fBtns{max-width:calc(100% - 320px - var(--sl) - var(--sr))}
 @media (max-height:500px){
  #hpPanel{top:calc(52px + var(--st));left:calc(184px + var(--sl));width:112px;padding:4px 6px 5px}#hpCanvas{width:96px;height:147px}#hpWarn div{font-size:9px;height:11.5px}
  .logo{font-size:30px}.menuBtns{gap:5px}.menuBtns button{min-height:36px;padding:6px 14px}button.big{font-size:16px;padding:8px 18px}
- .tile{width:66px;height:70px}.tile img{width:46px;height:40px}.tile .ico{font-size:22px;line-height:40px}.tile .nm{font-size:10px}.traySec{padding:3px 5px}.traySec h4{display:none}
+ .tile{width:66px;height:70px}.tile img{width:54px;height:42px}.tile .ico{font-size:22px;line-height:40px}.tile .nm{font-size:10px}.traySec{padding:3px 5px}.traySec h4{display:none}
  #checkout{width:210px;top:calc(56px + var(--st));padding:6px 8px;max-height:calc(100% - 150px - var(--st) - var(--sb))}#ckDiagram{width:54px;height:114px}#ckStats{font-size:11px}
  #checkout .row button{min-height:30px;font-size:11px;padding:4px}
  .readouts,#fStats{top:calc(52px + var(--st));padding:6px 10px;min-width:150px;gap:2px}.readouts b,#fStats b{font-size:16px}.readouts div,#fStats div{grid-template-columns:62px 1fr 30px}

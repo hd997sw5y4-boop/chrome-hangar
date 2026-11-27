@@ -7,6 +7,7 @@ import { HANGAR, IS_TOUCH } from './env.js';
 import { DECK } from './stand.js';
 import { height } from './terrain.js';
 import { walk as collideWalk, playerFrame, R_PLAYER, insideHangar } from './collide.js';
+import { Tray } from './tray.js';
 
 const $ = id => document.getElementById(id);
 const EYE = 1.65;
@@ -45,7 +46,17 @@ export class BuildMode {
       for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, () => { this.held[k] = false; });
     });
     if (IS_TOUCH) { $('ckBody').classList.add('hidden'); $('ckToggle').textContent = '+'; }
-    // drag a part from the tray straight onto the rocket
+    // tray: tap a card to pick it, drag it up onto the rocket, wheel / drag sideways to scroll
+    this.tray = new Tray($('tray'), {
+      onHover: () => this.g.audio.hover(),
+      onTap: card => { if (this.pickable(card)) this.select(this.sel === card.dataset.id && !IS_TOUCH ? null : card.dataset.id); },
+      onDragOut: (card, e) => {
+        const id = card.dataset.id; if (id === 'delete' || !this.pickable(card)) return;
+        if (this.sel !== id) this.select(id);
+        this.dragging = { id, moved: 31 }; this.aimXY = { x: e.clientX, y: e.clientY };
+      },
+    });
+    // a part being carried out of the tray follows the pointer; let go over the hangar to place it
     addEventListener('pointermove', e => { if (this.dragging) { this.dragging.moved += Math.abs(e.movementX || 0) + Math.abs(e.movementY || 0); if (e.target === this.w.renderer.domElement || this.dragging.moved > 30) this.aimXY = { x: e.clientX, y: e.clientY }; } });
     addEventListener('pointerup', e => {
       if (!this.dragging) return; const d = this.dragging; this.dragging = null;
@@ -65,17 +76,12 @@ export class BuildMode {
     }
     html += `<div class="traySec"><h4>Tools</h4><div class="tiles"><div class="tile del" data-id="delete" title="Delete / detach a part"><span class="kb">0</span><span class="ico">✕</span><span class="nm">Delete</span></div></div></div>`;
     $('tray').innerHTML = html;
-    $('tray').querySelectorAll('.tile').forEach(t => {
-      t.addEventListener('pointerenter', () => this.g.audio.hover());
-      t.addEventListener('pointerdown', e => {
-        e.preventDefault(); this.g.audio.unlock();
-        const id = t.dataset.id;
-        if (t.classList.contains('locked')) { this.g.toast(`Earn ${PARTS[id].unlockStars}★ in missions to unlock ${PARTS[id].name}.`); this.g.audio.bad(); return; }
-        this.select(this.sel === id && !IS_TOUCH ? null : id);
-        if (id !== 'delete') this.dragging = { id, moved: 0 };
-      });
-    });
     this.refreshTray();
+  }
+  pickable(t) {
+    this.g.audio.unlock();
+    if (!t.classList.contains('locked')) return true;
+    const id = t.dataset.id; this.g.toast(`Earn ${PARTS[id].unlockStars}★ in missions to unlock ${PARTS[id].name}.`); this.g.audio.bad(); return false;
   }
   refreshTray() {
     const step = this.tut && this.tutSteps[this.tut.i];
@@ -88,6 +94,7 @@ export class BuildMode {
   selectable() { return [...PART_IDS.filter(id => this.g.partUnlocked(id)), 'delete']; }
   select(id) {
     this.sel = id; this.g.audio.tap(); this.refreshTray(); this.clearGhost(); this.hoverDel = null;
+    if (id) this.tray?.reveal($('tray').querySelector(`.tile[data-id="${id}"]`));
     if (id && id !== 'delete') this.autoStand(id);
   }
 
@@ -306,6 +313,12 @@ export class BuildMode {
     if (inp.hit('Digit0') || inp.hit('Delete') || inp.hit('Backspace') || inp.hit('Pad2')) this.select(this.sel === 'delete' ? null : 'delete');
     if (inp.hit('Pad4') || inp.hit('Pad5')) { const l = this.selectable(); const i = l.indexOf(this.sel); this.select(l[(i + (inp.hit('Pad5') ? 1 : l.length - 1) + (i < 0 ? 1 : 0)) % l.length]); }
     if (inp.hit('Pad8')) this.g.travel('test');
+    // mouse captured: the wheel steps through the tray (one notch = one part); Tab frees / recaptures the cursor
+    if (inp.locked && inp.zoom) {
+      this.wheelAcc = (this.wheelAcc || 0) + inp.zoom;
+      if (Math.abs(this.wheelAcc) >= 0.9) { const l = this.selectable(), i = l.indexOf(this.sel), d = this.wheelAcc > 0 ? 1 : -1; this.wheelAcc = 0; this.select(l[i < 0 ? (d > 0 ? 0 : l.length - 1) : (i + d + l.length) % l.length]); }
+    }
+    if (inp.hit('Tab') && !IS_TOUCH) { if (inp.locked) inp.exitLock(); else inp.requestLock(); }
     // look + walk
     P.yaw -= inp.look.x; P.pitch = THREE.MathUtils.clamp(P.pitch - inp.look.y, -1.35, 1.35);
     const sp = (inp.down('ShiftLeft') ? 6.5 : 3.6) * dt;
@@ -313,7 +326,8 @@ export class BuildMode {
     // forward = (fx, fz), right = (-fz, fx); move.x > 0 strafes right, move.y < 0 walks forward
     const nx = P.x + (fx * -inp.move.y + -fz * inp.move.x) * sp, nz = P.z + (fz * -inp.move.y + fx * inp.move.x) * sp;
     const moved = Math.hypot(nx - P.x, nz - P.z);
-    const p = collideWalk(nx, nz, R_PLAYER, playerFrame(this.g)); P.x = p.x; P.z = p.z;
+    const obs = playerFrame(this.g), bots = this.g.robots?.obstacles(); if (bots?.length) obs.push(...bots);
+    const p = collideWalk(nx, nz, R_PLAYER, obs); P.x = p.x; P.z = p.z;
     const wantIn = insideHangar(P.x, P.z, this.w.indoor ? -0.4 : 1.0);
     if (wantIn !== this.w.indoor) this.w.setIndoor(wantIn);
     if (moved > 0.001) { this.stepT += moved; if (this.stepT > 0.75) { this.stepT = 0; this.g.audio.step(); } }
