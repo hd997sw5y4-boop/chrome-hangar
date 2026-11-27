@@ -35,7 +35,7 @@ export function natural(x, z) {
   h += inland * (ridge(x / 3200, z / 3200, 5) ** 1.4) * 1100 + inland * fbm(x / 700, z / 700, 4) * 60;
   // far south / north ranges so the horizon is never empty
   const farRing = sstep(9000, 16000, Math.hypot(x * 0.8, z));
-  h += farRing * ridge(x / 4000 + 3, z / 4000, 4) * 1500 * sstep(0, 1, 1 - sstep(-2000, 4000, x - coastX(z)));
+  h += farRing * ridge(x / 4000 + 3, z / 4000, 4) * 650 * sstep(0, 1, 1 - sstep(-2000, 4000, x - coastX(z)));
   // coast: beach slope then sea floor
   const d = x - coastX(z);
   const shore = sstep(-260, 20, d);
@@ -258,7 +258,7 @@ if (gFade > 0.995) discard;     // dissolve into the globe pass at high altitude
 #endif
   vec4 w = vec4(sand, dirt * (1.0 - sand), grass * (1.0 - sand) * (1.0 - smoothstep(25.0, 0.0, sd)), rock * 1.6);
   w = pow(w, vec4(2.0)); w /= max(1e-3, w.x + w.y + w.z + w.w);
-  vec3 col = two(tSand, p, far) * w.x + two(tDirt, p, far) * w.y + two(tGrass, p, far) * w.z + two(tRock, p * 0.6, far) * w.w;
+  vec3 col = two(tSand, p, far) * w.x + two(tDirt, p, far) * vec3(0.8, 0.71, 0.58) * w.y + two(tGrass, p, far) * w.z + two(tRock, p * 0.6, far) * vec3(0.78, 0.74, 0.68) * w.w;   // warm the pale dry-mud and rock sets
   col *= 0.86 + 0.28 * fb(p / 23.0);                    // breakup
   col *= mix(vec3(1.04, 0.99, 0.92), vec3(0.86, 0.93, 0.8), smoothstep(0.35, 0.7, n2));   // macro tint
 #ifdef MACRO
