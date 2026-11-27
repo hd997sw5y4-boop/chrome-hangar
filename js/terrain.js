@@ -232,7 +232,7 @@ float fb(vec2 p){ return vn(p)*0.5 + vn(p*2.03)*0.25 + vn(p*4.1)*0.125 + vn(p*8.
 vec3 two(sampler2D t, vec2 p, float far){ vec3 a = texture2D(t, p / 5.0).rgb, b = texture2D(t, p / 41.0 + 0.37).rgb, c = texture2D(t, p / 290.0).rgb;
   return mix(mix(a, b, 0.35), mix(b, c, 0.5), far); }`)
       .replace('#include <map_fragment>', `
-float gFade = max(uGF, uGE * smoothstep(7000.0, 11000.0, max(abs(vWP.x), abs(vWP.z))));   // blend into the globe pass behind
+float gFade = max(uGF, uGE * smoothstep(5000.0, 17000.0, length(vWP.xz)));   // soft radial blend into the globe, no square seam
 if (gFade > 0.995) discard;     // dissolve into the globe pass at high altitude
 { vec2 q = vWP.xz - uTrench.xy; if (abs(dot(q, uTrench.zw)) < uTrenchS.x && abs(dot(q, vec2(-uTrench.w, uTrench.z))) < uTrenchS.y) discard; }   // flame trench
 {
@@ -274,6 +274,9 @@ if (gFade > 0.995) discard;     // dissolve into the globe pass at high altitude
   }
 #endif
   float wet = smoothstep(uSea + 0.9, uSea + 0.05, vWP.y); col *= 1.0 - wet * 0.45; // wet sand at the waterline
+#ifdef MACRO
+  col = mix(col, mac * 1.05, gFade * mk);   // at the fade, lean on the same aerial the globe uses
+#endif
   diffuseColor.rgb *= col; diffuseColor.a *= 1.0 - gFade;
   gTW = w; gTP = p; gFar = far;
 }`)
@@ -291,7 +294,7 @@ if (gFade > 0.995) discard;     // dissolve into the globe pass at high altitude
 #endif`)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(0.97, 0.55, smoothstep(uSea + 0.6, uSea, vWP.y));');
   };
-  m.customProgramCacheKey = () => 'terrain-v4' + (nor ? 'n' : '') + (macro ? 'm' : '');
+  m.customProgramCacheKey = () => 'terrain-v5' + (nor ? 'n' : '') + (macro ? 'm' : '');
   return m;
 }
 

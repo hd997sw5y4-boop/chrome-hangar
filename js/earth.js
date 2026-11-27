@@ -52,7 +52,7 @@ export class Earth {
         vec3 day = texture2D(tDay, vUv).rgb;
         // sharp regional aerial image (the same 24 km USGS mosaic the local terrain uses) inset around the site
         if (uRegK > 0.0) { vec2 ru = (vW.xz * 1000.0 - uRegR.xy) / uRegR.z; float e = min(min(ru.x, 1.0 - ru.x), min(ru.y, 1.0 - ru.y));
-          if (e > 0.0) { vec4 rg = texture2D(tReg, ru); day = mix(day, rg.rgb * 0.8, smoothstep(0.0, 0.12, e) * uRegK * rg.a); } }
+          if (e > 0.0) { vec4 rg = texture2D(tReg, ru); day = mix(day, rg.rgb, smoothstep(0.0, 0.22, e) * uRegK * rg.a); } }
         float water = smoothstep(0.02, 0.0, day.r - day.b * 0.6) * smoothstep(0.12, 0.03, dot(day, vec3(0.33)));
         vec3 col = day * (lit * uSunI * 0.55 + 0.012);
         vec3 H = normalize(L + V); col += water * vec3(1.0, 0.92, 0.8) * pow(max(dot(N, H), 0.0), 90.0) * uSunI * 0.6 * lit;

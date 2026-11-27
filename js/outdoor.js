@@ -126,7 +126,7 @@ export class Outdoor {
       fragmentShader: `uniform sampler2D tN; uniform float uT; uniform vec3 uSun, uDeep, uShallow, uHorizon, uZenith, uSunCol; uniform float uGF, uGE; varying vec3 vW;
         #include <fog_pars_fragment>
         void main(){
-          float gFade = max(uGF, uGE * smoothstep(7000.0, 11000.0, max(abs(vW.x), abs(vW.z)))); if (gFade > 0.995) discard;
+          float gFade = max(uGF, uGE * smoothstep(5000.0, 17000.0, length(vW.xz))); if (gFade > 0.995) discard;
           vec2 p = vW.xz;
           vec3 n1 = texture2D(tN, p / 61.0 + vec2(uT * 0.011, uT * 0.007)).xyz * 2.0 - 1.0;
           vec3 n2 = texture2D(tN, p / 17.0 - vec2(uT * 0.017, -uT * 0.013)).xyz * 2.0 - 1.0;
