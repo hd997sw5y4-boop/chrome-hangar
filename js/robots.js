@@ -1,13 +1,12 @@
 // Worker robots: original, realistic humanoid service robots (about 1.75 m) built procedurally.
-// White clear-coated (or satin-silver) shell panels with thin seams, brushed-metal joints (ambientCG Metal032, CC0),
-// a graphite under-suit, rubber soles (ambientCG Rubber004, CC0), a glossy black glass faceplate and visible linear
+// White clear-coated (or satin-silver) shell panels with thin seams, brushed-metal joints (procedural anisotropic),
+// a graphite under-suit, plain dark rubber soles and fingertips, a glossy black glass faceplate and visible linear
 // actuators at the elbows and knees. Every robot shares one rigidly-skinned geometry set (6 draw calls per robot),
 // with its own skeleton. Legs use planted-foot IK (no foot sliding); upper body is code-animated and smoothed.
 // Jobs: patrol, inspect (reach toward the rocket), console (hands on a panel). Click one: it stops, turns, looks at
 // you and waves with a soft servo whir. Pad crews walk clear at countdown and are gone by liftoff.
 import * as THREE from 'three';
 import { mergeGeometries } from '../vendor/three/addons/utils/BufferGeometryUtils.js';
-import { applyPBR } from './tex.js';
 import { SPOTS } from './env.js';
 
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -193,17 +192,24 @@ function template() {
   return TEMPLATE;
 }
 
+function brushedTex() {   // grey streaks along u (lathe/cylinder circumference) for a brushed grain
+  const W = 512, H = 64, c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
+  g.fillStyle = '#bdbdbd'; g.fillRect(0, 0, W, H);
+  let s0 = 7; const r = () => (s0 = (s0 * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 2200; i++) { const v = 150 + r() * 105 | 0, y = r() * H; g.fillStyle = `rgba(${v},${v},${v},${0.08 + r() * 0.18})`; g.fillRect(r() * W, y, 40 + r() * 260, 0.6 + r() * 0.8); }
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(1, 6); t.anisotropy = 8; t.colorSpace = THREE.SRGBColorSpace; return t;
+}
 function makeMaterials(lite) {
   const Phys = lite ? THREE.MeshStandardMaterial : THREE.MeshPhysicalMaterial;
   const shellW = new Phys({ color: 0xeeeff0, roughness: 0.3, metalness: 0.0, ...(lite ? {} : { clearcoat: 0.7, clearcoatRoughness: 0.12, specularIntensity: 0.6 }) });
   const shellS = new Phys({ color: 0xc4c8cc, roughness: 0.27, metalness: 0.88, ...(lite ? {} : { clearcoat: 0.35, clearcoatRoughness: 0.2 }) });
-  const metal = new THREE.MeshStandardMaterial({ color: 0xd9dcdf, metalness: 1, roughness: 0.32 });
+  // brushed metal in code: fine streak texture drives roughness/colour grain; anisotropic highlights on desktop
+  const brush = brushedTex();
+  const metal = new Phys({ color: 0xd6d9dc, metalness: 1, roughness: 0.42, map: brush, roughnessMap: brush, ...(lite ? {} : { anisotropy: 0.75, anisotropyRotation: Math.PI / 2 }) });
   const dark = new THREE.MeshStandardMaterial({ color: 0x1b1d21, metalness: 0.35, roughness: 0.48 });
-  const rubber = new THREE.MeshStandardMaterial({ color: 0x2a2b2d, metalness: 0, roughness: 0.9 });
+  const rubber = new THREE.MeshStandardMaterial({ color: 0x1e1f21, metalness: 0, roughness: 0.82 });   // plain dark rubber
   const visor = new Phys({ color: 0x030405, roughness: 0.06, metalness: 0.3, ...(lite ? {} : { clearcoat: 1, clearcoatRoughness: 0.03, specularIntensity: 1 }) });
   const glow = new THREE.MeshStandardMaterial({ color: 0x0a1418, emissive: 0x6fdcff, emissiveIntensity: 1.6, roughness: 0.4 });
-  applyPBR(metal, 'metal032', [3, 2], { metal: true, ao: false }).then(m => { m.color.set(0xe2e4e6); m.roughness = 0.75; }).catch(() => {});
-  applyPBR(rubber, 'rubber004', [2, 2], { ao: false, normal: !lite }).then(m => m.color.set(0x55575a)).catch(() => {});
   return { shellW, shellS, metal, dark, rubber, visor, glow };
 }
 
@@ -250,7 +256,11 @@ class Robot {
       else if (d > 0.04) { wantYaw = Math.atan2(dx, dz); const err = Math.abs(wrapA(wantYaw - this.yaw)); wantV = err < 0.5 ? speed * clamp(d / 0.6, 0.25, 1) * (1 - err) : 0; }
       else if (goal.face != null) wantYaw = goal.face;
     }
-    this.v = damp(this.v, wantV, 3, dt);
+    // speed ramps gently, and the body never outruns a planted foot (keeps every stance leg within reach)
+    this.v = wantV > this.v ? Math.min(wantV, this.v + 0.9 * dt) : Math.max(wantV, this.v - 1.8 * dt);
+    const fw0 = this.fwd(); let lag = 0;
+    for (const f of this.feet) if (!f.sw) lag = Math.min(lag, (f.pos.x - this.pos.x) * fw0.x + (f.pos.z - this.pos.z) * fw0.z);
+    if (lag < -0.24) this.v = Math.max(0, this.v - 4 * dt);
     const err = wrapA(wantYaw - this.yaw), maxR = 1.6;
     const rate = clamp(err * 3, -maxR, maxR);
     this.yawRate = damp(this.yawRate, rate, 6, dt);
@@ -395,10 +405,18 @@ class Robot {
     // pelvis: height bob and lateral sway toward the stance foot
     const sw = this.feet.find(f => f.sw);
     const bobT = sw ? Math.sin(Math.PI * sw.sw.t) : 0;
-    this.bob = damp(this.bob, (sw ? 0.008 * bobT : 0) - (this.v > 0.1 ? 0.012 : 0), 10, dt);
+    this.bob = damp(this.bob, (sw ? 0.008 * bobT : 0) - clamp(this.v / 0.85, 0, 1) * 0.03, 10, dt);
     this.sway = damp(this.sway, sw ? -sw.s * 0.018 * bobT : 0, 8, dt);
     const crouch = gesture === 'inspect' ? 0.01 : 0;
-    b.pelvis.position.set(this.sway, HIP_Y - 0.022 + this.bob - crouch + br * 0.002, 0);
+    // drop the hips when a foot is far out so every leg stays within reach (long strides, stopping mid-step)
+    let py = HIP_Y - 0.022 + this.bob - crouch + br * 0.002;
+    const cy = Math.cos(this.yaw), sy = Math.sin(this.yaw), reach = (L_THIGH + L_SHIN) * 0.995;
+    for (const f of this.feet) {
+      const hx = this.pos.x + cy * (HIP_OFF[0] * f.s + this.sway), hz = this.pos.z - sy * (HIP_OFF[0] * f.s + this.sway);
+      const h = Math.min(reach - 0.01, Math.hypot(f.pos.x - hx, f.pos.z - hz));
+      py = Math.min(py, Math.sqrt(reach * reach - h * h) - HIP_OFF[1] + ANKLE_H + (f.lift || 0) + f.pos.y - this.ground);
+    }
+    b.pelvis.position.set(this.sway, py, 0);
     b.pelvis.rotation.set(0.02, sw ? sw.s * 0.05 * bobT : 0, -this.sway * 0.8);
 
     b.spine.rotation.set(q.spineX, q.spineY, 0);

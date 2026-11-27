@@ -93,7 +93,5 @@ Libraries
 
 Rockets are original designs. No real company, vehicle, logo or name is depicted.
 
-Robot materials — ambientCG, CC0 1.0
-  "Metal032" (brushed metal joints) — https://ambientcg.com/view?id=Metal032
-  "Rubber004" (rubber soles and fingertips) — https://ambientcg.com/view?id=Rubber004
-  Robots are an original procedural design (js/robots.js).
+
+Robots — original procedural design (js/robots.js); all materials made in code.
