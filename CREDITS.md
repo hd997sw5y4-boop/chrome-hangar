@@ -95,3 +95,9 @@ Rockets are original designs. No real company, vehicle, logo or name is depicted
 
 
 Robots — original procedural design (js/robots.js); all materials made in code.
+
+Interactive hangar models and textures, Poly Haven (polyhaven.com), CC0 1.0
+  Metal Office Desk: Ulan Cabanilla. Barrel 03: Serhii Khromov. Worn Metal Rack: Luca B. Plastic Crate 02: Fabi_G.
+  Hanging Industrial Lamp: Kuutti Siitonen. Industrial Storage Cart: Jule Bielitz. Portable Welding Cart: Georgii Gorbunov.
+  Modular Industrial Pipes 01, Modular Factory Facade (a few wall pieces): Poly Haven. Painted Metal Shutter texture: Poly Haven.
+Bay doors, crane controls, launch console, monitors, cryo tank, fuel hose, pad clamps and umbilical are original code-built designs.

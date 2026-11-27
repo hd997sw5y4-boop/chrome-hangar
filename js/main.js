@@ -12,6 +12,7 @@ import { partMesh, rocketMesh, disposeTree } from './parts3d.js';
 import { dressHangar } from './props.js';
 import { Intro, shouldPlayIntro } from './intro.js';
 import { Training } from './train.js';
+import { Interactive } from './interactive.js';
 import { Robots } from './robots.js';
 
 const $ = id => document.getElementById(id);
@@ -54,6 +55,7 @@ class Game {
     step(80, 'Polishing the steel…');
     this.build = new BuildMode(this); this.test = new TestMode(this); this.flight = new FlightMode(this);
     this.training = new Training(this);
+    this.interact = new Interactive(this); this.interact.load();
     this.robots = new Robots(this);
     await this.makeThumbs();
     this.build.makeTray();
@@ -329,7 +331,7 @@ class Game {
       const inp = this.input;
       if (this.intro && !this.intro.done) {
         if (inp.hit('Escape') || inp.hit('Pad9') || inp.hit('Space') || inp.hit('Enter')) this.intro.skip();
-      } else if (inp.hit('Escape') || inp.hit('Pad9')) {
+      } else if ((inp.hit('Escape') || inp.hit('Pad9')) && !this.interact?.eatEscape()) {
         if (this.panelOpen) this.closePanel();
         else if (this.intro && this.mode === 'loading') this.continueGame();
         else if (!this.resultsOpen) this.showMenu(!this.menuOpen);
@@ -337,7 +339,8 @@ class Game {
       if (this.intro && !this.intro.done) this.intro.update(dt);
       else {
         const paused = this.menuOpen || this.panelOpen;
-        if (this.modeObj) { if (!paused) this.modeObj.update(dt, this.resultsOpen); else this.modeObj.idle?.(dt); }
+        const held = this.interact?.frame(dt, paused);
+        if (this.modeObj) { if (!paused && !held) this.modeObj.update(dt, this.resultsOpen); else if (paused) this.modeObj.idle?.(dt); }
       }
       this.smoke.update(dt, this.windNow || { x: 0, z: 0 }, this.world.h * this.world.renderer.getPixelRatio() / Math.tan(this.world.camera.fov * Math.PI / 360) / 2);
       this.robots?.update(dt);

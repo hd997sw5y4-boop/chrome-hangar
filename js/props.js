@@ -1,4 +1,4 @@
-// Hangar dressing: CC0 Poly Haven props (crane, tool chest, carts, barrels, gas cylinders, shelving,
+// Hangar dressing: CC0 Poly Haven props (tool chest, carts, barrels, gas cylinders, shelving,
 // generator, crates, ladder, work lights) plus painted floor lanes, safety signs, extinguishers and a clock.
 import * as THREE from 'three';
 import { prop, pieces } from './models.js';
@@ -17,7 +17,6 @@ export async function dressHangar(world) {
   const H = HANGAR, g = new THREE.Group(); g.name = 'props'; world.hangar.add(g);
   const at = (o, x, y, z, ry = 0, s = 1) => { o.position.set(x, y, z); o.rotation.y = ry; o.scale.setScalar(s); g.add(o); return o; };
   const jobs = [
-    prop('overhead_crane').then(o => at(o, 0, H.h - 4.1 - o.userData.size.y * 1.6, 7, 0, 1.6)),
     prop('metal_tool_chest').then(o => at(o, 8.2, 1.06, 5.1, 0.1)),
     prop('tool_cart').then(o => { at(o, 5.2, 0, 7.4, 0.5); at(o.clone(), -6, 0, -9.5, 2.4); }),
     prop('Barrel_01').then(o => { for (const [x, z, r] of [[-19.6, -13.2, 0], [-18.9, -13.6, 1], [-19.4, -12.4, 2], [-18.6, -12.8, 0.4], [18.8, -13.4, 1.2]]) at(o.clone(), x, 0, z, r); }),

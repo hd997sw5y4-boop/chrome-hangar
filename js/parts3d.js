@@ -293,20 +293,35 @@ export function finPair(pairIndex, radius = 0.9) {
 }
 export function legSet(dropTo, radius = 0.9) {
   // dropTo = distance from the attach point down to the feet. A-frame: hinge, damper strut with chrome piston, two braces, foot pad.
-  const d = PARTS.legs, g = new THREE.Group(), k = new Kit();
+  // Each leg is its own group pivoting at its hinge so it can fold up flat against the body in flight (setLegFold).
+  const d = PARTS.legs, g = new THREE.Group(), legs = [];
   for (let i = 0; i < 4; i++) {
     const a = i * Math.PI / 2 + Math.PI / 4, c = Math.cos(a), s = Math.sin(a), at = (r, y) => V(c * r, y, s * r);
     const hinge = at(radius + 0.12, 0.95), foot = at(d.footRadius, -dropTo + 0.16), knee = hinge.clone().lerp(foot, 0.58);
-    k.add(new THREE.BoxGeometry(0.34, 0.38, 0.24), M.titanium, xf([c * (radius + 0.06), 0.98, s * (radius + 0.06)], [0, -a, 0]));
+    const k = new Kit(), kb = new Kit();
+    kb.add(new THREE.BoxGeometry(0.34, 0.38, 0.24), M.titanium, xf([c * (radius + 0.06), 0.98, s * (radius + 0.06)], [0, -a, 0]));
     k.rod(hinge, knee, 0.1, 0.085, M.dark, 12); k.rod(knee.clone().lerp(hinge, 0.06), foot, 0.055, 0.055, M.chromeTrim, 10);
     k.add(new THREE.SphereGeometry(0.11, 12, 8), M.titanium, xf([hinge.x, hinge.y, hinge.z]));
-    const side = V(-s, 0, c);
-    for (const sg of [-1, 1]) { const b0 = at(radius + 0.03, -0.05).add(side.clone().multiplyScalar(sg * 0.42)); k.rod(b0, knee, 0.04, 0.04, M.dark, 8); k.add(new THREE.BoxGeometry(0.14, 0.16, 0.1), M.titanium, xf([b0.x, b0.y, b0.z], [0, -a, 0])); }
+    const side = V(-s, 0, c), br = new Kit();
+    for (const sg of [-1, 1]) { const b0 = at(radius + 0.03, -0.05).add(side.clone().multiplyScalar(sg * 0.42)); br.rod(b0, knee, 0.04, 0.04, M.dark, 8); kb.add(new THREE.BoxGeometry(0.14, 0.16, 0.1), M.titanium, xf([b0.x, b0.y, b0.z], [0, -a, 0])); }
     k.add(new THREE.SphereGeometry(0.085, 12, 8), M.titanium, xf([foot.x, foot.y, foot.z]));
     k.add(new THREE.CylinderGeometry(0.26, 0.34, 0.09, 20), M.dark, xf([foot.x, -dropTo + 0.045, foot.z]));
     k.add(new THREE.CylinderGeometry(0.2, 0.26, 0.06, 20), M.titanium, xf([foot.x, -dropTo + 0.12, foot.z]));
+    kb.build(g);   // hinge brackets + brace sockets stay on the body
+    const leg = new THREE.Group(); leg.position.copy(hinge); g.add(leg);
+    const inner = new THREE.Group(); inner.position.copy(hinge).negate(); leg.add(inner); k.build(inner);
+    const braces = new THREE.Group(); inner.add(braces); br.build(braces);
+    // folded: strut points up along the body, tucked against the skin
+    const dir = foot.clone().sub(hinge).normalize(), up = V(-c * 0.06, 1, -s * 0.06).normalize();
+    legs.push({ leg, braces, q: new THREE.Quaternion().setFromUnitVectors(dir, up) });
   }
-  return k.build(g);
+  g.userData.legParts = legs;
+  return g;
+}
+const _qI = new THREE.Quaternion();
+// t = 0 deployed (landing), 1 folded flat against the body (ascent)
+export function setLegFold(root, t) {
+  root.traverse(o => { const L = o.userData.legParts; if (!L) return; for (const l of L) { l.leg.quaternion.slerpQuaternions(_qI, l.q, t); l.braces.visible = t < 0.35; } });
 }
 // stowed grid fins near the top of the stack (only on rockets that land)
 function gridFins(y, radius = 0.9) {

@@ -2,6 +2,7 @@
 // hold-upright assist and landing guide; break-apart failures with a "Try this" tip; post-flight stats.
 import { SKIES } from './env.js';
 import * as THREE from 'three';
+import { PadRelease } from './padrelease.js';
 import { PARTS, stats } from './rocket.js';
 import { rocketMesh, disposeTree } from './parts3d.js';
 import { newFlight, flightStep, airDensity, DT } from './sim.js';
@@ -63,6 +64,7 @@ export class FlightMode {
     this.group = rocketMesh(this.g.rocket); this.w.scene.add(this.group);
     const eng = PARTS[this.g.rocket.engine];
     this.flame = new Flame(eng.color); this.group.userData.engine.add(this.flame.group);
+    this.padRel ??= new PadRelease(this.w, this.g.audio); this.padRel.reset(this.group, this.f.origin.y);
     const pad = this.w.pad; if (pad) { pad.arm.rotation.y = 0; pad.arm.position.y = THREE.MathUtils.clamp(this.st0Top() - 3, 5, 38); }
     this.flash = 0; this.armT = 0; this.w.captureLocal('out', new THREE.Vector3(SPOTS.pad.x, 8, SPOTS.pad.z), [this.group]);
     this.thr = Math.min(1, eng.heat.safeThrottle); this.touchThr = null; this.hotWarned = false; this.countdown = null; this.acc = 0; this.ended = false; this.endT = 0; this.reached = null; this.shake = 0; this.camInit = false; this.armed = false;
@@ -73,7 +75,7 @@ export class FlightMode {
     this.syncPose(); this.syncButtons(); this.setCam(this.cam, true); this.zoomT = this.zoom = 1;
     if (!this.g.training?.active) this.g.prompt(IS_TOUCH ? 'Tap <b>Launch</b>. Throttle on the right, steer with the left stick.' : 'Press <b>Space</b> to launch. Shift / R throttle up, F down, WASD steer, C camera.');
   }
-  exit() { this.w.post.setDOF(false); this.w.post.setBlur(0); this.w.post.setHeat(new THREE.Vector4(0, 0, 0, 0)); this.w.setAltitude(0); this.w.camera.far = 60000; this.w.camera.updateProjectionMatrix(); this.clear(); $('camPicker').classList.add('hidden'); this.w.camera.up.set(0, 1, 0); this.guideLine.visible = false; this.g.prompt(null); $('landGuide').classList.add('hidden'); this.g.audio.setEngine(0); }
+  exit() { this.w.post.setDOF(false); this.w.post.setBlur(0); this.w.post.setHeat(new THREE.Vector4(0, 0, 0, 0)); this.w.setAltitude(0); this.w.camera.far = 60000; this.w.camera.updateProjectionMatrix(); this.clear(); $('camPicker').classList.add('hidden'); this.w.camera.up.set(0, 1, 0); this.guideLine.visible = false; this.g.prompt(null); $('landGuide').classList.add('hidden'); this.g.audio.setEngine(0); this.padRel?.reset(null); }
   st0Top() { return stats(this.g.rocket, this.g.fill).top; }
   clear() { if (this.group) { this.group.removeFromParent(); disposeTree(this.group); this.group = null; } }
   back() { this.g.audio.tap(); if (this.f.phase === 'flying' && !this.ended) this.endFlight('abort'); else this.g.setMode('build'); }
@@ -229,6 +231,7 @@ export class FlightMode {
     const cam = this.w.camera, dist = cam.position.distanceTo(this.group.position);
     const near = THREE.MathUtils.clamp(1 - dist / 2500, 0.05, 1);
     this.g.audio.setEngine(p * Math.min(1, eng.thrust / 120000 + 0.4), near, dist);
+    this.padRel?.update(dt, f);   // hold-downs + umbilical let go at ignition; legs tuck for ascent
     // crew arm swings clear from ignition
     const P = this.w.pad;
     if (P && (f.e.on || this.armT > 0)) { this.armT = Math.min(1, this.armT + dt / 3); P.arm.rotation.y = -1.25 * THREE.MathUtils.smoothstep(this.armT, 0, 1); }
