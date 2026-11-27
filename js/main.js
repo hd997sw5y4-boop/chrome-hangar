@@ -11,6 +11,7 @@ import { FlightMode } from './flight.js';
 import { partMesh, rocketMesh, disposeTree } from './parts3d.js';
 import { dressHangar } from './props.js';
 import { Intro, shouldPlayIntro } from './intro.js';
+import { Training } from './train.js';
 
 const $ = id => document.getElementById(id);
 const LS = { get: (k, d) => { try { const v = localStorage.getItem('ch_' + k); return v == null ? d : JSON.parse(v); } catch (_) { return d; } }, set: (k, v) => { try { localStorage.setItem('ch_' + k, JSON.stringify(v)); } catch (_) {} } };
@@ -51,6 +52,7 @@ class Game {
     this.world.applySky();
     step(80, 'Polishing the steel…');
     this.build = new BuildMode(this); this.test = new TestMode(this); this.flight = new FlightMode(this);
+    this.training = new Training(this);
     await this.makeThumbs();
     this.build.makeTray();
     this.wireUI();
@@ -144,10 +146,11 @@ class Game {
   updateObjective() {
     const mi = this.mission;
     const titles = { build: 'Hangar', test: 'Test stand', flight: 'Launch pad' };
-    $('modeTitle').textContent = titles[this.mode] + (mi ? ' · ' + mi.name : ' · Sandbox');
+    const missionName = mi?.type === 'tutorial' ? 'Training' : mi?.name;
+    $('modeTitle').textContent = titles[this.mode] + (mi ? ' · ' + missionName : ' · Sandbox');
     let o = '';
     if (!mi) o = 'Free build. Every part is unlocked.';
-    else if (mi.type === 'tutorial') o = 'Build a basic rocket part by part. Each card teaches what that part is for.';
+    else if (mi.type === 'tutorial') o = this.mode === 'flight' ? 'Learn the flight controls. Skip is always available.' : 'Build a basic rocket part by part. Each card teaches what that part is for.';
     else if (mi.type === 'static') o = this.mode === 'test' ? 'Hold the fire for 5 seconds without overheating.' : 'Build a rocket, then Send to stand.';
     else if (mi.type === 'altitude') o = this.mode === 'flight' ? 'Climb to 1,000 m.' : 'Build something that can reach 1,000 m, then Roll to pad.';
     else if (mi.type === 'landing') o = this.mode === 'flight' ? 'Climb above 100 m, then land under 3 m/s.' : 'You need landing legs. Spark is the easy lander.';
@@ -157,6 +160,10 @@ class Game {
     const p = $('prompt'); if (!html) { p.classList.add('hidden'); return; }
     p.innerHTML = html; p.classList.remove('hidden');
     if (btn) { const b = document.createElement('button'); b.textContent = btn; b.onclick = () => { this.audio.tap(); cb(); }; p.appendChild(b); }
+    if (this.training?.active && !this.training.doneOpen) {
+      const s = document.createElement('button'); s.textContent = 'Skip'; s.className = 'trainSkip'; s.title = 'Exit training';
+      s.onclick = () => { this.audio.tap(); this.training.skip(); }; p.appendChild(s);
+    }
   }
   toast(t, ms = 2200) {
     const el = $('toast'); el.textContent = t; el.classList.remove('hidden'); el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
@@ -188,18 +195,24 @@ class Game {
   }
   startMission(i) {
     const m = this.missions[i];
+    this.training?.stop();
     this.mission = m; this.closePanel(); this.showMenu(false); $('results').classList.add('hidden');
-    if (m.type === 'tutorial') { this.rocket = emptyRocket(); this.build.resetHistory(); this.setMode('build'); this.build.startTutorial(); }
-    else this.setMode('build');
+    if (m.type === 'tutorial') {
+      this.training.start();
+      this.rocket = emptyRocket(); this.build.resetHistory(); this.setMode('build'); this.build.startTutorial();
+    } else this.setMode('build');
     this.audio.tap();
   }
-  startSandbox() { this.mission = null; if (!this.rocket.stack.length || JSON.stringify(this.rocket) === JSON.stringify(starterRocket())) { this.rocket = stockRocket(); this.build.resetHistory(); } this.showMenu(false); this.closePanel(); this.setMode('build'); this.build.makeTray(); }
+  startSandbox() {
+    this.training?.stop();
+    this.mission = null; if (!this.rocket.stack.length || JSON.stringify(this.rocket) === JSON.stringify(starterRocket())) { this.rocket = stockRocket(); this.build.resetHistory(); } this.showMenu(false); this.closePanel(); this.setMode('build'); this.build.makeTray();
+  }
   continueGame() {
-    // first time: tutorial. Otherwise the first mission without all its stars, or sandbox.
-    if (!this.missionDone('m0')) return this.startMission(0);
+    // Training is opt-in from the menu; Play never forces it.
     for (let i = 1; i < this.missions.length; i++) if (!this.missionDone(this.missions[i].id)) return this.startMission(i);
     this.startSandbox();
   }
+  startTraining() { this.startMission(0); }
   openPanel(title, html) { $('panelTitle').textContent = title; $('panelBody').innerHTML = html; $('panel').classList.remove('hidden'); this.input.exitLock(); this.panelOpen = true; }
   closePanel() { $('panel').classList.add('hidden'); this.panelOpen = false; }
   starStr(id) { const s = this.progress.stars[id] || []; return [0, 1, 2].map(i => s[i] ? '★' : '<span class="off">★</span>').join(''); }
@@ -279,8 +292,11 @@ class Game {
     $('rStats').innerHTML = (r.stats || []).map(([l, v]) => `<div><label>${l}</label><b>${v}</b></div>`).join('');
     const g = $('rGraph'); g.classList.toggle('hidden', !r.samples);
     if (r.samples) drawGraph(g, r.samples);
+    this.lastResults = r;
     const idx = this.mission ? this.missions.indexOf(this.mission) : -1;
-    $('rNext').classList.toggle('hidden', !(r.ok && idx >= 0 && idx < this.missions.length - 1));
+    $('rNext').classList.toggle('hidden', !!(r.trainDone) || !(r.ok && idx >= 0 && idx < this.missions.length - 1));
+    $('rRetry').classList.toggle('hidden', !!r.trainDone);
+    $('rHangar').textContent = r.trainDone ? 'Back to menu' : 'Back to hangar';
     $('rRetry').textContent = this.mode === 'test' ? 'Fire again' : 'Fly again';
     this.resultsOpen = true;
   }
@@ -289,11 +305,11 @@ class Game {
   wireUI() {
     $('menu').addEventListener('click', e => {
       const a = e.target.dataset?.act; if (!a) return; this.audio.unlock(); this.audio.tap();
-      ({ continue: () => this.continueGame(), missions: () => this.showMissions(), sandbox: () => this.startSandbox(), saves: () => this.showSaves(), settings: () => this.showSettings(), help: () => this.showHelp(), credits: () => this.showCredits() })[a]();
+      ({ continue: () => this.continueGame(), training: () => this.startTraining(), missions: () => this.showMissions(), sandbox: () => this.startSandbox(), saves: () => this.showSaves(), settings: () => this.showSettings(), help: () => this.showHelp(), credits: () => this.showCredits() })[a]();
     });
     $('panelClose').onclick = () => { this.audio.tap(); this.closePanel(); };
     $('btnMenu').onclick = () => { this.audio.tap(); this.showMenu(true); };
-    $('rHangar').onclick = () => { this.hideResults(); this.setMode('build'); };
+    $('rHangar').onclick = () => { if (this.lastResults?.trainDone) this.training.returnToMenu(); else { this.hideResults(); this.setMode('build'); } };
     $('rRetry').onclick = () => { this.hideResults(); this.setMode(this.mode); };
     $('rNext').onclick = () => { this.hideResults(); this.startMission(this.missions.indexOf(this.mission) + 1); };
     for (const ev of ['pointerdown', 'touchend', 'click']) document.addEventListener(ev, () => this.audio.unlock(), { capture: true });

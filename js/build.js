@@ -400,6 +400,7 @@ export class BuildMode {
   finishTutorial() {
     const stars = this.tut.stars; this.tut = null; this.g.prompt(null); this.refreshTray();
     this.g.award('m0', stars);
+    if (this.g.training?.active) { this.g.training.onBuildDone(); return; }
     this.g.showResults({ ok: true, title: 'First bolt: done', reason: 'You built a basic rocket part by part. Next, fire it on the test stand.', stars });
   }
 }

@@ -71,7 +71,7 @@ export class FlightMode {
     $('mThr').querySelector('em').style.bottom = (eng.minThrottle * 100) + '%';
     $('thrTouch').querySelector('em').style.bottom = (eng.minThrottle * 100) + '%';
     this.syncPose(); this.syncButtons(); this.setCam(this.cam, true); this.zoomT = this.zoom = 1;
-    this.g.prompt(IS_TOUCH ? 'Tap <b>Launch</b>. Throttle on the right, steer with the left stick.' : 'Press <b>Space</b> to launch. Shift / R throttle up, F down, WASD steer, C camera.');
+    if (!this.g.training?.active) this.g.prompt(IS_TOUCH ? 'Tap <b>Launch</b>. Throttle on the right, steer with the left stick.' : 'Press <b>Space</b> to launch. Shift / R throttle up, F down, WASD steer, C camera.');
   }
   exit() { this.w.post.setDOF(false); this.w.post.setBlur(0); this.w.post.setHeat(new THREE.Vector4(0, 0, 0, 0)); this.w.setAltitude(0); this.w.camera.far = 60000; this.w.camera.updateProjectionMatrix(); this.clear(); $('camPicker').classList.add('hidden'); this.w.camera.up.set(0, 1, 0); this.guideLine.visible = false; this.g.prompt(null); $('landGuide').classList.add('hidden'); this.g.audio.setEngine(0); }
   st0Top() { return stats(this.g.rocket, this.g.fill).top; }
@@ -143,6 +143,7 @@ export class FlightMode {
     this.visuals(dt);
     this.hud();
     this.camera(dt);
+    if (this.g.training?.active) this.g.training.onFlightFrame();
     if (this.ended) { this.endT += dt; if (this.endT > 2.6 && !this.g.resultsOpen && !this.resultsShown) { this.resultsShown = true; this.g.showResults(this.result); } }
   }
   onEvent(ev) {
@@ -171,6 +172,8 @@ export class FlightMode {
   }
   endFlight(how, kind) {
     if (this.ended) return; this.ended = true; this.endT = 0; this.resultsShown = false;
+    // During training, keep teaching look / zoom / views even if the flight ends early.
+    if (this.g.training?.active) { this.f.e.cmd = 0; this.armed = false; this.resultsShown = true; return; }
     const f = this.f, m = this.g.mission, st0 = this.st0;
     f.e.cmd = 0; this.armed = false;
     const fmt = (v, d = 0) => v.toLocaleString(undefined, { maximumFractionDigits: d, minimumFractionDigits: d });

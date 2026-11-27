@@ -26,8 +26,10 @@ body.build:not(.touch) #crosshair{display:block}
 #topLeft{position:absolute;left:calc(14px + var(--sl));top:calc(10px + var(--st));max-width:46vw}
 #modeTitle{font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:13px;color:var(--accent)}
 #objective{font-size:14px;color:var(--ink);text-shadow:0 1px 3px #000}
-#topRight{position:absolute;right:calc(12px + var(--sr));top:calc(8px + var(--st));display:flex;gap:6px}
+#topRight{position:absolute;right:calc(12px + var(--sr));top:calc(8px + var(--st));display:flex;gap:6px;pointer-events:auto}
+#btnTrainSkip{width:auto;padding:0 12px;font-size:14px;font-weight:600;background:var(--glass)}
 #topRight button{width:44px;height:44px;padding:0;font-size:20px;background:var(--glass)}
+#topRight #btnTrainSkip{width:auto;min-width:64px;padding:0 14px;font-size:14px;font-weight:600}
 #prompt{position:absolute;left:50%;top:calc(58px + var(--st));transform:translateX(-50%);background:var(--glass);border:1px solid rgba(127,231,255,.45);padding:10px 18px;border-radius:14px;max-width:min(560px,70vw);text-align:center;box-shadow:0 0 24px rgba(127,231,255,.15);pointer-events:auto;display:flex;flex-direction:column;align-items:center;gap:8px}
 #prompt .tutDo{margin:0}
 #prompt .factCard{margin:0;width:100%;text-align:left;background:rgba(127,231,255,.08);border:1px solid rgba(127,231,255,.35);border-radius:10px;padding:8px 12px}
@@ -35,6 +37,7 @@ body.build:not(.touch) #crosshair{display:block}
 #prompt .factCard b{display:block;margin:2px 0 4px;font-size:15px}
 #prompt .factCard p{margin:0;font-size:14px;color:var(--ink);line-height:1.35}
 #prompt button{margin:0;min-height:32px;padding:5px 14px}
+#prompt button.trainSkip{background:transparent;border-color:transparent;color:var(--dim);font-size:13px;min-height:28px;padding:2px 10px}
 #toast{position:absolute;left:50%;top:38%;transform:translateX(-50%);background:var(--glass);padding:10px 20px;border-radius:14px;font-size:17px;border:1px solid var(--line);animation:pop .25s ease-out}
 @keyframes pop{from{transform:translateX(-50%) scale(.9);opacity:0}to{opacity:1}}
 /* build */

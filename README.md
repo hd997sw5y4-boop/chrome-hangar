@@ -12,7 +12,7 @@ Static three.js site, no build step. three.js r187 is vendored in `vendor/`.
 
 - `index.html`, `css/style.css`: UI
 - `js/main.js`: boot, menus, missions, saves, settings, results
-- `js/build.js`: first-person hangar, tray, snapping, undo/redo, checkout panel, and the First bolt tutorial (part-by-part build with a fact card for each real part)
+- `js/build.js`, `js/train.js`: hangar build plus Training (menu button; part-by-part rocket facts, then flight controls; Skip always available)
 - `js/testfire.js`: test stand static fire
 - `js/flight.js`: launch, cameras, assists, landing guide, failures
 - `js/sim.js`: fixed-step single-rigid-body flight + engine/heat model (pure JS)
