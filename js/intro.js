@@ -30,12 +30,13 @@ export class Intro {
     } else this.lookY = 8;
     // path: wide coastal approach in the golden light, then a close 3/4 on the pad
     const P = SPOTS.pad;
+    // stay on the apron centre-line so the flood masts at x = ±34 never sit in the foreground
     this.pts = [
-      new THREE.Vector3(P.x + 420, 95, P.z - 260),
-      new THREE.Vector3(P.x + 210, 48, P.z - 40),
-      new THREE.Vector3(P.x + 90, 22, P.z + 70),
-      new THREE.Vector3(P.x + 36, 9.5, P.z + 42),
-      new THREE.Vector3(P.x + 22, 6.4, P.z + 28),
+      new THREE.Vector3(P.x + 280, 120, P.z + 220),
+      new THREE.Vector3(P.x + 110, 48, P.z + 140),
+      new THREE.Vector3(P.x + 40, 20, P.z + 70),
+      new THREE.Vector3(P.x + 18, 8.2, P.z + 38),
+      new THREE.Vector3(P.x + 11, 5.6, P.z + 24),
     ];
     this.look = [
       new THREE.Vector3(P.x, 14, P.z),

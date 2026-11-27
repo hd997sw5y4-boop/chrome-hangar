@@ -553,8 +553,17 @@ export class Outdoor {
     this.terrain?.refine(cam.position, 2);
     if (this.oceanMat) this.oceanMat.uniforms.uT.value = this.time;
     if (this.surf) for (const s of this.surf) { s.material.map.offset.x = (Math.sin(this.time * 0.5 + s.userData.surf) * 0.18); }
+    const indoor = this.w.indoor;
+    if (indoor !== this._hidIndoor) {
+      this._hidIndoor = indoor;
+      for (const ch of this.group.children) {
+        if (ch === this.terrain) continue;
+        if (this.chunks.includes(ch)) continue;
+        ch.visible = !indoor;
+      }
+    }
     const px = cam.position.x, pz = cam.position.z, alt = Math.max(0, cam.position.y);
-    const showScatter = !this.w.indoor;
+    const showScatter = !indoor;
     for (const ch of this.chunks) {
       if (!showScatter) { ch.visible = false; continue; }
       const dx = Math.max(0, Math.abs(px - ch.userData.x) - 200), dz = Math.max(0, Math.abs(pz - ch.userData.z) - 200), d = Math.hypot(dx, dz, alt);
