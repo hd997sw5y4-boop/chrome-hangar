@@ -328,7 +328,7 @@ class Robot {
   update(dt, ctx) {
     this.t += dt;
     const P = { ...REST }, t = this.t, job = this.job;
-    let goal = null, speed = 0.85, look = null, gesture = null;
+    let goal = null, speed = 0.85, look = null, gesture = null; let waveT = 0;
 
     if (this.greet) {
       const g = this.greet; g.t += dt;
@@ -336,7 +336,7 @@ class Robot {
       const off = wrapA(toCam - this.yaw);
       if (!g.face || Math.abs(wrapA(toCam - g.face)) > 0.6) g.face = Math.abs(off) > 0.45 ? toCam : g.face ?? this.yaw;
       goal = { x: this.pos.x, z: this.pos.z, face: g.face };
-      look = ctx.cam; if (g.t > 0.35) gesture = 'wave';
+      look = ctx.cam; waveT = g.t; if (g.t > 0.35 && g.t < 3.1) gesture = 'wave';
       if (!g.whir2 && g.t > 0.4) { g.whir2 = true; this.sys.whir(0.5, 1.3); }
       if (g.t > 3.4) this.greet = null;
     } else if (job.type === 'patrol' || job.type === 'leave') {
@@ -373,7 +373,7 @@ class Robot {
     }
 
     if (gesture === 'wave') {
-      const w = Math.sin(this.greet.t * 7.5);
+      const w = Math.sin(waveT * 7.5);
       P.shRx = -0.12; P.shRy = -Math.PI / 2; P.shRz = -1.35; P.elR = -1.55 + w * 0.32; P.wrRx = 0; P.wrRz = w * 0.15; P.curlR = 0.12;
       P.shLz = 0.1; P.chestZ = -0.04;
     } else if (gesture === 'inspect') {
