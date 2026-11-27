@@ -29,7 +29,7 @@ export class Earth {
     if (info?.lat) { this.lat = info.lat; this.lon = info.lon; }
     const k = this.tier(), L = new THREE.TextureLoader(), an = Math.min(8, this.w.renderer.capabilities.getMaxAnisotropy());
     const tx = (n, srgb) => L.loadAsync(`assets/earth/${n}.webp`).then(t => { t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace; t.anisotropy = an; t.wrapS = THREE.RepeatWrapping; return t; });
-    this.loading = Promise.all([tx(`earth_day_${k}k`, true), tx(`earth_night_${Math.min(k, 4)}k`, false), tx('earth_clouds_2k', false)]).then(([day, night, clouds]) => this.build(day, night, clouds)).catch(e => console.warn('earth', e));
+    this.loading = Promise.all([tx(`earth_day_${k}k`, true), tx(`earth_night_${Math.min(k, 4)}k`, false), tx(`earth_clouds_${k}k`, false)]).then(([day, night, clouds]) => this.build(day, night, clouds)).catch(e => console.warn('earth', e));
     return this.loading;
   }
   setRegion(tex, rect) { this.region = { tex, rect }; if (this.U) { this.U.tReg.value = tex; this.U.uRegR.value.copy(rect); this.U.uRegK.value = 1; } }

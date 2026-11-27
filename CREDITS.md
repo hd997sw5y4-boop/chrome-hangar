@@ -73,7 +73,9 @@ The whole Earth (high-altitude flights) — NASA imagery, public domain (credit:
   Blue Marble: Next Generation (July 2004, with topography and bathymetry), Reto Stöckli, NASA Earth
   Observatory / NASA Goddard Space Flight Center — https://science.nasa.gov/earth/earth-observatory/blue-marble-next-generation/
   Blue Marble clouds, NASA Goddard Space Flight Center; image by Reto Stöckli, enhancements by Robert
-  Simmon — https://visibleearth.nasa.gov/images/57747/blue-marble-clouds
+  Simmon — https://visibleearth.nasa.gov/images/57747/blue-marble-clouds (2K tier)
+  4K/8K cloud tiers: "North America Cloud Map" from Natural Earth III by Tom Patterson (public domain,
+  derived from the NASA Blue Marble clouds) — https://www.shadedrelief.com/natural3/pages/clouds.html
   Black Marble 2016 night lights, NASA Earth Observatory (Joshua Stevens, Miguel Román, NASA GSFC,
   Suomi NPP VIIRS) — https://science.nasa.gov/earth/earth-observatory/earth-at-night/maps/
   NASA imagery is used for illustration; no NASA logo or endorsement is implied.
