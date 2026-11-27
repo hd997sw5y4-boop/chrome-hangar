@@ -26,7 +26,7 @@ class Game {
     this.saves = LS.get('saves', []);
     this.rocket = LS.get('rocket', null) || stockRocket();
     this.fill = LS.get('fill', 1);
-    this.mission = null; // mission object or null = sandbox
+    this.mission = null; // mission object or null = free mode
     this.mode = 'loading';
     this.timer = new THREE.Timer();
     this.acc = 0;
@@ -151,14 +151,15 @@ class Game {
     const mi = this.mission;
     const titles = { build: 'Hangar', test: 'Test stand', flight: 'Launch pad' };
     const missionName = mi?.type === 'tutorial' ? 'Training' : mi?.name;
-    $('modeTitle').textContent = titles[this.mode] + (mi ? ' · ' + missionName : ' · Sandbox');
+    const free = !mi;
+    $('modeTitle').textContent = titles[this.mode] + (mi ? ' · ' + missionName : ' · Free Mode');
     let o = '';
-    if (!mi) o = 'Free build. Every part is unlocked.';
-    else if (mi.type === 'tutorial') o = this.mode === 'flight' ? 'Learn the flight controls. Skip is always available.' : 'Build a basic rocket part by part. Each card teaches what that part is for.';
-    else if (mi.type === 'static') o = this.mode === 'test' ? 'Hold the fire for 5 seconds without overheating.' : 'Build a rocket, then Send to stand.';
-    else if (mi.type === 'altitude') o = this.mode === 'flight' ? 'Climb to 1,000 m.' : 'Build something that can reach 1,000 m, then Roll to pad.';
-    else if (mi.type === 'landing') o = this.mode === 'flight' ? 'Climb above 100 m, then land under 3 m/s.' : 'You need landing legs. Spark is the easy lander.';
+    if (mi?.type === 'tutorial') o = this.mode === 'flight' ? 'Learn the flight controls. Skip is always available.' : 'Build a basic rocket part by part. Each card teaches what that part is for.';
+    else if (mi?.type === 'static') o = this.mode === 'test' ? 'Hold the fire for 5 seconds without overheating.' : 'Build a rocket, then Send to stand.';
+    else if (mi?.type === 'altitude') o = this.mode === 'flight' ? 'Climb to 1,000 m.' : 'Build something that can reach 1,000 m, then Roll to pad.';
+    else if (mi?.type === 'landing') o = this.mode === 'flight' ? 'Climb above 100 m, then land under 3 m/s.' : 'You need landing legs. Spark is the easy lander.';
     $('objective').textContent = o;
+    $('objective').classList.toggle('hidden', free);
   }
   prompt(html, btn, cb) {
     const p = $('prompt'); if (!html) { p.classList.add('hidden'); return; }
@@ -178,7 +179,6 @@ class Game {
   totalStars() { return Object.values(this.progress.stars).reduce((a, s) => a + s.filter(Boolean).length, 0); }
   missionDone(id) { return !!(this.progress.stars[id] && this.progress.stars[id][0]); }
   missionUnlocked(i) { return i === 0 || this.missionDone(this.missions[i - 1].id); }
-  sandboxUnlocked() { return this.missionDone('m1'); }
   partUnlocked(id) { return !this.mission || !(PARTS[id].unlockStars > this.totalStars()); }
   award(id, stars) {
     const old = this.progress.stars[id] || [false, false, false];
@@ -194,7 +194,7 @@ class Game {
   // ---------- menus ----------
   showMenu(v) {
     $('menu').classList.toggle('hidden', !v); document.body.classList.toggle('menuopen', v);
-    if (v) { this.input.exitLock(); this.input.clearHeld(); $('btnSandbox').disabled = !this.sandboxUnlocked(); $('btnSandbox').title = this.sandboxUnlocked() ? '' : 'Finish "Hold the fire" to unlock'; }
+    if (v) { this.input.exitLock(); this.input.clearHeld(); }
     this.menuOpen = v;
   }
   startMission(i) {
@@ -207,26 +207,26 @@ class Game {
     } else this.setMode('build');
     this.audio.tap();
   }
-  startSandbox() {
+  startFreeMode() {
     this.training?.stop();
-    this.mission = null; if (!this.rocket.stack.length || JSON.stringify(this.rocket) === JSON.stringify(starterRocket())) { this.rocket = stockRocket(); this.build.resetHistory(); } this.showMenu(false); this.closePanel(); this.setMode('build'); this.build.makeTray();
+    this.mission = null;
+    if (!this.rocket.stack.length || JSON.stringify(this.rocket) === JSON.stringify(starterRocket())) { this.rocket = stockRocket(); this.build.resetHistory(); }
+    this.hideResults(); this.prompt(null); this.showMenu(false); this.closePanel(); this.setMode('build'); this.build.makeTray();
   }
   continueGame() {
     // Training is opt-in from the menu; Play never forces it.
     for (let i = 1; i < this.missions.length; i++) if (!this.missionDone(this.missions[i].id)) return this.startMission(i);
-    this.startSandbox();
+    this.startFreeMode();
   }
   startTraining() { this.startMission(0); }
   openPanel(title, html) { $('panelTitle').textContent = title; $('panelBody').innerHTML = html; $('panel').classList.remove('hidden'); this.input.exitLock(); this.panelOpen = true; }
   closePanel() { $('panel').classList.add('hidden'); this.panelOpen = false; }
   starStr(id) { const s = this.progress.stars[id] || []; return [0, 1, 2].map(i => s[i] ? '★' : '<span class="off">★</span>').join(''); }
   showMissions() {
-    const html = '<div class="mList">' + this.missions.map((m, i) => `<div class="mItem"><div><b>${i}. ${m.name}</b> <span class="st">${this.starStr(m.id)}</span><p>${m.desc}</p><p>${m.stars.map((s, k) => `${k + 1}★ ${s}`).join(' · ')}</p></div><button data-m="${i}" ${this.missionUnlocked(i) ? '' : 'disabled'}>${this.missionUnlocked(i) ? 'Play' : 'Locked'}</button></div>`).join('') +
-      `<div class="mItem"><div><b>Sandbox</b><p>Free build with every part, after "Hold the fire".</p></div><button data-sb ${this.sandboxUnlocked() ? '' : 'disabled'}>${this.sandboxUnlocked() ? 'Play' : 'Locked'}</button></div></div>` +
-      `<p style="color:var(--dim);font-size:13px">Stars unlock parts: Tall Tank at 2★, Thunder at 4★. You have ${this.totalStars()}★.</p>`;
+    const html = '<div class="mList">' + this.missions.map((m, i) => `<div class="mItem"><div><b>${i}. ${m.name}</b> <span class="st">${this.starStr(m.id)}</span><p>${m.desc}</p><p>${m.stars.map((s, k) => `${k + 1}★ ${s}`).join(' · ')}</p></div><button data-m="${i}" ${this.missionUnlocked(i) ? '' : 'disabled'}>${this.missionUnlocked(i) ? 'Play' : 'Locked'}</button></div>`).join('') + '</div>' +
+      `<p style="color:var(--dim);font-size:13px">Stars unlock parts: Tall Tank at 2★, Thunder at 4★. You have ${this.totalStars()}★. Free Mode on the main menu is open play with every part and no missions.</p>`;
     this.openPanel('Missions', html);
     $('panelBody').querySelectorAll('[data-m]').forEach(b => b.onclick = () => this.startMission(+b.dataset.m));
-    const sb = $('panelBody').querySelector('[data-sb]'); if (sb) sb.onclick = () => this.startSandbox();
   }
   showSaves() {
     const can = this.mode === 'build';
@@ -283,6 +283,7 @@ class Game {
 
   // ---------- results ----------
   showResults(r) {
+    if (!this.mission && !r?.trainDone) return;
     this.input.exitLock();
     $('results').classList.remove('hidden');
     $('rTitle').textContent = r.title; $('rTitle').className = r.ok ? 'good' : '';
@@ -309,7 +310,7 @@ class Game {
   wireUI() {
     $('menu').addEventListener('click', e => {
       const a = e.target.dataset?.act; if (!a) return; this.audio.unlock(); this.audio.tap();
-      ({ continue: () => this.continueGame(), training: () => this.startTraining(), missions: () => this.showMissions(), sandbox: () => this.startSandbox(), saves: () => this.showSaves(), settings: () => this.showSettings(), help: () => this.showHelp(), credits: () => this.showCredits() })[a]();
+      ({ continue: () => this.continueGame(), training: () => this.startTraining(), missions: () => this.showMissions(), freemode: () => this.startFreeMode(), saves: () => this.showSaves(), settings: () => this.showSettings(), help: () => this.showHelp(), credits: () => this.showCredits() })[a]();
     });
     $('panelClose').onclick = () => { this.audio.tap(); this.closePanel(); };
     $('btnMenu').onclick = () => { this.audio.tap(); this.showMenu(true); };

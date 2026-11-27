@@ -11,7 +11,7 @@ and the whole NASA Earth with stars and an atmosphere rim as you climb (range to
 Static three.js site, no build step. three.js r187 is vendored in `vendor/`.
 
 - `index.html`, `css/style.css`: UI
-- `js/main.js`: boot, menus, missions, saves, settings, results
+- `js/main.js`: boot, menus, missions, Free Mode (open play, no objectives or results cards), saves, settings, results
 - `js/build.js`, `js/train.js`: hangar build plus Training (menu button; part-by-part rocket facts, then flight controls; Skip always available)
 - `js/testfire.js`: test stand static fire
 - `js/flight.js`: launch, cameras, assists, landing guide, failures

@@ -75,12 +75,18 @@ export class FlightMode {
     $('mThr').querySelector('em').style.bottom = (eng.minThrottle * 100) + '%';
     $('thrTouch').querySelector('em').style.bottom = (eng.minThrottle * 100) + '%';
     this.syncPose(); this.syncButtons(); this.setCam(this.cam, true); this.zoomT = this.zoom = 1;
-    if (!this.g.training?.active) this.g.prompt(IS_TOUCH ? 'Tap <b>Launch</b>. Throttle on the right, steer with the left stick.' : 'Press <b>Space</b> to launch. Shift / R throttle up, F down, WASD steer, C camera.');
+    if (this.g.mission && !this.g.training?.active) this.g.prompt(IS_TOUCH ? 'Tap <b>Launch</b>. Throttle on the right, steer with the left stick.' : 'Press <b>Space</b> to launch. Shift / R throttle up, F down, WASD steer, C camera.');
   }
   exit() { this.w.post.setDOF(false); this.w.post.setBlur(0); this.w.post.setHeat(new THREE.Vector4(0, 0, 0, 0)); this.w.setAltitude(0); this.w.camera.far = 60000; this.w.camera.updateProjectionMatrix(); this.clear(); $('camPicker').classList.add('hidden'); this.w.camera.up.set(0, 1, 0); this.guideLine.visible = false; this.g.prompt(null); $('landGuide').classList.add('hidden'); this.g.audio.setEngine(0); this.padRel?.reset(null); }
   st0Top() { return stats(this.g.rocket, this.g.fill).top; }
   clear() { if (this.group) { this.group.removeFromParent(); disposeTree(this.group); this.group = null; } }
-  back() { this.g.audio.tap(); if (this.f.phase === 'flying' && !this.ended) this.endFlight('abort'); else this.g.setMode('build'); }
+  back() {
+    this.g.audio.tap();
+    if (this.f.phase === 'flying' && !this.ended) {
+      this.endFlight('abort');
+      if (!this.g.mission) { this.g.setMode('build'); return; }
+    } else this.g.setMode('build');
+  }
   launch() {
     if (this.countdown != null || this.f.phase !== 'pad' || this.f.e.on) return;
     this.countdown = 3.999; $('btnLaunch').classList.add('hidden'); this.g.prompt(null); this.g.audio.beep(false); this.lastBeep = 3;
@@ -143,13 +149,13 @@ export class FlightMode {
     // mission 2 checkpoint
     const m = this.g.mission;
     if (m?.type === 'altitude' && !this.reached && f.alt >= m.goalAltitude) { this.reached = { fuel: f.fuelFrac }; this.g.toast('Tower cleared: 1,000 m!'); this.g.audio.star(0); this.g.audio.star(1); }
-    if (f.alt > RANGE_TOP && !this.ended) this.endFlight('range');
+    if (m && f.alt > RANGE_TOP && !this.ended) this.endFlight('range');
     this.syncPose();
     this.visuals(dt);
     this.hud();
     this.camera(dt);
     if (this.g.training?.active) this.g.training.onFlightFrame();
-    if (this.ended) { this.endT += dt; if (this.endT > 2.6 && !this.g.resultsOpen && !this.resultsShown) { this.resultsShown = true; this.g.showResults(this.result); } }
+    if (this.ended) { this.endT += dt; if (this.endT > 2.6 && !this.g.resultsOpen && !this.resultsShown) { this.resultsShown = true; if (this.g.mission && this.result) this.g.showResults(this.result); } }
   }
   onEvent(ev) {
     const a = this.g.audio;
@@ -181,6 +187,7 @@ export class FlightMode {
     if (this.g.training?.active) { this.f.e.cmd = 0; this.armed = false; this.resultsShown = true; return; }
     const f = this.f, m = this.g.mission, st0 = this.st0;
     f.e.cmd = 0; this.armed = false;
+    if (!m) { this.resultsShown = true; return; } // free mode: fly or watch the wreck, no results card
     const fmt = (v, d = 0) => v.toLocaleString(undefined, { maximumFractionDigits: d, minimumFractionDigits: d });
     const rows = [['Max altitude', fmt(f.apex) + ' m'], ['Top speed', fmt(f.topSpeed) + ' m/s'], ['Fuel left', Math.round(f.fuelFrac * 100) + '%'],
       ['Landing speed', how === 'landed' || how === 'crash' ? fmt(f.landSpeed, 1) + ' m/s' : '—'], ['Flight time', fmt(f.t, 1) + ' s'], ['Max dynamic pressure', fmt(f.maxQ / 1000, 1) + ' kPa']];

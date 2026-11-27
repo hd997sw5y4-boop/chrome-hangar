@@ -122,7 +122,10 @@ export class TestMode {
     const s = this.s, m = this.g.mission;
     const avg = s.fireT ? s.thrSum / s.fireT : 0, peak = s.e.peakHeat;
     if (m?.type !== 'static') {
-      if (kind === 'overheat') this.g.showResults({ ok: false, title: 'Engine overheated', reason: `${eng.name} ran above ${Math.round(eng.heat.safeThrottle * 100)}% for too long. The test stand caught it safely.`, hint: overheatHint(eng), stats: this.statRows(avg, peak) });
+      if (kind === 'overheat') {
+        if (m) this.g.showResults({ ok: false, title: 'Engine overheated', reason: `${eng.name} ran above ${Math.round(eng.heat.safeThrottle * 100)}% for too long. The test stand caught it safely.`, hint: overheatHint(eng), stats: this.statRows(avg, peak) });
+        else this.g.toast(`${eng.name} overheated. The test stand caught it safely.`);
+      }
       return;
     }
     const ok = s.fireT >= m.goalSeconds && kind !== 'overheat';
