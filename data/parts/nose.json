@@ -1,0 +1,3 @@
+{"id":"nose","name":"Nose Cone","section":"structure","kind":"nose","attach":"stack",
+ "length":2.4,"radius":0.9,"dryMass":140,"fuelMass":0,"cnAlpha":2.0,"cd":-0.4,"finish":"mirror",
+ "blurb":"Cuts drag almost in half. Always goes on top."}

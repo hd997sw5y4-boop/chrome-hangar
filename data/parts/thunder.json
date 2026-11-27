@@ -1,0 +1,4 @@
+{"id":"thunder","name":"Thunder","section":"propulsion","kind":"engine","attach":"engine",
+ "length":1.7,"radius":0.78,"dryMass":560,"thrust":230000,"isp":270,"minThrottle":0.6,"gimbalDeg":5,
+ "heat":{"safeThrottle":0.85,"risePerSec":22,"coolPerSec":6,"baseTemp":680,"spanTemp":2400,"limitTemp":3600},
+ "color":"#ff6a4d","blurb":"Huge thrust, thirsty, can't throttle below 60%. Overheats above 85%.","unlockStars":4}

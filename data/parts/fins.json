@@ -1,0 +1,3 @@
+{"id":"fins","name":"Fin Pair","section":"control","kind":"fins","attach":"side",
+ "span":1.25,"root":1.7,"tip":0.7,"dryMass":90,"cnAlpha":6.0,"cd":0.06,"maxPerTank":2,"finish":"brushed",
+ "blurb":"Placed as a mirrored pair. Pulls the drag ring down so the rocket flies straight."}

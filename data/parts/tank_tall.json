@@ -1,0 +1,3 @@
+{"id":"tank_tall","name":"Tall Tank","section":"structure","kind":"tank","attach":"stack",
+ "length":6.0,"radius":0.9,"dryMass":700,"fuelMass":6800,"cnAlpha":1.0,"cd":0.0,"finish":"brushed",
+ "blurb":"6.8 t of fuel. Goes far, but it's heavy.","unlockStars":2}

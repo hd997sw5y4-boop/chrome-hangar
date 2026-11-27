@@ -1,0 +1,3 @@
+{"id":"legs","name":"Landing Legs","section":"control","kind":"legs","attach":"side",
+ "dryMass":220,"cnAlpha":0.6,"cd":0.12,"footRadius":2.3,"drop":0.45,"finish":"dark",
+ "blurb":"Four legs, placed as mirrored pairs on the lowest tank. You need them to land."}

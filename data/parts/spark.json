@@ -1,0 +1,4 @@
+{"id":"spark","name":"Spark","section":"propulsion","kind":"engine","attach":"engine",
+ "length":1.0,"radius":0.42,"dryMass":180,"thrust":60000,"isp":305,"minThrottle":0.2,"gimbalDeg":7,
+ "heat":{"safeThrottle":1.0,"risePerSec":0,"coolPerSec":8,"baseTemp":620,"spanTemp":2100,"limitTemp":3150},
+ "color":"#7fd3ff","blurb":"Small, efficient and never overheats. Throttles down to 20%, so it is the easy lander."}

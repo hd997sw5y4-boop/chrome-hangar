@@ -1,0 +1,4 @@
+{"id":"ember","name":"Ember","section":"propulsion","kind":"engine","attach":"engine",
+ "length":1.3,"radius":0.55,"dryMass":310,"thrust":115000,"isp":290,"minThrottle":0.4,"gimbalDeg":6,
+ "heat":{"safeThrottle":0.9,"risePerSec":9,"coolPerSec":7,"baseTemp":640,"spanTemp":2250,"limitTemp":3350},
+ "color":"#ffb347","blurb":"The all-rounder. Runs hot above 90%."}

@@ -1,0 +1,3 @@
+{"id":"tank_short","name":"Short Tank","section":"structure","kind":"tank","attach":"stack",
+ "length":3.0,"radius":0.9,"dryMass":380,"fuelMass":3200,"cnAlpha":0.5,"cd":0.0,"finish":"mirror",
+ "blurb":"3.2 t of fuel. Light and easy to balance."}
