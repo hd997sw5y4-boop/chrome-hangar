@@ -10,6 +10,7 @@ import { TestMode } from './testfire.js';
 import { FlightMode } from './flight.js';
 import { partMesh, rocketMesh, disposeTree } from './parts3d.js';
 import { dressHangar } from './props.js';
+import { Intro, shouldPlayIntro } from './intro.js';
 
 const $ = id => document.getElementById(id);
 const LS = { get: (k, d) => { try { const v = localStorage.getItem('ch_' + k); return v == null ? d : JSON.parse(v); } catch (_) { return d; } }, set: (k, v) => { try { localStorage.setItem('ch_' + k, JSON.stringify(v)); } catch (_) {} } };
@@ -54,9 +55,15 @@ class Game {
     this.build.makeTray();
     this.wireUI();
     step(100);
-    $('loading').classList.add('hidden');
-    this.setMode('build');
-    this.showMenu(true);
+    if (shouldPlayIntro()) {
+      this.intro = new Intro(this);
+      await this.intro.start();
+      $('loading').classList.add('hidden');
+    } else {
+      $('loading').classList.add('hidden');
+      this.setMode('build');
+      this.showMenu(true);
+    }
     this.loop();
     if (this.settings.quality === 'ultra') this.world.loadHDRIs('2k').catch(() => {});
   }
@@ -115,6 +122,7 @@ class Game {
 
   // ---------- modes ----------
   setMode(m, opts = {}) {
+    if (this.intro) { this.intro.teardown(); this.intro = null; }
     const prev = this.modeObj;
     if (prev) prev.exit();
     this.mode = m;
@@ -301,12 +309,18 @@ class Game {
       this.timer.update(); const dt = Math.min(0.05, this.timer.getDelta());
       this.input.update(dt);
       const inp = this.input;
-      if (inp.hit('Escape') || inp.hit('Pad9')) {
-        if (this.panelOpen) this.closePanel(); else if (!this.resultsOpen) this.showMenu(!this.menuOpen);
+      if (this.intro && !this.intro.done) {
+        if (inp.hit('Escape') || inp.hit('Pad9') || inp.hit('Space') || inp.hit('Enter')) this.intro.skip();
+      } else if (inp.hit('Escape') || inp.hit('Pad9')) {
+        if (this.panelOpen) this.closePanel();
+        else if (this.intro && this.mode === 'loading') this.continueGame();
+        else if (!this.resultsOpen) this.showMenu(!this.menuOpen);
       }
-      const paused = this.menuOpen || this.panelOpen;
-      if (!paused) this.modeObj.update(dt, this.resultsOpen);
-      else this.modeObj.idle?.(dt);
+      if (this.intro && !this.intro.done) this.intro.update(dt);
+      else {
+        const paused = this.menuOpen || this.panelOpen;
+        if (this.modeObj) { if (!paused) this.modeObj.update(dt, this.resultsOpen); else this.modeObj.idle?.(dt); }
+      }
       this.smoke.update(dt, this.windNow || { x: 0, z: 0 }, this.world.h * this.world.renderer.getPixelRatio() / Math.tan(this.world.camera.fov * Math.PI / 360) / 2);
       this.debris.update(dt); this.sparks.update(dt, this.world.h * this.world.renderer.getPixelRatio() / Math.tan(this.world.camera.fov * Math.PI / 360) / 2);
       if (this.windNow) this.world.wind = this.windNow;

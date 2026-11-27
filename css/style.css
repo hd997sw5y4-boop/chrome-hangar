@@ -130,3 +130,16 @@ body.touch #fBtns{max-width:calc(100% - 320px - var(--sl) - var(--sr))}
 #camName.show{animation:camflash 1.8s ease forwards}
 @keyframes camflash{0%{opacity:0;transform:translate(-50%,6px)}12%{opacity:1;transform:translate(-50%,0)}75%{opacity:1}100%{opacity:0}}
 body.touch #camPicker{grid-template-columns:repeat(4,minmax(96px,1fr));bottom:calc(70px + env(safe-area-inset-bottom))}
+
+/* golden-hour title card over the pad fly-in */
+#intro{position:fixed;inset:0;z-index:18;pointer-events:auto;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding:0 6vw calc(11vh + var(--sb));background:linear-gradient(180deg,rgba(8,6,4,0) 40%,rgba(12,8,5,.45) 100%);opacity:0;transition:opacity .8s ease}
+#intro.show{opacity:1}
+#intro.out{opacity:0;transition:opacity .55s ease}
+.introTitle{font-size:clamp(40px,8vw,86px);letter-spacing:.28em;font-weight:300;text-shadow:0 2px 24px rgba(0,0,0,.55),0 0 40px rgba(255,170,70,.18);transform:translateY(16px);opacity:0;transition:transform 1.1s ease,opacity 1.1s ease,letter-spacing 1.4s ease}
+.introTitle b{font-weight:700;background:linear-gradient(180deg,#fff8f0,#ffd9a0 45%,#c9894a);-webkit-background-clip:text;background-clip:text;color:transparent}
+#intro.show .introTitle{transform:none;opacity:1;letter-spacing:.22em}
+.introTag{margin-top:10px;color:#f0e6d4;letter-spacing:.22em;text-transform:uppercase;font-size:13px;opacity:0;transform:translateY(8px);transition:opacity .8s ease .35s,transform .8s ease .35s;text-shadow:0 1px 10px #000}
+#intro.hold .introTag{opacity:.9;transform:none}
+.introSkip{position:absolute;right:calc(18px + var(--sr));bottom:calc(16px + var(--sb));color:rgba(255,240,220,.55);font-size:12px;letter-spacing:.08em}
+body.intro #hud,body.intro #menu,body.intro #buildUI,body.intro #testUI,body.intro #flightUI,body.intro #stickL,body.intro #crosshair{display:none!important}
+@media (max-height:500px){.introTitle{font-size:32px;letter-spacing:.18em}.introTag{font-size:11px}#intro{padding-bottom:calc(8vh + var(--sb))}}
