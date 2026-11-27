@@ -1,5 +1,6 @@
-// All sound is synthesized with WebAudio (no files): soft taps, a magnetic snap, boots on grate,
-// engine roar and rumble, cooling ticks, countdown beeps, and a calm ambient pad.
+// SFX are synthesized with WebAudio: soft taps, a magnetic snap, boots on grate,
+// engine roar and rumble, cooling ticks, and countdown beeps.
+// Music is a rotating playlist of bright, warm chill lo-fi tracks (CC0) — not the old pad.
 export class Audio {
   constructor() { this.ctx = null; this.vol = { master: 0.8, music: 0.45, sfx: 0.8 }; }
   unlock() {
@@ -20,7 +21,7 @@ export class Audio {
     const t = this.ctx.currentTime;
     this.master.gain.setTargetAtTime(this.vol.master, t, 0.05);
     this.sfx.gain.setTargetAtTime(this.vol.sfx, t, 0.05);
-    this.music.gain.setTargetAtTime(this.vol.music * 0.5, t, 0.05);
+    this.music.gain.setTargetAtTime(this.vol.music * 0.4, t, 0.05);
   }
   impulse(sec) {
     const c = this.ctx, n = c.sampleRate * sec, b = c.createBuffer(2, n, c.sampleRate);
@@ -89,20 +90,65 @@ export class Audio {
     this.crackG.gain.setTargetAtTime(0.12 * l * near, t, 0.1);
     this.subG.gain.setTargetAtTime(0.5 * l, t, 0.1);
   }
-  startMusic() { // slow, warm chord pad
-    const c = this.ctx, chords = [[220, 277.2, 329.6, 415.3], [196, 246.9, 293.7, 370], [174.6, 220, 261.6, 329.6], [196, 246.9, 329.6, 392]];
-    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900; lp.connect(this.music);
-    const w = c.createGain(); w.gain.value = 0.6; lp.connect(w); w.connect(this.verb);
-    let i = 0;
-    const play = () => {
-      if (!this.ctx) return; const t = c.currentTime + 0.05;
-      for (const f of chords[i % chords.length]) for (const det of [-3, 3]) {
-        const o = c.createOscillator(), g = c.createGain(); o.type = 'triangle'; o.frequency.value = f / 2; o.detune.value = det;
-        g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.035, t + 3); g.gain.linearRampToValueAtTime(0.0001, t + 9);
-        o.connect(g); g.connect(lp); o.start(t); o.stop(t + 9.2);
-      }
-      i++;
+  startMusic() { // rotating bright, happy chill lo-fi (CC0 HoliznaCC0)
+    if (this._musicOn) return;
+    this._musicOn = true;
+    const tracks = [
+      'assets/music/puppy-love.mp3',
+      'assets/music/new-shoes.mp3',
+      'assets/music/poor-but-happy.mp3',
+    ];
+    const fade = 2.5;
+    const decks = [0, 1].map(() => {
+      const a = new Audio(); a.preload = 'auto'; a.crossOrigin = 'anonymous';
+      const g = this.ctx.createGain(); g.gain.value = 0;
+      this.ctx.createMediaElementSource(a).connect(g); g.connect(this.music);
+      return { a, g };
+    });
+    tracks.forEach((src) => { const p = new Audio(); p.preload = 'auto'; p.src = src; });
+    let arm = 0, idx = Math.floor(Math.random() * tracks.length), advancing = false;
+    const fadeOut = (d) => {
+      const t = this.ctx.currentTime;
+      d.g.gain.cancelScheduledValues(t);
+      d.g.gain.setValueAtTime(Math.max(d.g.gain.value, 0.0001), t);
+      d.g.gain.linearRampToValueAtTime(0.0001, t + fade);
+      setTimeout(() => { try { d.a.pause(); d.a.currentTime = 0; } catch (_) {} }, fade * 1000 + 80);
     };
-    play(); this.musicTimer = setInterval(play, 8000);
+    const cue = (i, fresh) => {
+      const d = decks[arm], src = tracks[i];
+      const go = () => {
+        const t = this.ctx.currentTime;
+        d.g.gain.cancelScheduledValues(t);
+        d.g.gain.setValueAtTime(0.0001, t);
+        d.g.gain.linearRampToValueAtTime(1, t + (fresh ? 1.2 : fade));
+        d.a.play().catch(() => {});
+        if (!fresh) fadeOut(decks[1 - arm]);
+        const dur = d.a.duration;
+        const leadMs = (Number.isFinite(dur) && dur > fade + 1 ? dur - fade : 120) * 1000;
+        const next = () => {
+          if (advancing) return;
+          advancing = true;
+          arm ^= 1; idx = (i + 1) % tracks.length;
+          cue(idx, false);
+          setTimeout(() => { advancing = false; }, 400);
+        };
+        clearTimeout(this._musicTo);
+        this._musicTo = setTimeout(next, leadMs);
+        d.a.onended = next;
+      };
+      d.a.onended = d.a.oncanplaythrough = d.a.onerror = null;
+      d.a.src = src;
+      // First play stays in the unlock() click so autoplay policies allow it.
+      if (fresh) d.a.play().catch(() => {});
+      d.a.oncanplaythrough = () => { d.a.oncanplaythrough = null; go(); };
+      if (d.a.readyState >= 3) { d.a.oncanplaythrough = null; go(); }
+      d.a.onerror = () => {
+        d.a.onerror = null;
+        arm ^= 1; idx = (i + 1) % tracks.length;
+        if (idx !== i) cue(idx, fresh);
+      };
+      d.a.load();
+    };
+    cue(idx, true);
   }
 }

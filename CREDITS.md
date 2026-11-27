@@ -3,7 +3,7 @@ Chrome Hangar — credits
 Game design, code, rockets and structures
   Made for Ezequiel Cortez. Every rocket part, the hangar shell, test stand, pad, tank farm, water
   tower, masts, bunker, viewing stand, trucks and fences are built procedurally in code. Engine
-  roar, music and most sounds are synthesized live with the Web Audio API.
+  roar and most sounds are synthesized live with the Web Audio API.
 
 Everything below is CC0 1.0 (public domain) unless marked otherwise. Credit is given anyway.
 
@@ -79,6 +79,11 @@ The whole Earth (high-altitude flights) — NASA imagery, public domain (credit:
   Black Marble 2016 night lights, NASA Earth Observatory (Joshua Stevens, Miguel Román, NASA GSFC,
   Suomi NPP VIIRS) — https://science.nasa.gov/earth/earth-observatory/earth-at-night/maps/
   NASA imagery is used for illustration; no NASA logo or endorsement is implied.
+
+Music, CC0 1.0
+  HoliznaCC0 — "Puppy Love", "New Shoes", and "Poor, But Happy" from the Happy Lo-Fi collection
+  (https://opengameart.org/content/happy-lo-fi-lofi-collection). Warm, relaxed hip-hop style lo-fi
+  that rotates in the hangar. Public domain, CC0 1.0.
 
 Sound effects, CC0 1.0
   Kenney — "Interface Sounds" and "Impact Sounds" (kenney.nl): UI clicks, metal plate and clank hits.
