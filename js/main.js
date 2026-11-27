@@ -12,6 +12,7 @@ import { partMesh, rocketMesh, disposeTree } from './parts3d.js';
 import { dressHangar } from './props.js';
 import { Intro, shouldPlayIntro } from './intro.js';
 import { Training } from './train.js';
+import { Robots } from './robots.js';
 
 const $ = id => document.getElementById(id);
 const LS = { get: (k, d) => { try { const v = localStorage.getItem('ch_' + k); return v == null ? d : JSON.parse(v); } catch (_) { return d; } }, set: (k, v) => { try { localStorage.setItem('ch_' + k, JSON.stringify(v)); } catch (_) {} } };
@@ -53,6 +54,7 @@ class Game {
     step(80, 'Polishing the steel…');
     this.build = new BuildMode(this); this.test = new TestMode(this); this.flight = new FlightMode(this);
     this.training = new Training(this);
+    this.robots = new Robots(this);
     await this.makeThumbs();
     this.build.makeTray();
     this.wireUI();
@@ -338,6 +340,7 @@ class Game {
         if (this.modeObj) { if (!paused) this.modeObj.update(dt, this.resultsOpen); else this.modeObj.idle?.(dt); }
       }
       this.smoke.update(dt, this.windNow || { x: 0, z: 0 }, this.world.h * this.world.renderer.getPixelRatio() / Math.tan(this.world.camera.fov * Math.PI / 360) / 2);
+      this.robots?.update(dt);
       this.debris.update(dt); this.sparks.update(dt, this.world.h * this.world.renderer.getPixelRatio() / Math.tan(this.world.camera.fov * Math.PI / 360) / 2);
       if (this.windNow) this.world.wind = this.windNow;
       this.world.update(dt);

@@ -92,3 +92,8 @@ Libraries
   meshoptimizer decoder — MIT License, (c) 2016-2026 Arseny Kapoulkine — https://github.com/zeux/meshoptimizer
 
 Rockets are original designs. No real company, vehicle, logo or name is depicted.
+
+Robot materials — ambientCG, CC0 1.0
+  "Metal032" (brushed metal joints) — https://ambientcg.com/view?id=Metal032
+  "Rubber004" (rubber soles and fingertips) — https://ambientcg.com/view?id=Rubber004
+  Robots are an original procedural design (js/robots.js).
