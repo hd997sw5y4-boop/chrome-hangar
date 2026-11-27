@@ -70,7 +70,7 @@ export class Audio {
   }
   // continuous engine bed: low rumble + roar + crackle, driven by setEngine()
   startEngineBed() {
-    const c = this.ctx; this.eng = c.createGain(); this.eng.gain.value = 0; this.eng.connect(this.sfx);
+    const c = this.ctx; this.eng = c.createGain(); this.eng.gain.value = 0; this.engDelay = c.createDelay(8); this.eng.connect(this.engDelay); this.engDelay.connect(this.sfx);
     const src = c.createBufferSource(); src.buffer = this.noiseBuf; src.loop = true;
     this.engLP = c.createBiquadFilter(); this.engLP.type = 'lowpass'; this.engLP.frequency.value = 400;
     src.connect(this.engLP); this.engLP.connect(this.eng);
@@ -81,8 +81,9 @@ export class Audio {
     const lfo = c.createOscillator(); lfo.frequency.value = 7; const lg = c.createGain(); lg.gain.value = 0.15; lfo.connect(lg); lg.connect(this.crackG.gain);
     src.start(); crack.start(); sub.start(); lfo.start();
   }
-  setEngine(level, near = 1) { // level 0..1, near 0..1 (distance)
-    if (!this.ctx) return; const t = this.ctx.currentTime, l = Math.max(0, level);
+  setEngine(level, near = 1, dist = 0) { // level 0..1, near 0..1 (distance), dist m: sound travels at 343 m/s
+    if (!this.ctx || !this.eng) return; const t = this.ctx.currentTime, l = Math.max(0, level);
+    this.engDelay.delayTime.setTargetAtTime(Math.min(7.5, dist / 343), t, 0.6);
     this.eng.gain.setTargetAtTime(l * (0.25 + 0.75 * near) * 0.9, t, 0.08);
     this.engLP.frequency.setTargetAtTime(180 + 900 * l * near, t, 0.1);
     this.crackG.gain.setTargetAtTime(0.12 * l * near, t, 0.1);

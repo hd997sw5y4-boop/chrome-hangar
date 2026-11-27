@@ -39,15 +39,15 @@ export class Flame {
         uniforms: { uTime: { value: 0 }, uPower: { value: 0 }, uExpand: { value: 1.4 }, uDiam: { value: 1 }, uCoreK: { value: coreK }, uLen: { value: 10 }, uGain: { value: gain }, uCore: { value: new THREE.Color(core) }, uEdge: { value: ed.clone() } } });
       const o = new THREE.Mesh(geo, m); o.frustumCulled = false; o.userData.noAO = true; this.group.add(o); return o;
     };
-    this.sheath = mk('#ffd9a0', edge.clone().multiplyScalar(0.8), 0.3, 1.2);   // outer, balloons in thin air
-    this.main = mk('#fff4dc', edge, 1.0, 3.2);
-    this.core = mk('#ffffff', new THREE.Color('#cfe8ff'), 2.5, 6.0);          // short white-hot core
+    this.sheath = mk('#ffd9a0', edge.clone().multiplyScalar(0.8), 0.3, 0.6);   // outer, balloons in thin air
+    this.main = mk('#fff4dc', edge, 1.0, 1.7);
+    this.core = mk('#ffffff', new THREE.Color('#cfe8ff'), 2.5, 3.0);          // short white-hot core
     // Mach disc + diamond glows + nozzle bloom
     const N = 7, pg = new THREE.BufferGeometry();
     pg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 3), 3));
     pg.setAttribute('size', new THREE.BufferAttribute(new Float32Array(N), 1)); pg.setAttribute('bright', new THREE.BufferAttribute(new Float32Array(N), 1));
     this.glows = new THREE.Points(pg, new THREE.ShaderMaterial({ vertexShader: glowVS, fragmentShader: glowFS, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-      uniforms: { scale: { value: 800 }, uCol: { value: new THREE.Color(1.0, 0.86, 0.62) }, uK: { value: 9 } } }));
+      uniforms: { scale: { value: 800 }, uCol: { value: new THREE.Color(1.0, 0.86, 0.62) }, uK: { value: 3.5 } } }));
     this.glows.frustumCulled = false; this.group.add(this.glows);
     this.light = new THREE.PointLight(0xff9a4a, 0, 260, 1.5); this.light.position.y = -3; this.group.add(this.light);
     this.group.visible = false; this.power = 0;
@@ -68,25 +68,26 @@ export class Flame {
     for (let i = 0; i < 7; i++) {
       const y = i === 0 ? -0.15 : -(i - 0.1) * sp;
       P.position.setY(i, y); P.size.setX(i, i === 0 ? radius * 4.5 : radius * (2.0 - i * 0.18) * (1 + thin));
-      P.bright.setX(i, power * (i === 0 ? 1.4 : diam * Math.exp(-i * 0.35) * (0.8 + 0.2 * Math.sin(t * 50 + i))));
+      P.bright.setX(i, power * 0.5 * (i === 0 ? 1.4 : diam * Math.exp(-i * 0.35) * (0.8 + 0.2 * Math.sin(t * 50 + i))));
     }
     P.position.needsUpdate = P.size.needsUpdate = P.bright.needsUpdate = true;
-    this.light.intensity = power * (3000 + thrust / 25) * (0.82 + 0.18 * Math.sin(t * 53) * Math.sin(t * 17));
+    this.light.intensity = power * (250 + thrust / 500) * (0.82 + 0.18 * Math.sin(t * 53) * Math.sin(t * 17));
   }
 }
 
-// soft puff sprite: overlapping lobes so particles read as billows, not discs
+// puff sprite: overlapping sphere lobes. A = density, R = top-lit shading (self-shadowed billows), G = rim
 function smokeTex() {
-  const S = 128, c = document.createElement('canvas'); c.width = c.height = S; const g = c.getContext('2d');
+  const S = 128, c = document.createElement('canvas'); c.width = c.height = S; const g = c.getContext('2d'), img = g.createImageData(S, S);
   let sd = 9; const r = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
-  for (let i = 0; i < 26; i++) {
-    const a = r() * 6.283, d = r() * S * 0.22, x = S / 2 + Math.cos(a) * d, y = S / 2 + Math.sin(a) * d, R = S * (0.12 + r() * 0.2);
-    const gr = g.createRadialGradient(x, y, 0, x, y, R); gr.addColorStop(0, `rgba(255,255,255,${0.18 + r() * 0.2})`); gr.addColorStop(1, 'rgba(255,255,255,0)');
-    g.fillStyle = gr; g.fillRect(0, 0, S, S);
+  const L = []; for (let i = 0; i < 22; i++) { const a = r() * 6.283, d = Math.sqrt(r()) * S * 0.24; L.push([S / 2 + Math.cos(a) * d, S / 2 + Math.sin(a) * d, S * (0.1 + r() * 0.13)]); }
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    let den = 0, hz = -1, nx = 0, ny = 0;
+    for (const [cx, cy, R] of L) { const dx = (x - cx) / R, dy = (y - cy) / R, q = 1 - dx * dx - dy * dy; if (q <= 0) continue; den += q; const z = Math.sqrt(q); if (z * R > hz) { hz = z * R; nx = dx; ny = dy; } }
+    const edge = Math.max(0, 1 - Math.hypot(x - S / 2, y - S / 2) / (S * 0.5)), A = Math.min(1, den * 0.9) * Math.min(1, edge * 3);
+    const lit = Math.max(0, 0.35 - ny * 0.75 - nx * 0.15 + Math.sqrt(Math.max(0, 1 - nx * nx - ny * ny)) * 0.4);
+    const o = (y * S + x) * 4; img.data[o] = Math.min(255, lit * 255); img.data[o + 1] = Math.min(255, Math.hypot(nx, ny) * 255); img.data[o + 2] = 0; img.data[o + 3] = A * 255;
   }
-  const m = g.createRadialGradient(S / 2, S / 2, S * 0.3, S / 2, S / 2, S / 2); m.addColorStop(0, 'rgba(0,0,0,0)'); m.addColorStop(1, 'rgba(0,0,0,1)');
-  g.globalCompositeOperation = 'destination-out'; g.fillStyle = m; g.fillRect(0, 0, S, S);
-  return new THREE.CanvasTexture(c);
+  g.putImageData(img, 0, 0); return new THREE.CanvasTexture(c);
 }
 
 // Smoke / steam particles. Lit by the sky (top brighter), by the engine flame (orange, falls off with distance),
@@ -109,13 +110,13 @@ export class Smoke {
       transparent: true, depthWrite: false,
       vertexShader: `attribute float size, alpha, heat, rot, kind; uniform float scale, uFlameI; uniform vec3 uFlame; varying float vA, vH, vR, vK, vL;
         void main(){ vA = alpha; vH = heat; vR = rot; vK = kind; vec4 wp = modelMatrix * vec4(position, 1.0); float d = distance(wp.xyz, uFlame);
-          vL = uFlameI / (1.0 + d * d / 900.0);
+          vL = min(0.55, uFlameI / (1.0 + d * d / 200.0));
           vec4 mv = viewMatrix * wp; gl_PointSize = min(1024.0, size * scale / -mv.z); gl_Position = projectionMatrix * mv; }`,
       fragmentShader: `uniform sampler2D map; uniform vec3 uSky, uSun; varying float vA, vH, vR, vK, vL;
         void main(){ vec2 q = gl_PointCoord - 0.5; float c = cos(vR), s = sin(vR); q = mat2(c, -s, s, c) * q; vec4 t = texture2D(map, q + 0.5);
-          float top = 0.55 + 0.45 * clamp(0.5 - q.y * 1.4, 0.0, 1.0);
-          vec3 base = mix(vec3(0.70, 0.67, 0.63), vec3(0.97, 0.97, 0.98), vK);
-          vec3 col = base * (uSky * 0.55 + uSun * 0.6 * top) + vec3(1.0, 0.55, 0.22) * (vL * (0.6 + 0.4 * top) + vH * 2.5);
+          float top = t.r; // baked billow shading (sprite rotates, light stays from above enough at these speeds)
+          vec3 base = mix(vec3(0.50, 0.47, 0.44), vec3(0.85, 0.86, 0.88), vK);
+          vec3 col = base * (uSky * 0.42 + uSun * 0.45 * top) * mix(0.38, 1.1, top) + vec3(1.0, 0.5, 0.2) * (vL * (0.4 + 0.6 * (1.0 - top)) + vH * 0.6);
           gl_FragColor = vec4(col, t.a * vA); if (gl_FragColor.a < 0.008) discard; }`,
     });
     this.points = new THREE.Points(geo, this.mat); this.points.frustumCulled = false; this.points.userData.noAO = true;
@@ -136,7 +137,7 @@ export class Smoke {
       const k = a / this.life[i], drag = Math.exp(-dt * 1.1);
       this.v[i * 3] = this.v[i * 3] * drag + wind.x * (1 - drag); this.v[i * 3 + 1] = this.v[i * 3 + 1] * drag + (0.8 + this.kind[i] * 1.2) * dt; this.v[i * 3 + 2] = this.v[i * 3 + 2] * drag + wind.z * (1 - drag);
       this.p[i * 3] += this.v[i * 3] * dt; this.p[i * 3 + 1] = Math.max(0.2, this.p[i * 3 + 1] + this.v[i * 3 + 1] * dt); this.p[i * 3 + 2] += this.v[i * 3 + 2] * dt;
-      S[i] = this.size[i] * (1 + Math.sqrt(k) * 3.2 * this.grow[i]);
+      S[i] = this.size[i] * (1 + Math.sqrt(k) * 1.8 * this.grow[i]);
       A[i] = Math.min(1, a * 5) * Math.pow(1 - k, 1.4) * 0.6;
       H[i] = this.heat[i] * Math.max(0, 1 - a * 2.5);
       R[i] += dt * 0.15 * ((i & 1) ? 1 : -1);
@@ -153,7 +154,7 @@ export class Sparks {
     const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(this.p, 3));
     this.aB = new THREE.BufferAttribute(new Float32Array(max), 1); geo.setAttribute('bright', this.aB);
     this.points = new THREE.Points(geo, new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, uniforms: { scale: { value: 600 } },
-      vertexShader: 'attribute float bright; uniform float scale; varying float vB; void main(){ vB = bright; vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_PointSize = clamp(0.35 * scale / -mv.z, 1.5, 24.0); gl_Position = projectionMatrix * mv; }',
+      vertexShader: 'attribute float bright; uniform float scale; varying float vB; void main(){ vB = bright; vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_PointSize = clamp(0.1 * scale / -mv.z, 1.0, 5.0); gl_Position = projectionMatrix * mv; }',
       fragmentShader: 'varying float vB; void main(){ vec2 d = gl_PointCoord - 0.5; float a = max(0.0, 1.0 - length(d) * 2.0); if (vB <= 0.0 || a <= 0.0) discard; gl_FragColor = vec4(vec3(1.0, 0.62, 0.25) * vB * a * 12.0, 1.0); }' }));
     this.points.frustumCulled = false; this.points.userData.noAO = true;
   }

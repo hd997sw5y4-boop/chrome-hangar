@@ -63,6 +63,8 @@ export class FlightMode {
     this.group = rocketMesh(this.g.rocket); this.w.scene.add(this.group);
     const eng = PARTS[this.g.rocket.engine];
     this.flame = new Flame(eng.color); this.group.userData.engine.add(this.flame.group);
+    const pad = this.w.pad; if (pad) { pad.arm.rotation.y = 0; pad.arm.position.y = THREE.MathUtils.clamp(this.st0Top() - 3, 5, 38); }
+    this.flash = 0; this.armT = 0; this.w.captureLocal('out', new THREE.Vector3(SPOTS.pad.x, 8, SPOTS.pad.z), [this.group]);
     this.thr = Math.min(1, eng.heat.safeThrottle); this.touchThr = null; this.hotWarned = false; this.countdown = null; this.acc = 0; this.ended = false; this.endT = 0; this.reached = null; this.shake = 0; this.camInit = false; this.armed = false;
     $('btnLaunch').classList.remove('hidden'); $('countdown').classList.add('hidden');
     this.st0 = stats(this.g.rocket, this.g.fill);
@@ -71,7 +73,8 @@ export class FlightMode {
     this.syncPose(); this.syncButtons(); this.setCam(this.cam, true); this.zoomT = this.zoom = 1;
     this.g.prompt(IS_TOUCH ? 'Tap <b>Launch</b>. Throttle on the right, steer with the left stick.' : 'Press <b>Space</b> to launch. Shift / R throttle up, F down, WASD steer, C camera.');
   }
-  exit() { this.w.setAltitude(0); this.w.camera.far = 60000; this.w.camera.updateProjectionMatrix(); this.clear(); $('camPicker').classList.add('hidden'); this.w.camera.up.set(0, 1, 0); this.guideLine.visible = false; this.g.prompt(null); $('landGuide').classList.add('hidden'); this.g.audio.setEngine(0); }
+  exit() { this.w.post.setDOF(false); this.w.post.setBlur(0); this.w.post.setHeat(new THREE.Vector4(0, 0, 0, 0)); this.w.setAltitude(0); this.w.camera.far = 60000; this.w.camera.updateProjectionMatrix(); this.clear(); $('camPicker').classList.add('hidden'); this.w.camera.up.set(0, 1, 0); this.guideLine.visible = false; this.g.prompt(null); $('landGuide').classList.add('hidden'); this.g.audio.setEngine(0); }
+  st0Top() { return stats(this.g.rocket, this.g.fill).top; }
   clear() { if (this.group) { this.group.removeFromParent(); disposeTree(this.group); this.group = null; } }
   back() { this.g.audio.tap(); if (this.f.phase === 'flying' && !this.ended) this.endFlight('abort'); else this.g.setMode('build'); }
   launch() {
@@ -144,8 +147,9 @@ export class FlightMode {
   }
   onEvent(ev) {
     const a = this.g.audio;
-    if (ev.type === 'liftoff') a.noise(1.2, 200, 0.5, 0.5, 0, 'lowpass', 0.4);
-    if (ev.type === 'ignite') a.noise(0.5, 500, 0.6, 0.5, 0, 'lowpass', 0.3);
+    const delay = this.group ? this.w.camera.position.distanceTo(this.group.position) / 343 : 0;   // sound arrives late from far away
+    if (ev.type === 'liftoff') { a.noise(1.6, 160, 0.5, 0.7, delay, 'lowpass', 0.5); this.flash = 1; this.burst(70, 26); }
+    if (ev.type === 'ignite') { a.noise(0.7, 420, 0.6, 0.6, delay, 'lowpass', 0.35); a.noise(0.35, 2600, 0.7, 0.18, delay, 'bandpass', 0.2); this.flash = 0.7; this.burst(40, 18); }
     if (ev.type === 'cutoff') a.coolTicks();
     if (ev.type === 'landed') { a.clamp(); a.coolTicks(); this.endFlight('landed'); }
     if (ev.type === 'crash') this.crash(ev.kind);
@@ -199,28 +203,61 @@ export class FlightMode {
     if (how === 'abort' || how === 'range') this.endT = 2.6;
   }
 
+  // sparks + hot debris spat out of both trench exits and the mount hole
+  burst(n, speed) {
+    const P = this.w.pad, sp = this.g.sparks; if (!P || !sp || !this.f || this.f.origin.y > 60) return;
+    for (let i = 0; i < n; i++) {
+      const e = i % 3, o = e < 2 ? P.exits[e] : P.center, d = e < 2 ? P.exitDirs[e] : new THREE.Vector3(Math.cos(i), 0, Math.sin(i));
+      const s = speed * (0.4 + Math.random() * 0.8);
+      sp.emit(o.x, o.y + 0.5, o.z, d.x * s + (Math.random() - 0.5) * 8, 4 + Math.random() * 14, d.z * s + (Math.random() - 0.5) * 8, 1 + Math.random() * 1.8);
+    }
+  }
   visuals(dt) {
-    const f = this.f; if (!this.group) { this.g.audio.setEngine(0); return; }
+    const f = this.f, post = this.w.post; if (!this.group) { this.g.audio.setEngine(0); post.setHeat(new THREE.Vector4(0, 0, 0, 0)); return; }
     const eng = f.eng, t = performance.now() / 1000;
     const p = f.e.on ? f.e.thr * f.e.spool : 0, rho = airDensity(f.origin.y);
-    this.flame.update(t, p, eng.radius * 0.95, 3 + 10 * p * eng.thrust / 115000, rho);
+    const radius = eng.radius * 0.95, len = 4 + 12 * p * Math.sqrt(eng.thrust / 115000);
+    this.flash = Math.max(0, this.flash - dt * 1.4);
+    this.flame.update(t, p, radius, len, rho, eng.thrust);
+    this.flame.setScale(this.w.h * this.w.renderer.getPixelRatio() / Math.tan(this.w.camera.fov * Math.PI / 360) / 2);
+    const h = f.origin.y, ground = THREE.MathUtils.clamp(1 - h / 80, 0, 1);
+    this.flame.light.intensity *= 1 + ground * 1.2 + this.flash * 2.5;   // the trench throws the glow back up onto the tower
     this.group.userData.engine.userData.nozMat.emissiveIntensity = Math.max(0, (f.e.temp - 400) / 900);
     const cam = this.w.camera, dist = cam.position.distanceTo(this.group.position);
     const near = THREE.MathUtils.clamp(1 - dist / 2500, 0.05, 1);
-    this.g.audio.setEngine(p * Math.min(1, eng.thrust / 120000 + 0.4), near);
-    // smoke: billowing at the pad, a thin trail higher up
+    this.g.audio.setEngine(p * Math.min(1, eng.thrust / 120000 + 0.4), near, dist);
+    // crew arm swings clear from ignition
+    const P = this.w.pad;
+    if (P && (f.e.on || this.armT > 0)) { this.armT = Math.min(1, this.armT + dt / 3); P.arm.rotation.y = -1.25 * THREE.MathUtils.smoothstep(this.armT, 0, 1); }
+    // smoke lit by the flame and the sky
+    const noz = new THREE.Vector3(f.origin.x, f.origin.y, f.origin.z), up = new THREE.Vector3(f.up.x, f.up.y, f.up.z);
+    this.g.smoke.light(noz.clone().addScaledVector(up, -3), p * (0.6 + ground * 0.8 + this.flash), this.w.hemi?.color, this.w.sun?.color);
     this.g.windNow = f.windNow;
     if (p > 0) {
-      const n = this.g.smoke.max / 1000;
-      const up = new THREE.Vector3(f.up.x, f.up.y, f.up.z), noz = new THREE.Vector3(f.origin.x, f.origin.y, f.origin.z);
-      const h = noz.y;
-      if (h < 45) {
-        const k = (1 - h / 45) * p;
-        for (let i = 0; i < 8 * n * k + 0.5; i++) { const a = Math.random() * 6.283, s = 14 + Math.random() * 18; this.g.smoke.emit(noz.x + Math.cos(a) * 2, 0.8, noz.z + Math.sin(a) * 2, Math.cos(a) * s, 1 + Math.random() * 3, Math.sin(a) * s, 3 + Math.random() * 3, 5 + Math.random() * 4, 0.7, 1.6); }
+      const n = this.g.smoke.max / 1000, sm = this.g.smoke;
+      if (P && h < 70) {
+        const k = (1 - h / 70) * p;
+        // billows rolling out of both trench exits, steam boiling off the deluge at the mount
+        for (const e of [0, 1]) for (let i = 0; i < 5 * n * k + 0.4; i++) {
+          const o = P.exits[e], d = P.exitDirs[e], s = 16 + Math.random() * 22, j = (Math.random() - 0.5) * 3;
+          sm.emit(o.x + j, 1 + Math.random() * 2, o.z + j, d.x * s + (Math.random() - 0.5) * 10, 3 + Math.random() * 6, d.z * s + (Math.random() - 0.5) * 10, 5 + Math.random() * 4, 9 + Math.random() * 6, 0.6, 2.2, 0);
+        }
+        for (let i = 0; i < 3 * n * k + 0.3; i++) { const a = Math.random() * 6.283, r = 3 + Math.random() * 4; sm.emit(P.center.x + Math.cos(a) * r, 0.8, P.center.z + Math.sin(a) * r, Math.cos(a) * 5, 5 + Math.random() * 5, Math.sin(a) * 5, 3 + Math.random() * 2, 7 + Math.random() * 4, 0.25, 2.4, 1); }
+        if (this.g.sparks && Math.random() < k * 0.6) this.burst(3, 20);
+      } else if (h < 70) {
+        for (let i = 0; i < 8 * n * (1 - h / 70) * p + 0.5; i++) { const a = Math.random() * 6.283, s = 14 + Math.random() * 18; sm.emit(noz.x + Math.cos(a) * 2, 0.8, noz.z + Math.sin(a) * 2, Math.cos(a) * s, 1 + Math.random() * 3, Math.sin(a) * s, 3 + Math.random() * 3, 5 + Math.random() * 4, 0.7, 1.6); }
       }
-      if (h < 6000) for (let i = 0; i < 2 * n * p + 0.3; i++) { const j = () => (Math.random() - 0.5) * 1.5; this.g.smoke.emit(noz.x - up.x * 3 + j(), noz.y - up.y * 3 + j(), noz.z - up.z * 3 + j(), f.vel.x * 0.2 - up.x * 25, f.vel.y * 0.2 - up.y * 25, f.vel.z * 0.2 - up.z * 25, 1.4 + Math.random(), 2.5 + Math.random() * 2, 0.5, 1.2); }
+      if (h < 6000) for (let i = 0; i < 2 * n * p + 0.3; i++) { const j = () => (Math.random() - 0.5) * 1.5; sm.emit(noz.x - up.x * 3 + j(), noz.y - up.y * 3 + j(), noz.z - up.z * 3 + j(), f.vel.x * 0.2 - up.x * 25, f.vel.y * 0.2 - up.y * 25, f.vel.z * 0.2 - up.z * 25, 1.4 + Math.random(), 2.5 + Math.random() * 2, 0.5, 1.2); }
     }
-    this.shake = Math.max(this.shake * Math.exp(-dt * 2), p * near * Math.min(1.4, eng.thrust / 100000) * (f.alt < 80 ? 1 : 0.35) * 0.25);
+    this.shake = Math.max(this.shake * Math.exp(-dt * 2), p * near * Math.min(1.6, eng.thrust / 90000) * (h < 80 ? 1 : 0.3) * 0.55 + this.flash * near * 0.8);
+    // post: heat shimmer behind the nozzle, DOF on long-lens shots, motion blur on the chase cam
+    const sp = noz.clone().project(cam), tail = noz.clone().addScaledVector(up, -len * 0.6).project(cam);
+    const dir = new THREE.Vector2(tail.x - sp.x, (tail.y - sp.y)).normalize();
+    const rad = radius / (dist * Math.tan(cam.fov * Math.PI / 360));
+    post.setHeat(new THREE.Vector4(sp.x * 0.5 + 0.5, sp.y * 0.5 + 0.5, THREE.MathUtils.clamp(rad * 0.5, 0.004, 0.25), sp.z < 1 ? p * (rho / 1.225) : 0), dir);
+    const view = this.cam === 6 ? DIRECTOR[this.dir.i % DIRECTOR.length][0] : this.cam;
+    post.setDOF(view === 2 || view === 3 || view === 8 || view === 9, dist, view === 2 || view === 3 ? 0.00004 : 0.00015);
+    post.setBlur(view === 1 ? THREE.MathUtils.clamp((f.speed - 60) / 900, 0, 0.06) : 0);
   }
   hud() {
     const f = this.f, fmt = v => Math.round(v).toLocaleString();
@@ -278,7 +315,7 @@ export class FlightMode {
       c.position.copy(this.w.outdoor.standCam); this.camPos.copy(c.position);
       const pad = new THREE.Vector3(SPOTS.pad.x, 0, SPOTS.pad.z), d = c.position.distanceTo(tgt);
       const k = THREE.MathUtils.clamp(f.alt / 400, 0, 1), aim = pad.clone().setY(L * 0.6).lerp(tgt, 0.55 + 0.45 * k);
-      const span = Math.max(L * 4 + 30, (f.alt + L) * 1.25 * (1 - k) + L * 6 * k) * Math.min(4, this.zoom);
+      const span = Math.max(L * 4 + 55, (f.alt + L) * 1.25 * (1 - k) + L * 6 * k) * Math.min(4, this.zoom);
       c.fov = THREE.MathUtils.clamp(2 * Math.atan(span / 2 / d) * 180 / Math.PI, 2.5, 50);
       if (snap) { this.camLook.copy(aim); this.camInit = true; } else this.camLook.lerp(aim, 1 - Math.exp(-dt * 5));
       c.lookAt(this.camLook);
@@ -312,7 +349,10 @@ export class FlightMode {
       c.fov = 50; place(p, tgt, 4);
     }
     c.near = Math.max(view === 4 || view === 5 ? 0.1 : 0.4, Math.min(5, f.alt / 400)); c.far = Math.max(60000, f.alt * 2.5); c.updateProjectionMatrix();
-    if (this.shake > 0.001) { const s = this.shake; c.position.x += (Math.random() - 0.5) * s; c.position.y += (Math.random() - 0.5) * s; c.rotation.z += (Math.random() - 0.5) * s * 0.01; }
+    if (this.shake > 0.001) {   // layered shake: low rumble sway + high-frequency buzz, scaled by distance (zoomed lenses shake less in world units)
+      const s = this.shake * Math.min(1, c.fov / 50), T = performance.now() / 1000, nz = (a, b) => Math.sin(T * a) * 0.6 + Math.sin(T * b + 1.7) * 0.4;
+      c.position.x += nz(23, 37) * s * 0.35; c.position.y += nz(29, 41) * s * 0.35; c.rotateX(nz(11, 19) * s * 0.012); c.rotateY(nz(13, 17) * s * 0.012); c.rotateZ(nz(7, 31) * s * 0.008);
+    }
     this.w.followSun(new THREE.Vector3(f.pos.x, Math.min(f.pos.y, 2000), f.pos.z)); this.w.setAltitude(f.alt);
   }
 }

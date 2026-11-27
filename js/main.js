@@ -4,7 +4,7 @@ import { loadParts, PARTS, PART_IDS, emptyRocket, starterRocket, stockRocket, cl
 import { World, PRESETS, SKIES, defaultQuality, IS_TOUCH, IS_IOS } from './env.js';
 import { Audio } from './audio.js';
 import { Input } from './input.js';
-import { Smoke, Debris } from './fx.js';
+import { Smoke, Debris, Sparks } from './fx.js';
 import { BuildMode } from './build.js';
 import { TestMode } from './testfire.js';
 import { FlightMode } from './flight.js';
@@ -40,6 +40,7 @@ class Game {
     this.input = new Input($('c'));
     this.smoke = new Smoke(PRESETS[this.settings.quality]?.particles || 900); this.world.scene.add(this.smoke.points);
     this.debris = new Debris(this.world.scene);
+    this.sparks = new Sparks(PRESETS[this.settings.quality]?.particles > 600 ? 500 : 200); this.world.scene.add(this.sparks.points);
     this.applySettings();
     addEventListener('resize', () => this.resize()); this.resize();
     step(45, 'Hanging the lights…');
@@ -123,7 +124,7 @@ class Game {
     $('stickL').classList.toggle('hidden', !(m === 'build' || m === 'flight'));
     $('hud').classList.remove('hidden');
     $('btnUndo').classList.toggle('hidden', m !== 'build'); $('btnRedo').classList.toggle('hidden', m !== 'build');
-    this.smoke.clear(); this.debris.clear(); this.audio.setEngine(0);
+    this.smoke.clear(); this.debris.clear(); this.sparks?.clear(); this.audio.setEngine(0);
     this.modeObj.enter(opts);
     this.updateObjective();
   }
@@ -307,7 +308,7 @@ class Game {
       if (!paused) this.modeObj.update(dt, this.resultsOpen);
       else this.modeObj.idle?.(dt);
       this.smoke.update(dt, this.windNow || { x: 0, z: 0 }, this.world.h * this.world.renderer.getPixelRatio() / Math.tan(this.world.camera.fov * Math.PI / 360) / 2);
-      this.debris.update(dt);
+      this.debris.update(dt); this.sparks.update(dt, this.world.h * this.world.renderer.getPixelRatio() / Math.tan(this.world.camera.fov * Math.PI / 360) / 2);
       if (this.windNow) this.world.wind = this.windNow;
       this.world.update(dt);
       this.world.render();

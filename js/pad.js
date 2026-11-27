@@ -117,7 +117,7 @@ export function buildPadComplex(w, padPos, lite) {
   const hoseMat = new THREE.MeshStandardMaterial({ color: 0x1a1b1e, roughness: 0.7 });
   for (const [dx, r] of [[-0.6, 0.12], [0.5, 0.09]]) { const a = V(dx, 9, -(hw + 8.5) + a2 + 0.3), b = V(dx * 2, 0.6, -hw - 1.0), m = a.clone().lerp(b, 0.5); m.y -= 2.2; kf.add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([a, m, b]), 20, r, 6), hoseMat); }
   k.build(frame); kf.build(frame);
-  frame.updateMatrixWorld(true);
+  g.updateMatrixWorld(true);
   const armY = (w.rocketTop || 14) - 3;
   arm.position.y = Math.max(6, Math.min(36, armY));
   // exits (world space) where the trench breathes out, deluge nozzles (world)

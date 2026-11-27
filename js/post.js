@@ -38,7 +38,7 @@ function dirtTex() {
 const GradeShader = {
   uniforms: {
     tDiffuse: { value: null }, tDirt: { value: null }, uRes: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 },
-    uVig: { value: 0.32 }, uCA: { value: 0.0008 }, uGrain: { value: 0.035 }, uDirtK: { value: 0.55 },
+    uVig: { value: 0.32 }, uCA: { value: 0.0008 }, uGrain: { value: 0.035 }, uDirtK: { value: 0.22 },
     uBlur: { value: 0 }, uHeat: { value: new THREE.Vector4(0, 0, 0, 0) }, uHeatDir: { value: new THREE.Vector2(0, -1) },
     uSun: { value: new THREE.Vector3(0.5, 0.5, 0) }, uShaft: { value: 0 }, uShaftN: { value: 20 }, uLift: { value: new THREE.Vector3(0.012, 0.010, 0.018) },
     uGain: { value: new THREE.Vector3(1.03, 1.0, 0.95) }, uSat: { value: 1.12 }, uContrast: { value: 1.08 },
@@ -67,13 +67,13 @@ const GradeShader = {
       if (uShaft > 0.0 && uSun.z > 0.0) {
         vec2 dir = (uSun.xy - uv); float s = 0.0, wsum = 0.0; float j = h(uv * uRes + uTime);
         for (int i = 0; i < 32; i++) { if (float(i) >= uShaftN) break; float k = (float(i) + j) / uShaftN; vec3 t = texture2D(tDiffuse, uv + dir * k * 0.85).rgb;
-          float w = 1.0 - k; s += smoothstep(0.82, 1.0, dot(t, vec3(0.299, 0.587, 0.114))) * w; wsum += w; }
-        float fall = exp(-length((uSun.xy - vUv) * asp) * 1.7);
+          float w = 1.0 - k; s += smoothstep(0.92, 1.0, dot(t, vec3(0.299, 0.587, 0.114))) * w; wsum += w; }
+        float fall = exp(-length((uSun.xy - vUv) * asp) * 2.6);
         col += vec3(1.0, 0.82, 0.58) * (s / wsum) * uShaft * fall * uSun.z;
       }
       // lens dirt lit by bright light around it and by the sun direction
       vec3 b = vec3(0.0); for (int i = 0; i < 6; i++) { float a = float(i) * 1.0472; b += texture2D(tDiffuse, vUv + vec2(cos(a), sin(a)) * 0.09).rgb; }
-      float bl = max(0.0, dot(b / 6.0, vec3(0.333)) - 0.55) * 1.6 + uSun.z * exp(-length((uSun.xy - vUv) * asp) * 2.5) * 0.8;
+      float bl = max(0.0, dot(b / 6.0, vec3(0.333)) - 0.55) * 1.6 + uSun.z * exp(-length((uSun.xy - vUv) * asp) * 3.0) * 0.4;
       col += texture2D(tDirt, vUv).rgb * bl * uDirtK * vec3(1.0, 0.9, 0.78);
       // grade: lift / gain, contrast, saturation
       col = col * uGain + uLift * (1.0 - col);
