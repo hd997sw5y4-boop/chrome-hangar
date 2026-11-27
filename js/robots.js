@@ -601,7 +601,7 @@ export class Robots {
     const f = r.jobKey === 'follow', locked = !!document.pointerLockElement;
     this.bar.innerHTML = `<span>${r.finish === 'silver' ? 'SILVER ROBOT' : 'DARK ROBOT'}</span><button data-job="follow" class="${f ? 'on' : ''}">${f ? 'Stop following' : 'Follow me'}</button>` +
       `<button data-job="inspect">Inspect rocket</button><button data-job="console">Console</button><button data-job="stand">Check stand</button>` +
-      (r.jobKey !== r.rounds && !f ? '<button data-job="rounds">Free roam</button>' : '') + (locked ? '<small>Tab frees the cursor</small>' : '');
+      (r.jobKey !== r.rounds && !f ? '<button data-job="rounds">Free roam</button>' : '') + (locked ? '<small>Tab or the Tray button frees the cursor</small>' : '');
     this.bar.classList.remove('hidden');
     this.barT = setTimeout(() => this.bar.classList.add('hidden'), 7000);
   }

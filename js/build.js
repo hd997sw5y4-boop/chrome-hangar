@@ -8,6 +8,7 @@ import { DECK } from './stand.js';
 import { height } from './terrain.js';
 import { walk as collideWalk, playerFrame, R_PLAYER, insideHangar } from './collide.js';
 import { Tray } from './tray.js';
+import { TrayView } from './trayview.js';
 
 const $ = id => document.getElementById(id);
 const EYE = 1.65;
@@ -29,6 +30,7 @@ export class BuildMode {
     this.ringGeo = new THREE.TorusGeometry(1.22, 0.035, 8, 64); this.dotGeo = new THREE.SphereGeometry(0.22, 16, 12);
     this.ray = new THREE.Raycaster(); this.stepT = 0; this.tut = null; this.aimXY = null; this.dragging = null;
     this.held = {};
+    this.view = new TrayView(this); this.trayOpen = true;
     this.wireUI();
     this.rebuild();
   }
@@ -49,13 +51,24 @@ export class BuildMode {
     // tray: tap a card to pick it, drag it up onto the rocket, wheel / drag sideways to scroll
     this.tray = new Tray($('tray'), {
       onHover: () => this.g.audio.hover(),
-      onTap: card => { if (this.pickable(card)) this.select(this.sel === card.dataset.id && !IS_TOUCH ? null : card.dataset.id); },
+      onTap: card => { this.view.open(); if (this.pickable(card)) this.select(this.sel === card.dataset.id && !IS_TOUCH ? null : card.dataset.id); },
       onDragOut: (card, e) => {
         const id = card.dataset.id; if (id === 'delete' || !this.pickable(card)) return;
         if (this.sel !== id) this.select(id);
+        this.view.open();
         this.dragging = { id, moved: 31 }; this.aimXY = { x: e.clientX, y: e.clientY };
       },
     });
+    // Tray button (also T / Tab / wheel click, R3 or the touchpad click on a DualSense): open = free cursor + framed view,
+    // close = back to the walk-around view and mouse-look. Losing mouse-look any other way (Esc) opens the tray.
+    $('btnTray').onclick = () => this.toggleTray();
+    document.addEventListener('pointerlockchange', () => {
+      if (this.g.mode !== 'build') return;
+      const locked = document.pointerLockElement === this.w.renderer.domElement;
+      if (locked && this.trayOpen) this.showTray(false);
+      else if (!locked && !this.trayOpen) this.showTray(true, false);
+    });
+    addEventListener('resize', () => this.measureTray());
     // a part being carried out of the tray follows the pointer; let go over the hangar to place it
     addEventListener('pointermove', e => { if (this.dragging) { this.dragging.moved += Math.abs(e.movementX || 0) + Math.abs(e.movementY || 0); if (e.target === this.w.renderer.domElement || this.dragging.moved > 30) this.aimXY = { x: e.clientX, y: e.clientY }; } });
     addEventListener('pointerup', e => {
@@ -63,6 +76,22 @@ export class BuildMode {
       if (d.moved > 30 && document.elementFromPoint(e.clientX, e.clientY) === this.w.renderer.domElement) { this.aimXY = { x: e.clientX, y: e.clientY }; this.aim(); this.place(); }
       if (IS_TOUCH) this.aimXY = null;
     });
+  }
+  showTray(open, frame = open) {
+    this.trayOpen = open; document.body.classList.toggle('trayShut', !open); $('btnTray').classList.toggle('on', open);
+    if (open && frame) this.view.open(); if (!open) this.view.close();
+    this.measureTray();
+  }
+  toggleTray() {
+    const open = !this.trayOpen; this.g.audio.tap(); this.showTray(open);
+    if (open) this.g.input.exitLock(); else this.g.input.requestLock();
+  }
+  measureTray() { const h = $('tray').offsetHeight; if (h) document.documentElement.style.setProperty('--trayH', h + 'px'); }
+  // with the tray shut, picking a part (wheel, keys, L1/R1) flashes it up for a moment
+  peekTray() {
+    if (this.trayOpen) return;
+    document.body.classList.add('trayPeek'); clearTimeout(this.peekT);
+    this.peekT = setTimeout(() => document.body.classList.remove('trayPeek'), 1400);
   }
   makeTray() {
     const secs = { structure: 'Structure', propulsion: 'Propulsion', control: 'Control' };
@@ -76,7 +105,7 @@ export class BuildMode {
     }
     html += `<div class="traySec"><h4>Tools</h4><div class="tiles"><div class="tile del" data-id="delete" title="Delete / detach a part"><span class="kb">0</span><span class="ico">✕</span><span class="nm">Delete</span></div></div></div>`;
     $('tray').innerHTML = html;
-    this.refreshTray();
+    this.refreshTray(); this.measureTray();
   }
   pickable(t) {
     this.g.audio.unlock();
@@ -94,7 +123,7 @@ export class BuildMode {
   selectable() { return [...PART_IDS.filter(id => this.g.partUnlocked(id)), 'delete']; }
   select(id) {
     this.sel = id; this.g.audio.tap(); this.refreshTray(); this.clearGhost(); this.hoverDel = null;
-    if (id) this.tray?.reveal($('tray').querySelector(`.tile[data-id="${id}"]`));
+    if (id) { this.tray?.reveal($('tray').querySelector(`.tile[data-id="${id}"]`)); this.peekTray(); }
     if (id && id !== 'delete') this.autoStand(id);
   }
 
@@ -192,12 +221,12 @@ export class BuildMode {
     this.w.stand.visible = true; this.w.assembly?.setFold(0, true); this.standH = this.standTarget = 0;
     this.w.stand.position.y = 0;
     for (const b of $('standCtl').querySelectorAll('[data-s="up"], [data-s="down"]')) b.classList.add('hidden');
-    this.rebuild(); this.applyCam();
+    this.rebuild(); this.view.reset(); this.showTray(true, false); this.applyCam();
     this.g.scene = this.w.scene;
   }
-  exit() { this.g.input.exitLock(); this.clearGhost(); this.markers.clear(); $('aimReason').classList.add('hidden'); this.g.prompt(null); }
+  exit() { this.view.reset(); document.body.classList.remove('trayShut', 'trayPeek'); this.g.input.exitLock(); this.clearGhost(); this.markers.clear(); $('aimReason').classList.add('hidden'); this.g.prompt(null); }
   idle() {
-    this.applyCam(); this.w.stand.position.y = 0; this.w.stand.rotation.y = this.standYaw;
+    this.applyCam(); this.view.update(0, null); this.w.stand.position.y = 0; this.w.stand.rotation.y = this.standYaw;
   }
   applyCam() { const P = this.player; this.w.camera.position.set(P.x, EYE + height(P.x, P.z), P.z); this.w.camera.rotation.set(P.pitch, P.yaw, 0, 'YXZ'); }
 
@@ -318,10 +347,11 @@ export class BuildMode {
       this.wheelAcc = (this.wheelAcc || 0) + inp.zoom;
       if (Math.abs(this.wheelAcc) >= 0.9) { const l = this.selectable(), i = l.indexOf(this.sel), d = this.wheelAcc > 0 ? 1 : -1; this.wheelAcc = 0; this.select(l[i < 0 ? (d > 0 ? 0 : l.length - 1) : (i + d + l.length) % l.length]); }
     }
-    if (inp.hit('Tab') && !IS_TOUCH) { if (inp.locked) inp.exitLock(); else inp.requestLock(); }
-    // look + walk
-    P.yaw -= inp.look.x; P.pitch = THREE.MathUtils.clamp(P.pitch - inp.look.y, -1.35, 1.35);
-    const sp = (inp.down('ShiftLeft') ? 6.5 : 3.6) * dt;
+    if (inp.hit('KeyT') || inp.hit('Tab') || inp.hit('Mouse1') || inp.hit('Pad11') || inp.hit('Pad17')) this.toggleTray();
+    // look + walk (while the tray view is framing the work, look / move orbit and zoom it instead)
+    const framed = this.view.on;
+    if (!framed) { P.yaw -= inp.look.x; P.pitch = THREE.MathUtils.clamp(P.pitch - inp.look.y, -1.35, 1.35); }
+    const sp = framed ? 0 : (inp.down('ShiftLeft') ? 6.5 : 3.6) * dt;
     const fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw);
     // forward = (fx, fz), right = (-fz, fx); move.x > 0 strafes right, move.y < 0 walks forward
     const nx = P.x + (fx * -inp.move.y + -fz * inp.move.x) * sp, nz = P.z + (fz * -inp.move.y + fx * inp.move.x) * sp;
@@ -331,7 +361,7 @@ export class BuildMode {
     const wantIn = insideHangar(P.x, P.z, this.w.indoor ? -0.4 : 1.0);
     if (wantIn !== this.w.indoor) this.w.setIndoor(wantIn);
     if (moved > 0.001) { this.stepT += moved; if (this.stepT > 0.75) { this.stepT = 0; this.g.audio.step(); } }
-    this.applyCam();
+    this.applyCam(); this.view.update(dt, inp);
     // stand: R/F raise/lower, Q/E turn (also d-pad and on-screen buttons)
     const k = c => inp.down(c) ? 1 : 0, pb = inp.pad?.b || [];
     const up = k('KeyR') + (pb[12] > 0.5) + (this.held.up ? 1 : 0) - k('KeyF') - (pb[13] > 0.5) - (this.held.down ? 1 : 0);
@@ -364,7 +394,7 @@ export class BuildMode {
       else {
         const hoveringSomething = a.cand || a.del;
         if (inp.locked || hoveringSomething) this.place();
-        else inp.requestLock();
+        else if (!this.view.on) inp.requestLock();   // while the tray view frames the work, a click on empty floor keeps the cursor
       }
     }
     if (inp.hit('Pad0') || inp.hit('Enter')) this.place();

@@ -24,6 +24,7 @@ export class Input {
     this.clearHeld = clear;
     canvas.addEventListener('mousedown', e => {
       if (e.button === 0) this.mouse.clicked = true; if (e.button === 2) this.mouse.right = true;
+      if (e.button === 1) { e.preventDefault(); this.pressed.add('Mouse1'); }   // wheel click (no autoscroll)
       if (!this.locked && (e.button === 0 || e.button === 2)) this.dragging = true;   // drag to orbit when the pointer is free
       this.lastDevice = 'kb';
     });

@@ -43,6 +43,15 @@ body.build:not(.touch) #crosshair{display:block}
 /* build */
 #buildUI{position:fixed;inset:0;pointer-events:none;z-index:4}
 #tray{position:absolute;left:calc(10px + var(--sl));right:calc(10px + var(--sr));bottom:calc(10px + var(--sb));display:flex;gap:10px;justify-content:safe center;pointer-events:auto;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;touch-action:none;overscroll-behavior:contain;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;padding:6px 2px 2px;cursor:grab}
+#tray{transition:transform .34s cubic-bezier(.2,.8,.2,1),opacity .26s}
+body.trayShut #tray{transform:translateY(calc(100% + 18px + var(--sb)));opacity:0;pointer-events:none}
+body.trayShut.trayPeek #tray{transform:none;opacity:.94}
+#btnTray{position:absolute;left:calc(10px + var(--sl));bottom:calc(var(--trayH,96px) + 18px + var(--sb));display:flex;align-items:center;gap:7px;background:var(--glass);font-weight:600;font-size:14px;letter-spacing:.04em;padding:0 12px;height:40px;pointer-events:auto;transition:bottom .34s cubic-bezier(.2,.8,.2,1),background .15s,box-shadow .15s}
+#btnTray .ico{font-size:17px;line-height:1;color:var(--accent)}
+#btnTray .kb{font-size:10px;color:var(--dim);border:1px solid var(--line);border-radius:5px;padding:1px 5px}
+#btnTray.on{border-color:rgba(127,231,255,.55);box-shadow:0 0 14px rgba(127,231,255,.18)}
+body.trayShut #btnTray{bottom:calc(10px + var(--sb))}
+body.touch #btnTray .kb{display:none}body.touch.build #btnTray{left:calc(160px + var(--sl))}
 #tray.dragging{cursor:grabbing}#tray.dragging .tile{pointer-events:none}
 .traySec{transform:translateX(var(--trayOv,0px))}
 #tray::-webkit-scrollbar{display:none}
