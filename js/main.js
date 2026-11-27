@@ -9,7 +9,7 @@ import { BuildMode } from './build.js';
 import { TestMode } from './testfire.js';
 import { FlightMode } from './flight.js';
 import { partMesh, rocketMesh, disposeTree } from './parts3d.js';
-import { dressHangar } from './props.js';
+import { dressHangar, bakeDressing } from './props.js';
 import { Intro, shouldPlayIntro } from './intro.js';
 import { Training } from './train.js';
 import { Interactive } from './interactive.js';
@@ -60,6 +60,7 @@ class Game {
     this.hands = new Hands(this);
     await this.interact.load();
     await this.hands.load();
+    bakeDressing(this.world); this.world.refreshLocalIn();   // merge static dressing, then re-shoot the hangar reflections
     this.robots = new Robots(this);
     await this.makeThumbs();
     this.build.makeTray();

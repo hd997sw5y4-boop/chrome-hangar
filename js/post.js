@@ -1,27 +1,39 @@
-// Post-processing pipeline (three.js addons): world (+ planet) pass -> GTAO -> depth of field -> HDR bloom
-// -> filmic tone map -> grade (vignette, lens dirt, grain, sun shafts, heat shimmer,
-// chase-cam motion blur) -> SMAA. Phone keeps bloom + grade on MSAA; low renders straight to screen.
+// Post-processing pipeline (three.js addons): scene pass (world + planet into one 4x MSAA HDR buffer with a float
+// depth texture -> GTAO from that same depth, so there is no second whole-scene normal render -> NaN guard)
+// -> depth of field -> HDR bloom -> filmic tone map -> grade (vignette, lens dirt, sun shafts, heat shimmer,
+// chase-cam motion blur, a fixed sub-LSB dither instead of animated grain, so edges never crawl) -> SMAA on High/Ultra.
+// Phone / Medium keep bloom + grade on MSAA; low renders straight to screen.
 import * as THREE from 'three';
 import { EffectComposer } from '../vendor/three/addons/postprocessing/EffectComposer.js';
 import { Pass } from '../vendor/three/addons/postprocessing/Pass.js';
 import { ShaderPass } from '../vendor/three/addons/postprocessing/ShaderPass.js';
+import { FullScreenQuad } from '../vendor/three/addons/postprocessing/Pass.js';
 import { UnrealBloomPass } from '../vendor/three/addons/postprocessing/UnrealBloomPass.js';
 import { GTAOPass } from '../vendor/three/addons/postprocessing/GTAOPass.js';
 import { SMAAPass } from '../vendor/three/addons/postprocessing/SMAAPass.js';
 import { OutputPass } from '../vendor/three/addons/postprocessing/OutputPass.js';
 import { BokehPass } from '../vendor/three/addons/postprocessing/BokehPass.js';
 
-class WorldPass extends Pass {
-  constructor(world) { super(); this.w = world; this.needsSwap = false; }
-  render(r, writeBuffer, readBuffer) { r.setRenderTarget(readBuffer); r.clear(); this.w.renderScene(); }
-}
-// GTAO, but transparent FX (flames, glow cones, glass) never write AO normals
-class AOPass extends GTAOPass {
-  _overrideVisibility() {
-    super._overrideVisibility();
-    const cache = this._visibilityCache;
-    this.scene.traverse(o => { if (o.visible && (o.userData.noAO || (o.material && !Array.isArray(o.material) && o.material.transparent))) { o.visible = false; cache.push(o); } });
+// World (+ planet) into its own MSAA HDR target whose depth resolves into a float depth texture. GTAO reads that
+// depth (normals rebuilt from it) and multiplies its result onto the same colour, then the NaN guard writes the
+// clean image into the composer chain. Rendering happens into the multisampled buffer and depth is only sampled
+// from the resolved texture, so there is never a framebuffer/texture feedback loop.
+class ScenePass extends Pass {
+  constructor(world, W, H, ao) {
+    super(); this.w = world; this.needsSwap = true;
+    const depth = new THREE.DepthTexture(W, H); depth.type = THREE.FloatType;
+    this.rt = new THREE.WebGLRenderTarget(W, H, { type: THREE.HalfFloatType, samples: 4, depthTexture: depth });
+    this.ao = ao ? new GTAOPass(world.scene, world.camera, W, H, { depthTexture: depth }) : null;
+    this.clean = new FullScreenQuad(new THREE.ShaderMaterial(CleanShader));
   }
+  setSize(w, h) { this.rt.setSize(w, h); this.ao?.setSize(w, h); }
+  render(r, writeBuffer) {
+    r.setRenderTarget(this.rt); r.clear(); this.w.renderScene();
+    if (this.ao?.enabled) this.ao.render(r, null, this.rt);
+    this.clean.material.uniforms.tDiffuse.value = this.rt.texture;
+    r.setRenderTarget(writeBuffer); this.clean.render(r);
+  }
+  dispose() { this.rt.depthTexture?.dispose(); this.rt.dispose(); this.ao?.dispose(); this.clean.material.dispose(); this.clean.dispose(); }
 }
 
 function dirtTex() {
@@ -38,13 +50,13 @@ function dirtTex() {
 const GradeShader = {
   uniforms: {
     tDiffuse: { value: null }, tDirt: { value: null }, uRes: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 },
-    uVig: { value: 0.32 }, uGrain: { value: 0.035 }, uDirtK: { value: 0.22 },
+    uVig: { value: 0.32 }, uDirtK: { value: 0.22 },
     uBlur: { value: 0 }, uHeat: { value: new THREE.Vector4(0, 0, 0, 0) }, uHeatDir: { value: new THREE.Vector2(0, -1) },
     uSun: { value: new THREE.Vector3(0.5, 0.5, 0) }, uShaft: { value: 0 }, uShaftN: { value: 20 }, uLift: { value: new THREE.Vector3(0.012, 0.010, 0.018) },
     uGain: { value: new THREE.Vector3(1.03, 1.0, 0.95) }, uSat: { value: 1.12 }, uContrast: { value: 1.08 },
   },
   vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-  fragmentShader: `uniform sampler2D tDiffuse, tDirt; uniform vec2 uRes, uHeatDir; uniform float uTime, uVig, uGrain, uDirtK, uBlur, uShaft, uShaftN, uSat, uContrast;
+  fragmentShader: `uniform sampler2D tDiffuse, tDirt; uniform vec2 uRes, uHeatDir; uniform float uTime, uVig, uDirtK, uBlur, uShaft, uShaftN, uSat, uContrast;
     uniform vec4 uHeat; uniform vec3 uSun, uLift, uGain; varying vec2 vUv;
     float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
     float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f); return mix(mix(h(i), h(i+vec2(1,0)), f.x), mix(h(i+vec2(0,1)), h(i+vec2(1,1)), f.x), f.y); }
@@ -63,7 +75,7 @@ const GradeShader = {
       if (uBlur > 0.0) { vec3 acc = col; for (int i = 1; i < 8; i++) { float k = float(i) / 8.0; acc += texture2D(tDiffuse, uv - c * k * uBlur).rgb; } col = acc / 8.0; }
       // sun shafts: march toward the sun through bright sky pixels
       if (uShaft > 0.0 && uSun.z > 0.0) {
-        vec2 dir = (uSun.xy - uv); float s = 0.0, wsum = 0.0; float j = h(uv * uRes + uTime);
+        vec2 dir = (uSun.xy - uv); float s = 0.0, wsum = 0.0; float j = h(floor(vUv * uRes));   // fixed jitter: no crawl
         for (int i = 0; i < 32; i++) { if (float(i) >= uShaftN) break; float k = (float(i) + j) / uShaftN; vec3 t = texture2D(tDiffuse, uv + dir * k * 0.85).rgb;
           float w = 1.0 - k; s += smoothstep(0.92, 1.0, dot(t, vec3(0.299, 0.587, 0.114))) * w; wsum += w; }
         float fall = exp(-length((uSun.xy - vUv) * asp) * 2.6);
@@ -78,8 +90,7 @@ const GradeShader = {
       col = (col - 0.5) * uContrast + 0.5;
       float l = dot(col, vec3(0.299, 0.587, 0.114)); col = mix(vec3(l), col, uSat);
       col *= 1.0 - uVig * smoothstep(0.15, 0.95, r2);
-      col += (h(vUv * uRes + fract(uTime) * 61.0) - 0.5) * uGrain;
-      gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
+      gl_FragColor = vec4(clamp(col, 0.0, 1.0) + (h(floor(vUv * uRes)) - 0.5) / 255.0, 1.0);   // static dither against banding
     }`,
 };
 
@@ -100,18 +111,19 @@ export class Post {
     r.toneMapping = THREE.ACESFilmicToneMapping;
     if (!this.enabled) return;
     const pr = r.getPixelRatio(), W = Math.max(1, w * pr | 0), H = Math.max(1, h * pr | 0);
-    const rt = new THREE.WebGLRenderTarget(W, H, { type: THREE.HalfFloatType, samples: 4 });
-    const C = this.composer = new EffectComposer(r, rt); C.setPixelRatio(pr); C.setSize(w, h);
-    C.addPass(new WorldPass(this.w));
+    // the chain after the scene pass is full-screen only, so it needs no MSAA or depth of its own
+    const rt = new THREE.WebGLRenderTarget(W, H, { type: THREE.HalfFloatType, depthBuffer: false });
+    const C = this.composer = new EffectComposer(r, rt); C.setPixelRatio(pr);
+    const scene = this.scenePass = new ScenePass(this.w, W, H, this.tier === 2);
+    C.addPass(scene); C.setSize(w, h);
     if (this.tier === 2) {
-      const ao = this.ao = new AOPass(this.w.scene, this.w.camera, W, H);
+      const ao = this.ao = scene.ao;
       ao.updateGtaoMaterial({ radius: 2.2, distanceExponent: 1.6, thickness: 2.2, scale: 1.0, samples: 12, distanceFallOff: 1.0 });
       ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 12 });
-      ao.blendIntensity = 1.0; C.addPass(ao);
+      ao.blendIntensity = 1.0;
       const bk = this.bokeh = new BokehPass(this.w.scene, this.w.camera, { focus: 30, aperture: 0.00012, maxblur: 0.008 });
       bk.enabled = false; C.addPass(bk);
     }
-    C.addPass(new ShaderPass(CleanShader));
     const bloom = this.bloom = new UnrealBloomPass(new THREE.Vector2(W, H).multiplyScalar(this.tier === 2 ? 0.5 : 0.35), this.tier === 2 ? 0.28 : 0.24, 0.5, 4.0);   // only real light sources (flames, lamps, sun glints) cross the threshold
     // energy-conserving threshold: only the light ABOVE the threshold blooms, capped, so chrome glints glow without a white-out
     bloom.materialHighPassFilter.fragmentShader = `uniform sampler2D tDiffuse; uniform float luminosityThreshold; varying vec2 vUv;
@@ -121,12 +133,12 @@ export class Post {
     C.addPass(bloom);
     C.addPass(new OutputPass());
     const g = this.grade = new ShaderPass(GradeShader); g.uniforms.tDirt.value = dirtTex(); g.uniforms.uRes.value.set(W, H);
-    if (this.tier === 1) { g.uniforms.uShaftN.value = 12; g.uniforms.uGrain.value = 0.025; }
+    if (this.tier === 1) g.uniforms.uShaftN.value = 12;
     C.addPass(g);
-    if (q === 'ultra') C.addPass(new SMAAPass(W, H));
+    if (q === 'high' || q === 'ultra') C.addPass(new SMAAPass(W, H));   // catches the thin specular edges MSAA misses
   }
   resize(w, h) { if (this.composer) { const pr = this.w.renderer.getPixelRatio(); this.composer.setPixelRatio(pr); this.composer.setSize(w, h); this.grade.uniforms.uRes.value.set(w * pr, h * pr); } }
-  dispose() { if (this.composer) { this.composer.passes.forEach(p => p.dispose?.()); this.composer.renderTarget1.dispose(); this.composer.renderTarget2.dispose(); this.composer = null; this.ao = this.bokeh = null; } }
+  dispose() { if (this.composer) { this.composer.passes.forEach(p => p.dispose?.()); this.composer.renderTarget1.dispose(); this.composer.renderTarget2.dispose(); this.composer = null; this.ao = this.bokeh = this.scenePass = null; } }
   // per-frame inputs from the modes
   setDOF(on, focus = 30, aperture = 0.00012) { this.dof.on = on; if (this.bokeh) { this.bokeh.enabled = on; this.bokeh.uniforms.focus.value = focus; this.bokeh.uniforms.aperture.value = aperture; } }
   setBlur(k) { if (this.grade) this.grade.uniforms.uBlur.value = k; }
