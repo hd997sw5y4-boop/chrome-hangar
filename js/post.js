@@ -85,6 +85,13 @@ const GradeShader = {
     }`,
 };
 
+// guards the HDR buffer: a stray NaN/Inf from a specular highlight would smear across the whole bloom chain
+const CleanShader = {
+  uniforms: { tDiffuse: { value: null } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: 'uniform sampler2D tDiffuse; varying vec2 vUv; void main(){ vec4 c = texture2D(tDiffuse, vUv); bvec4 bad = isnan(c); if (bad.x || bad.y || bad.z || any(isinf(c.rgb))) c = vec4(0.0, 0.0, 0.0, 1.0); gl_FragColor = vec4(min(c.rgb, vec3(30.0)), 1.0); }',
+};
+
 export class Post {
   constructor(world) { this.w = world; this.enabled = false; this.dof = { on: false, focus: 30 }; }
   setup(q, w, h) {
@@ -106,7 +113,13 @@ export class Post {
       const bk = this.bokeh = new BokehPass(this.w.scene, this.w.camera, { focus: 30, aperture: 0.00012, maxblur: 0.008 });
       bk.enabled = false; C.addPass(bk);
     }
-    const bloom = this.bloom = new UnrealBloomPass(new THREE.Vector2(W, H).multiplyScalar(this.tier === 2 ? 0.5 : 0.35), this.tier === 2 ? 0.6 : 0.5, 0.55, 3.0);   // only real light sources (flames, lamps, sun glints) cross the threshold
+    C.addPass(new ShaderPass(CleanShader));
+    const bloom = this.bloom = new UnrealBloomPass(new THREE.Vector2(W, H).multiplyScalar(this.tier === 2 ? 0.5 : 0.35), this.tier === 2 ? 0.28 : 0.24, 0.5, 4.0);   // only real light sources (flames, lamps, sun glints) cross the threshold
+    // energy-conserving threshold: only the light ABOVE the threshold blooms, capped, so chrome glints glow without a white-out
+    bloom.materialHighPassFilter.fragmentShader = `uniform sampler2D tDiffuse; uniform float luminosityThreshold; varying vec2 vUv;
+      void main(){ vec3 c = texture2D(tDiffuse, vUv).rgb; float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+        float k = max(0.0, l - luminosityThreshold) / max(l, 1e-4); gl_FragColor = vec4(min(c * k, vec3(6.0)), 1.0); }`;
+    bloom.materialHighPassFilter.needsUpdate = true;
     C.addPass(bloom);
     C.addPass(new OutputPass());
     const g = this.grade = new ShaderPass(GradeShader); g.uniforms.tDirt.value = dirtTex(); g.uniforms.uRes.value.set(W, H);

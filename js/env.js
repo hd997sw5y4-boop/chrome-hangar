@@ -1,7 +1,7 @@
 // World: renderer, hangar, apron, test stand, pad, lights, HDRI reflections, graphics presets.
 import * as THREE from 'three';
 import { HDRLoader } from '../vendor/three/addons/loaders/HDRLoader.js';
-import { initMaterials, partMesh } from './parts3d.js';
+import { initMaterials, partMesh, setRocketEnv } from './parts3d.js';
 import { PARTS } from './rocket.js';
 import { applyPBR, setTexTier } from './tex.js';
 import { setModelTier } from './models.js';
@@ -102,6 +102,7 @@ export class World {
     const S = this.sky; if (!S) return;
     const k = THREE.MathUtils.smoothstep(this.alt || 0, 1500, 45000), sp = 1 - 0.99 * k;
     const sc = this.scene; sc.backgroundIntensity = this.skyNorm * sp;
+    this.skyEI = Math.min(2.5, Math.sqrt(this.skyNorm)) * S.env * (1 - 0.6 * k);
     if (!this.indoor) sc.environmentIntensity = Math.min(2.5, Math.sqrt(this.skyNorm)) * S.env * (1 - 0.6 * k);
     sc.fog.density = S.fog * Math.exp(-(this.alt || 0) / 5000);   // thinner air, less haze
     sc.fog.color.copy(this.skyHorizon).multiplyScalar(this.skyNorm * 0.85 * sp);
@@ -113,11 +114,31 @@ export class World {
       o.uHorizon.value.copy(this.skyHorizon).multiplyScalar(this.skyNorm * 0.85 * sp); o.uZenith.value.copy(this.skyZenith).multiplyScalar(this.skyNorm * sp); }
     this.followSun(this.sun.target.position);
   }
+  // Local reflection probe: the real surroundings (lamps, floor, tower, terrain) rendered into a PMREM cube, so chrome
+  // reflects what is actually around it instead of a distant HDRI. Indoors: once per hangar build; outdoors: at the pad.
+  captureLocal(where, pos, hide = []) {
+    if (!this.envs.hangar || !this.envs.sky) return;
+    this.pmrem ??= new THREE.PMREMGenerator(this.renderer);
+    const vis = hide.map(o => o && o.visible); hide.forEach(o => o && (o.visible = false));
+    const env = this.scene.environment, ei = this.scene.environmentIntensity;
+    this.scene.environment = where === 'in' ? this.envs.hangar : this.envs.sky;
+    const size = this.quality === 'phone' || this.quality === 'low' ? 64 : this.quality === 'ultra' ? 256 : 128;
+    const rt = this.pmrem.fromScene(this.scene, 0, 0.2, where === 'in' ? 120 : 3000, { size, position: pos });
+    hide.forEach((o, i) => o && (o.visible = vis[i]));
+    this.scene.environment = env; this.scene.environmentIntensity = ei;
+    const key = where === 'in' ? 'localIn' : 'localOut'; this[key]?.rt.dispose();
+    this[key] = { rt, pos: pos.clone(), sky: this.skyKey };
+  }
+  pickEnv() {
+    const cam = this.camera.position, L = this.localOut;
+    setRocketEnv(this.indoor ? this.localIn?.rt.texture || null : L && L.sky === this.skyKey && cam.y < 400 && cam.distanceTo(L.pos) < 600 ? L.rt.texture : null);
+  }
   setIndoor(v) {
     this.indoor = v;
     if (this.envs.hangar && this.envs.sky) { this.scene.environment = v ? this.envs.hangar : this.envs.sky; this.scene.environmentIntensity = v ? 1.0 : 0.95; if (!v) this.applySky?.(); }
     this.spot.castShadow = v && this.shadowSize > 0;
     this.sun.castShadow = !v && this.shadowSize > 0;
+    this.sun.visible = !v;   // no unshadowed sunlight leaking through the hangar roof
   }
 
   applyQuality(q, w, h) {
@@ -151,6 +172,8 @@ export class World {
     const blend = GLOBE_FADE.value + GLOBE_EDGE.value > 0;   // terrain + sea alpha-blend into the planet pass only while it shows
     for (const m of [this.outdoor?.terrainMat, this.outdoor?.oceanMat]) if (m && m.transparent !== blend) { m.transparent = blend; m.needsUpdate = true; } if (this.outdoor) this.outdoor.group.visible = gf < 0.999;
     this._dt = dt;
+    if (this.indoor && !this.localIn && this.envs.hangar && this.envs.sky && this.stand) this.captureLocal('in', new THREE.Vector3(0, 5, 0), [this.stand]);
+    this.pickEnv();
     if (this.post.enabled) this.post.render(dt);
     else { r.setRenderTarget(null); this.renderScene(); }
   }
@@ -267,7 +290,7 @@ export class World {
     ceil.rotation.x = Math.PI / 2; ceil.position.y = H.h; g.add(ceil);
     const beam = new THREE.BoxGeometry(H.x * 2, 0.5, 0.35);
     const beams = new THREE.InstancedMesh(beam, frameMat, 7);
-    const lightMat = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xfff4e0, emissiveIntensity: 3.2 });
+    const lightMat = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xfff4e0, emissiveIntensity: 16 });
     const lights = new THREE.InstancedMesh(new THREE.BoxGeometry(3.2, 0.12, 0.9), lightMat, 18);
     const m4 = new THREE.Matrix4(); let li = 0;
     for (let i = 0; i < 7; i++) {
