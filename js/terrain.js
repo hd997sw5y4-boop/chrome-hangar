@@ -3,7 +3,7 @@
 // Pure height function (no three.js) so placement code and tests can share it.
 import * as THREE from 'three';
 import { TRENCH } from './pad.js';
-import { GLOBE_FADE, GLOBE_EDGE } from './earth.js';
+import { GLOBE_FADE, TERRAIN_FADE, LEVELS } from './earth.js';
 
 export let SEA = -0.9;             // sea level (site ground is 0); set from the DEM when one loads
 export const SITE = { x0: -200, x1: 175, z0: -250, z1: 95, blend: 150 };
@@ -34,9 +34,6 @@ export function natural(x, z) {
   // inland hills and mountains (west and north-west)
   const inland = sstep(500, 7000, -x * 0.85 + z * 0.35);
   h += inland * (ridge(x / 3200, z / 3200, 5) ** 1.4) * 1100 + inland * fbm(x / 700, z / 700, 4) * 60;
-  // far south / north ranges so the horizon is never empty
-  const farRing = sstep(9000, 16000, Math.hypot(x * 0.8, z));
-  h += farRing * ridge(x / 4000 + 3, z / 4000, 4) * 650 * sstep(0, 1, 1 - sstep(-2000, 4000, x - coastX(z)));
   // coast: beach slope then sea floor
   const d = x - coastX(z);
   const shore = sstep(-260, 20, d);
@@ -121,7 +118,7 @@ export function terrainGeometry(N = 200, R = 26000, L = 700) {
 
 // ---------- LOD terrain ----------
 // Centre: 500 m tiles, each a THREE.LOD with 3 resolutions and skirts to hide cracks between levels.
-// Beyond: one coarse non-uniform ring mesh out to the horizon, sunk under the tiled area.
+// Beyond: one coarse non-uniform ring mesh out to ~12 km (sunk under the tiled area); past 7-10 km it hands over to the planet pass.
 const OFF = -0.12; // the mesh sits 12 cm under the apron slab
 function normalAt(x, z, e) { const hx = height(x + e, z) - height(x - e, z), hz = height(x, z + e) - height(x, z - e); const l = Math.hypot(hx, 2 * e, hz); return [-hx / l, 2 * e / l, -hz / l]; }
 // One height sample per vertex (plus a 1-cell border); normals from the same grid so tiles match.
@@ -150,7 +147,7 @@ function tileGeometry(x0, z0, T, seg, cx, cz) {
 // Tiled terrain with distance-based levels built lazily (a couple per frame) and freed when far.
 // Phone/low use one mid-res disc plus a horizon ring (two draws) instead of a tile grid.
 export class TerrainLOD extends THREE.Group {
-  constructor(mat, lite) {
+  constructor(mat, lite, ringMat = mat) {
     super(); this.name = 'terrain'; this.mat = mat; this.lite = lite;
     const cx = Math.round((SITE.x0 + SITE.x1) / 2), cz = Math.round((SITE.z0 + SITE.z1) / 2);
     if (lite) {
@@ -167,9 +164,9 @@ export class TerrainLOD extends THREE.Group {
         }
         for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const a = j * (N + 1) + i, b = a + 1, c = a + N + 1, d = c + 1; idx.push(a, c, b, b, c, d); }
         const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); g.setIndex(idx);
-        const m = new THREE.Mesh(g, mat); m.receiveShadow = true; return m;
+        const m = new THREE.Mesh(g, sinkInside ? ringMat : mat); m.receiveShadow = true; return m;
       };
-      this.add(make(140, 5000, 500)); this.add(make(100, 30000, 1200, 4900));
+      this.add(make(140, 5000, 500)); this.add(make(100, 11000, 1200, 4900));
       return;
     }
     const T = this.T = 500, NT = 14, half = this.half = NT * T / 2;
@@ -181,7 +178,7 @@ export class TerrainLOD extends THREE.Group {
       this.setLevel(tile, this.levels.length - 1); this.add(tile.mesh); this.tiles.push(tile);
     }
     // horizon ring: non-uniform grid, vertices inside the tiled square pushed down out of sight
-    const N = 170, R = 30000, L = 1200, map = s => R * s * s * s + L * s;
+    const N = 150, R = 10800, L = 1400, map = s => R * s * s * s + L * s;
     const pos = new Float32Array((N + 1) * (N + 1) * 3), nor = new Float32Array(pos.length), idx = [];
     for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) {
       const x = cx + map(i / N * 2 - 1), z = cz + map(j / N * 2 - 1), k = (j * (N + 1) + i) * 3, inside = Math.abs(x - cx) < half - 1 && Math.abs(z - cz) < half - 1;
@@ -190,7 +187,7 @@ export class TerrainLOD extends THREE.Group {
     }
     for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const a = j * (N + 1) + i, b = a + 1, c = a + N + 1, d = c + 1; idx.push(a, c, b, b, c, d); }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); g.setIndex(idx);
-    const ring = new THREE.Mesh(g, mat); ring.receiveShadow = true; this.add(ring);
+    const ring = new THREE.Mesh(g, ringMat); ring.receiveShadow = true; this.add(ring);
   }
   setLevel(tile, l) {
     if (tile.lvl === l) return;
@@ -213,7 +210,7 @@ export class TerrainLOD extends THREE.Group {
     for (const [, t, l] of todo) { const needs = !t.geos[l]; this.setLevel(t, l); if (needs && --budget <= 0) break; }
   }
 }
-export function buildTerrainLOD(mat, lite) { return new TerrainLOD(mat, lite); }
+export function buildTerrainLOD(mat, lite, ringMat) { return new TerrainLOD(mat, lite, ringMat); }
 
 // Splat-blended material: sand / dirt / grass / rock by height, slope and noise, with two-scale
 // sampling so tiling never shows. Built on MeshStandardMaterial so lights, fog and shadows still work.
@@ -226,9 +223,9 @@ export function terrainMaterial(tex, nor = null, macro = null) {
   const U = {
     tSand: { value: tex.sand }, tDirt: { value: tex.dirt }, tGrass: { value: tex.grass }, tRock: { value: tex.rock },
     nSand: { value: nor?.sand }, nDirt: { value: nor?.dirt }, nGrass: { value: nor?.grass }, nRock: { value: nor?.rock },
-    tMacHi: { value: macro?.hi }, tMacLo: { value: macro?.lo }, uHiR: { value: macro?.hiR || new THREE.Vector3() }, uLoR: { value: macro?.loR || new THREE.Vector3() },
+    tMacHi: { value: macro?.hi }, uHiR: { value: macro?.hiR || new THREE.Vector3() }, ...LEVELS, uTF: TERRAIN_FADE,
     uTrench: { value: new THREE.Vector4(TRENCH.cx, TRENCH.cz, Math.cos(TRENCH.ang), Math.sin(TRENCH.ang)) }, uTrenchS: { value: new THREE.Vector2(TRENCH.half, TRENCH.w) },
-    uGF: GLOBE_FADE, uGE: GLOBE_EDGE, uSea: { value: SEA }, uCoast: { value: shoreX(-80) }, uSite: { value: new THREE.Vector4(SITE.x0, SITE.x1, SITE.z0, SITE.z1) },
+    uGF: GLOBE_FADE, uSea: { value: SEA }, uCoast: { value: shoreX(-80) }, uSite: { value: new THREE.Vector4(SITE.x0, SITE.x1, SITE.z0, SITE.z1) },
   };
   m.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, U);
@@ -236,13 +233,15 @@ export function terrainMaterial(tex, nor = null, macro = null) {
       .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz; vWN = normalize(mat3(modelMatrix) * objectNormal);');
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
 varying vec3 vWP; varying vec3 vWN;
-uniform sampler2D tSand, tDirt, tGrass, tRock; uniform float uSea, uCoast, uGF, uGE; uniform vec4 uSite, uTrench; uniform vec2 uTrenchS;
+uniform sampler2D tSand, tDirt, tGrass, tRock; uniform float uSea, uCoast, uGF; uniform vec4 uSite, uTrench; uniform vec2 uTrenchS, uTF;
 #ifdef DETAIL_NORMALS
 uniform sampler2D nSand, nDirt, nGrass, nRock;
 #endif
 #ifdef MACRO
-uniform sampler2D tMacHi, tMacLo; uniform vec3 uHiR, uLoR;
+uniform sampler2D tMacHi; uniform vec3 uHiR; uniform sampler2DArray tLvC; uniform float uLv[8]; uniform float uE0;
 float edgeIn(vec2 u, float k){ return smoothstep(0.0, k, min(min(u.x, 1.0 - u.x), min(u.y, 1.0 - u.y))); }
+// the planet's imagery levels (assets/earth/levels), km-based, so the ground colour matches what the planet shows past 10 km
+vec4 lvl(float k, vec2 pk, float m){ float E = uE0 / exp2(k); vec2 u = pk / E + 0.5; return vec4(texture(tLvC, vec3(u, k)).rgb, edgeIn(u, m)); }
 #endif
 vec4 gTW; vec2 gTP; float gFar;
 float h21(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -252,8 +251,9 @@ float fb(vec2 p){ return vn(p)*0.5 + vn(p*2.03)*0.25 + vn(p*4.1)*0.125 + vn(p*8.
 vec3 two(sampler2D t, vec2 p, float far){ vec3 a = texture2D(t, p / 5.0).rgb, b = texture2D(t, p / 41.0 + 0.37).rgb, c = texture2D(t, p / 290.0).rgb;
   return mix(mix(a, b, 0.35), mix(b, c, 0.5), far); }`)
       .replace('#include <map_fragment>', `
-float gFade = max(uGF, uGE * smoothstep(5000.0, 17000.0, length(vWP.xz)));   // soft radial blend into the globe, no square seam
+float gFade = max(uGF, smoothstep(uTF.x, uTF.y, length(vWP.xz)));   // soft radial hand-over to the planet pass, no square seam
 if (gFade > 0.995) discard;     // dissolve into the globe pass at high altitude
+if (gFade > 0.001 && vWP.y < uSea - 0.3) discard;   // no ghost of the sea floor through the fading sea
 { vec2 q = vWP.xz - uTrench.xy; if (abs(dot(q, uTrench.zw)) < uTrenchS.x && abs(dot(q, vec2(-uTrench.w, uTrench.z))) < uTrenchS.y) discard; }   // flame trench
 {
   vec2 p = vWP.xz; float dist = length(vWP - cameraPosition); float far = smoothstep(80.0, 1400.0, dist);
@@ -269,11 +269,12 @@ if (gFade > 0.995) discard;     // dissolve into the globe pass at high altitude
   sand = clamp(sand, 0.0, 1.0); rock = clamp(rock, 0.0, 1.0);
 #ifdef MACRO
   // real aerial imagery decides what grows where; the tiling sets only add close-up detail
-  vec2 uh = (p - uHiR.xy) / uHiR.z, ul = (p - uLoR.xy) / uLoR.z;
-  float fh = edgeIn(uh, 0.05), fl = edgeIn(ul, 0.06);
-  vec4 mlo4 = texture2D(tMacLo, ul), mhi4 = texture2D(tMacHi, uh);
-  vec3 mac = mix(mlo4.rgb, mhi4.rgb, fh * mhi4.a);
-  float mk = fl * mix(mlo4.a, 1.0, fh * mhi4.a) * smoothstep(40.0, 260.0, sd + (n - 0.5) * 60.0);      // keep the graded site procedural
+  vec2 uh = (p - uHiR.xy) / uHiR.z, pk = p * 0.001;
+  vec4 l4 = lvl(4.0, pk, 0.04), l5 = lvl(5.0, pk, 0.06), l6 = lvl(6.0, pk, 0.08), l7 = lvl(7.0, pk, 0.1), mhi4 = texture2D(tMacHi, uh);
+  vec3 mac = mix(mix(mix(l4.rgb, l5.rgb, l5.a * uLv[5]), l6.rgb, l6.a * uLv[6]), l7.rgb, l7.a * uLv[7]);
+  float fh = edgeIn(uh, 0.05);
+  mac = mix(mac, mhi4.rgb, fh * mhi4.a);
+  float mk = l4.a * uLv[4] * smoothstep(40.0, 260.0, sd + (n - 0.5) * 60.0);      // keep the graded site procedural
   float ml = dot(mac, vec3(0.3, 0.59, 0.11)), mg = mac.g - max(mac.r, mac.b);
   float sandM = smoothstep(0.16, 0.34, ml) * (1.0 - smoothstep(0.0, 0.03, mg));
   float grassM = smoothstep(-0.005, 0.03, mg + (n - 0.5) * 0.02);
@@ -297,6 +298,7 @@ if (gFade > 0.995) discard;     // dissolve into the globe pass at high altitude
 #ifdef MACRO
   col = mix(col, mac * 1.05, gFade * mk);   // at the fade, lean on the same aerial the globe uses
 #endif
+  col *= mix(vec3(1.0), vec3(0.6, 0.62, 0.67), smoothstep(150.0, 2500.0, cameraPosition.y));   // seen from the air, sit at the same brightness as the planet's ground
   diffuseColor.rgb *= col; diffuseColor.a *= 1.0 - gFade;
   gTW = w; gTP = p; gFar = far;
 }`)
@@ -314,7 +316,7 @@ if (gFade > 0.995) discard;     // dissolve into the globe pass at high altitude
 #endif`)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(0.97, 0.55, smoothstep(uSea + 0.6, uSea, vWP.y));');
   };
-  m.customProgramCacheKey = () => 'terrain-v5' + (nor ? 'n' : '') + (macro ? 'm' : '');
+  m.customProgramCacheKey = () => 'terrain-v6' + (nor ? 'n' : '') + (macro ? 'm' : '');
   return m;
 }
 

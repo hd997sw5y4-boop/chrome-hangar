@@ -6,7 +6,8 @@ import { PARTS } from './rocket.js';
 import { applyPBR, setTexTier } from './tex.js';
 import { setModelTier } from './models.js';
 import { Outdoor, bake } from './outdoor.js';
-import { Earth, GLOBE_FADE, GLOBE_EDGE } from './earth.js';
+import './haze.js';   // height-integrated blue haze for every fogged material
+import { Earth, GLOBE_FADE, TERRAIN_FADE } from './earth.js';
 import { Post } from './post.js';
 import { buildInterior } from './hangar.js';
 import { buildPadComplex, TRENCH } from './pad.js';
@@ -54,7 +55,7 @@ export class World {
     r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFShadowMap;
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(70, 1, 0.1, 60000);
-    this.scene.fog = new THREE.FogExp2(0xbfc9d2, 0.000075); // aerial perspective: ~40% at 10 km, ~85% at 20 km
+    this.scene.fog = new THREE.FogExp2(0xa9bcd6, 0.00004); // density = sea-level haze extinction (1/m), thinned with height in haze.js
     this.pmrem = new THREE.PMREMGenerator(r);
     this.envs = {};
     this.M = initMaterials();
@@ -107,14 +108,18 @@ export class World {
     const sc = this.scene; sc.backgroundIntensity = this.skyNorm * sp;
     this.skyEI = Math.min(2.5, Math.sqrt(this.skyNorm)) * S.env * (1 - 0.6 * k);
     if (!this.indoor) sc.environmentIntensity = Math.min(2.5, Math.sqrt(this.skyNorm)) * S.env * (1 - 0.6 * k);
-    sc.fog.density = S.fog * Math.exp(-(this.alt || 0) / 5000);   // thinner air, less haze
-    sc.fog.color.copy(this.skyHorizon).multiplyScalar(this.skyNorm * 0.85 * sp);
+    // thin blue aerial haze: brightness from the sky's horizon, hue pulled toward clear-air blue (less so at sunset/dusk)
+    const hb = this.skyHorizon.clone().multiplyScalar(this.skyNorm * 0.85), lum = 0.2126 * hb.r + 0.7152 * hb.g + 0.0722 * hb.b;
+    const blue = new THREE.Color(0.58, 0.71, 0.93).multiplyScalar(lum / 0.69);
+    sc.fog.color.copy(hb).lerp(blue, { day: 0.8, sunset: 0.4, dusk: 0.5, overcast: 0.35 }[this.skyKey] ?? 0.6);
+    sc.fog.density = S.fog * 0.55;
+    this.hazeAmb = 0.16 + 0.12 * Math.min(2, S.hemi / 0.3) * (S.soft ? 1.6 : 1);   // sky fill on the planet's ground
     this.sun.intensity = S.sun * (1 + 0.3 * k); this.hemi.intensity = S.hemi * sp;
     this.renderer.toneMappingExposure = S.exp;
     this.sun.shadow.radius = S.soft ? 6 : 1; this.sun.shadow.intensity = S.soft ? 0.55 : 1;
     const o = this.outdoor?.oceanMat?.uniforms;
     if (o) { o.uSun.value.copy(this.sunDir); o.uSunCol.value.copy(this.sun.color).multiplyScalar(S.soft ? 0.25 : 1);
-      o.uHorizon.value.copy(this.skyHorizon).multiplyScalar(this.skyNorm * 0.85 * sp); o.uZenith.value.copy(this.skyZenith).multiplyScalar(this.skyNorm * sp); }
+      o.uHorizon.value.copy(this.skyHorizon).multiplyScalar(this.skyNorm * 0.85); o.uZenith.value.copy(this.skyZenith).multiplyScalar(this.skyNorm); }   // the sea still reflects the sky when we are high up
     this.followSun(this.sun.target.position);
   }
   // Local reflection probe: the real surroundings (lamps, floor, tower, terrain) rendered into a PMREM cube, so chrome
@@ -177,9 +182,14 @@ export class World {
     const nearHangar = this.indoor || Math.hypot(cam.position.x, cam.position.y, cam.position.z) < 90;
     this._props ??= this.hangar.getObjectByName('props'); if (this._props) this._props.visible = nearHangar;
     this._shell ??= this.hangar.getObjectByName('shell'); if (this._shell) this._shell.visible = nearHangar;
-    GLOBE_FADE.value = gf; GLOBE_EDGE.value = this.earth.ready && !this.indoor ? THREE.MathUtils.smoothstep(alt, 2500, 9000) : 0;
-    const blend = GLOBE_FADE.value + GLOBE_EDGE.value > 0;   // terrain + sea alpha-blend into the planet pass only while it shows
-    for (const m of [this.outdoor?.terrainMat, this.outdoor?.oceanMat]) if (m && m.transparent !== blend) { m.transparent = blend; m.needsUpdate = true; } if (this.outdoor) this.outdoor.group.visible = gf < 0.999;
+    // outdoors the planet pass draws sky + ground to the horizon; the local terrain and sea hand over to it 7-10 km out,
+    // and dissolve completely on the way up (7-22 km)
+    if (!this.indoor) this.earth.prepare(cam, dt);
+    const earthOn = !this.indoor && this.earth.ready;
+    GLOBE_FADE.value = earthOn ? gf : 0; TERRAIN_FADE.value.set(earthOn ? 7000 : 1e9, earthOn ? 10000 : 2e9);
+    const o = this.outdoor, fadeAll = GLOBE_FADE.value > 0;
+    for (const [m, b] of [[o?.terrainMat, fadeAll], [o?.terrainRingMat, earthOn], [o?.oceanMat, earthOn]]) if (m && m.transparent !== b) { m.transparent = b; m.needsUpdate = true; }
+    if (o) o.group.visible = GLOBE_FADE.value < 0.999;
     this._dt = dt;
     if (this.indoor && !this.localIn && this.envs.hangar && this.envs.sky && this.stand) this.captureLocal('in', new THREE.Vector3(0, 5, 0), [this.stand]);
     this.pickEnv();
@@ -191,7 +201,7 @@ export class World {
     const r = this.renderer, cam = this.camera, alt = cam.position.y, dt = this._dt || 0.016;
     if (this.smokeFX && this.smokeFX.live && alt < 400) this.smokeFX.prepareDepth(r, this.scene, cam);
     else if (this.smokeFX) this.smokeFX.mat.uniforms.uHasDepth.value = 0;
-    if (alt > 600 && !this.indoor && this.earth.render(r, cam, dt)) {
+    if (!this.indoor && this.earth.render(r, cam, dt)) {
       // planet pass drew sky + globe; local scene goes on top with fresh depth
       const bg = this.scene.background; this.scene.background = null;
       r.autoClear = false; r.clearDepth(); r.render(this.scene, cam); r.autoClear = true; this.scene.background = bg;

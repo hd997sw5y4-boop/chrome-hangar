@@ -73,6 +73,15 @@ Terrain — real-world elevation and imagery, U.S. government public-domain work
   Based on the Guadalupe–Nipomo Dunes coast, California (site at 34.97 N, 120.62 W), with the site graded flat.
   The range is fictional: not a real launch complex, and no real facility is depicted.
 
+Regional ground seen from altitude (assets/earth/levels, baked by tools/bake_levels.py) — all U.S. government public-domain works
+  Aerial imagery: USDA Farm Service Agency National Agriculture Imagery Program (NAIP), via the USGS The National Map
+  NAIP image service — https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer
+  Gap fill (areas NAIP does not publish): Landsat, Global Web-Enabled Landsat Data (WELD) true colour, USGS / NASA, served by
+  NASA GIBS — https://www.earthdata.nasa.gov/engage/open-data-services-software/earthdata-developer-portal/gibs-api
+  Wide views: NASA Blue Marble: Next Generation, served by NASA GIBS (credit: NASA Earth Observatory).
+  Relief and coastline: USGS 3D Elevation Program (3DEP) — https://www.usgs.gov/3d-elevation-program
+  No Google, Bing, Mapbox, Esri or other licensed map tiles are used; everything is baked into the game (no API keys).
+
 The whole Earth (high-altitude flights) — NASA imagery, public domain (credit: NASA Earth Observatory)
   Blue Marble: Next Generation (July 2004, with topography and bathymetry), Reto Stöckli, NASA Earth
   Observatory / NASA Goddard Space Flight Center — https://science.nasa.gov/earth/earth-observatory/blue-marble-next-generation/

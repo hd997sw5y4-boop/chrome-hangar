@@ -3,7 +3,7 @@
 // control bunker, viewing stand, vehicles, power line, windsocks, and instanced rocks, scrub and
 // grass in distance-culled chunks (the cheap LOD that keeps iPhone at 60 fps).
 import * as THREE from 'three';
-import { GLOBE_FADE, GLOBE_EDGE } from './earth.js';
+import { GLOBE_FADE, TERRAIN_FADE } from './earth.js';
 import { mergeGeometries } from '../vendor/three/addons/utils/BufferGeometryUtils.js';
 import { height, slopeAt, SEA, shoreX, buildTerrainLOD, terrainMaterial, waterNormals, siteDist, loadDEM, hasDEM, demRect } from './terrain.js';
 import { pieces, prop } from './models.js';
@@ -98,13 +98,13 @@ export class Outdoor {
     let nor = null;
     if (!this.lite) { const [a, b, c, d] = await Promise.all(names.map(n => tx(n, 'nor', false))); nor = { sand: a, dirt: b, grass: c, rock: d }; }
     let macro = null;
-    if (hasDEM()) {   // aerial imagery that matches the elevation grids (mirrored the same way in tools/make_dem.py)
-      const im = n => L.loadAsync(`assets/terrain/${n}.webp`).then(t => { t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; t.flipY = false; t.needsUpdate = true; return t; });   // row 0 = south = grid z0
-      const [hi, lo] = await Promise.all([im(this.lite ? 'albedo_hi_1k' : 'albedo_hi_2k'), im('albedo_lo_1k')]).catch(() => []);
-      if (hi && lo) { macro = { hi, lo, hiR: demRect(false), loR: demRect(true) }; this.w.earth?.setRegion(lo, macro.loR); }
+    if (hasDEM()) {   // sharp aerial image of the site (mirrored like the elevation grids in tools/make_dem.py); wider colour comes from the planet's levels
+      const hi = await L.loadAsync(`assets/terrain/${this.lite ? 'albedo_hi_1k' : 'albedo_hi_2k'}.webp`).then(t => { t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; t.flipY = false; t.needsUpdate = true; return t; }).catch(() => null);   // row 0 = south = grid z0
+      if (hi) macro = { hi, hiR: demRect(false) };
     }
     this.terrainMat = terrainMaterial({ sand, dirt, grass, rock }, nor, macro);
-    const t = buildTerrainLOD(this.terrainMat, this.lite);
+    this.terrainRingMat = terrainMaterial({ sand, dirt, grass, rock }, nor, macro);   // outer ring: alpha-blends into the planet 7-10 km out
+    const t = buildTerrainLOD(this.terrainMat, this.lite, this.terrainRingMat);
     t.refine(new THREE.Vector3(0, 2, -60), Infinity);   // settle around the hangar and pad before the first frame
     this.group.add(t); this.terrain = t;
   }
@@ -116,17 +116,17 @@ export class Outdoor {
       uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, {
         tN: { value: nm }, uT: { value: 0 }, uSun: { value: new THREE.Vector3(-300, 260, -420).normalize() },
         uDeep: { value: new THREE.Color(0x06283c) }, uShallow: { value: new THREE.Color(0x1c6a7c) },
-        uHorizon: { value: new THREE.Color(0xc3ccd4) }, uZenith: { value: new THREE.Color(0x5f8fc0) }, uSunCol: { value: new THREE.Color(1, 0.92, 0.8) }, uGF: GLOBE_FADE, uGE: GLOBE_EDGE,
+        uHorizon: { value: new THREE.Color(0xc3ccd4) }, uZenith: { value: new THREE.Color(0x5f8fc0) }, uSunCol: { value: new THREE.Color(1, 0.92, 0.8) }, uGF: GLOBE_FADE, uTF: TERRAIN_FADE,
       }]),
       vertexShader: `varying vec3 vW; varying float vD;
         #include <fog_pars_vertex>
         void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; vec4 mvPosition = viewMatrix * w; gl_Position = projectionMatrix * mvPosition;
         #include <fog_vertex>
         }`,
-      fragmentShader: `uniform sampler2D tN; uniform float uT; uniform vec3 uSun, uDeep, uShallow, uHorizon, uZenith, uSunCol; uniform float uGF, uGE; varying vec3 vW;
+      fragmentShader: `uniform sampler2D tN; uniform float uT; uniform vec3 uSun, uDeep, uShallow, uHorizon, uZenith, uSunCol; uniform float uGF; uniform vec2 uTF; varying vec3 vW;
         #include <fog_pars_fragment>
         void main(){
-          float gFade = max(uGF, uGE * smoothstep(5000.0, 17000.0, length(vW.xz))); if (gFade > 0.995) discard;
+          float gFade = max(uGF, smoothstep(uTF.x, uTF.y, length(vW.xz))); if (gFade > 0.995) discard;   // the planet pass carries the same water on
           vec2 p = vW.xz;
           vec3 n1 = texture2D(tN, p / 61.0 + vec2(uT * 0.011, uT * 0.007)).xyz * 2.0 - 1.0;
           vec3 n2 = texture2D(tN, p / 17.0 - vec2(uT * 0.017, -uT * 0.013)).xyz * 2.0 - 1.0;
@@ -146,9 +146,9 @@ export class Outdoor {
           #include <fog_fragment>
         }`,
     });
-    mat.uniforms.uGF = GLOBE_FADE; mat.uniforms.uGE = GLOBE_EDGE;   // shared, not cloned by UniformsUtils.merge
+    mat.uniforms.uGF = GLOBE_FADE; mat.uniforms.uTF = TERRAIN_FADE;   // shared, not cloned by UniformsUtils.merge
     this.oceanMat = mat;
-    const sea = new THREE.Mesh(new THREE.PlaneGeometry(60000, 60000), mat); sea.rotation.x = -Math.PI / 2; sea.position.y = SEA; sea.receiveShadow = false; sea.name = 'ocean';
+    const sea = new THREE.Mesh(new THREE.PlaneGeometry(24000, 24000), mat); sea.rotation.x = -Math.PI / 2; sea.position.y = SEA; sea.receiveShadow = false; sea.name = 'ocean';
     this.group.add(sea);
     // surf lines where the beach meets the water
     const foam = canvasTex(64, 256, (c, w, h) => {
@@ -161,7 +161,7 @@ export class Outdoor {
     const water = z => { let a = shoreX(z) - 400, b = shoreX(z) + 600; for (let i = 0; i < 24; i++) { const m = (a + b) / 2; if (height(m, z) > SEA) a = m; else b = m; } return (a + b) / 2; };
     for (const [off, wd, op] of [[0, 7, 0.85], [9, 5, 0.45], [22, 4, 0.25]]) {
       const pos = [], uv = [], idx = []; let k = 0;
-      for (let z = -11000; z <= 11000; z += 15) {
+      for (let z = -9500; z <= 9500; z += 15) {   // stops inside the hand-over to the planet's sea
         const x = water(z) + off; pos.push(x, SEA + 0.04, z, x + wd, SEA + 0.04, z); uv.push(0, z / 30, 1, z / 30);
         if (k) idx.push(k * 2 - 2, k * 2 - 1, k * 2, k * 2 - 1, k * 2 + 1, k * 2); k++;
       }

@@ -68,7 +68,7 @@ print('coast x near site', [r for r in rows if abs(r[0] - SITE_C[1]) < 200])
 
 # macro colour from the aerial imagery (mirrored the same way), WebP for the game
 from PIL import Image
-for src, dst, size in [('guadalupe_dunes_4km_albedo_2k.webp', 'albedo_hi_2k.webp', 2048), ('guadalupe_dunes_4km_albedo_1k.webp', 'albedo_hi_1k.webp', 1024), ('guadalupe_coast_24km_albedo_1k.webp', 'albedo_lo_1k.webp', 1024)]:
+for src, dst, size in [('guadalupe_dunes_4km_albedo_2k.webp', 'albedo_hi_2k.webp', 2048), ('guadalupe_dunes_4km_albedo_1k.webp', 'albedo_hi_1k.webp', 1024)]:   # wider ground colour now comes from tools/bake_levels.py
     im = Image.open(SRC + src).convert('RGB').transpose(Image.ROTATE_180).resize((size, size), Image.LANCZOS)
     # alpha = valid imagery (the mosaics have white / black no-data blocks); shaders fall back where alpha is 0
     from PIL import ImageFilter
