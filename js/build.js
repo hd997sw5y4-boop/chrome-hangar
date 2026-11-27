@@ -338,11 +338,20 @@ export class BuildMode {
     else rs.classList.add('hidden');
     // clicks / taps
     const tap = inp.taps[0];
-    if (tap) { this.aimXY = { x: tap.x, y: tap.y }; if (this.sel) this.place(); else this.tryPickDelete(true); this.aimXY = null; }
+    if (tap) {
+      this.aimXY = { x: tap.x, y: tap.y };
+      if (this.g.hands?.inspectTap?.(tap)) { inp.taps.shift(); this.aimXY = null; }
+      else if (this.sel) this.place();
+      else this.tryPickDelete(true);
+      this.aimXY = null;
+    }
     if (inp.mouse.clicked) {
-      const hoveringSomething = a.cand || a.del;
-      if (inp.locked || hoveringSomething) this.place();
-      else inp.requestLock();
+      if (this.g.hands?.blockLock?.()) inp.mouse.clicked = false;
+      else {
+        const hoveringSomething = a.cand || a.del;
+        if (inp.locked || hoveringSomething) this.place();
+        else inp.requestLock();
+      }
     }
     if (inp.hit('Pad0') || inp.hit('Enter')) this.place();
     if (inp.mouse.right || inp.hit('KeyX')) this.tryPickDelete(false);

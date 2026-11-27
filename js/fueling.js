@@ -47,7 +47,7 @@ class Vapor {
 
 export class Fueling {
   constructor(ix) {
-    this.ix = ix; this.g = ix.g; this.state = 'stowed'; this.pump = true; this.frost = 0; this.tankFrost = 0.15;
+    this.ix = ix; this.g = ix.g; this.state = 'stowed'; this.pump = true; this.valve = 1; this.frost = 0; this.tankFrost = 0.15;
     this.nozzle = PARK.clone(); this.nozDir = new THREE.Vector3(0, -1, 0); this.lastKey = ''; this.flowing = false;
   }
   async load() {
@@ -128,7 +128,7 @@ export class Fueling {
     this.portLocal = toTank.multiplyScalar(R0).setY(t.y0 + Math.min(1.2, t.d.length * 0.4));
     this.ventLocal = toTank.clone().normalize().multiplyScalar(R0).setY(tanks[tanks.length - 1].y1 - 0.35);
     this.state = 'connected'; this.port.visible = true; this.ix.sfx.lever(); setTimeout(() => this.ix.sfx.clunk(0.5), 120);
-    this.g.toast(this.g.fill >= 0.999 ? 'Connected. Tanks are already full: topping off.' : this.pump ? 'Connected. Fueling…' : 'Connected. Turn the FUEL PUMP on at the console.', 2200);
+    this.g.toast(this.g.fill >= 0.999 ? 'Connected. Tanks are already full: topping off.' : !this.pump ? 'Connected. Turn the FUEL PUMP on at the console.' : (this.valve ?? 1) < 0.05 ? 'Connected. Open the fuel valve on the tank to start the flow.' : 'Connected. Fueling…', 2200);
     this.topOff = this.g.fill >= 0.999 ? 2.5 : 0;
   }
   rebuildHose(force) {
@@ -166,14 +166,14 @@ export class Fueling {
     this.noz.position.copy(this.nozzle); this.noz.lookAt(this.nozzle.clone().add(this.nozDir));
     this.rebuildHose();
     // flow
-    const flowing = this.state === 'connected' && this.pump && (g.fill < 0.999 || this.topOff > 0);
+    const flowing = this.state === 'connected' && this.pump && (this.valve ?? 1) > 0.04 && (g.fill < 0.999 || this.topOff > 0);
     if (flowing) {
-      if (g.fill < 0.999) { g.fill = Math.min(1, g.fill + dt * 0.075); this.saveT = (this.saveT || 0) - dt; if (this.saveT <= 0 || g.fill >= 1) { this.saveT = 0.3; g.build.refreshCheckout(); } if (g.fill >= 1) { g.saveState(); g.toast('Tanks full. Rocket is fueled.', 2000); this.ix.sfx.chime(2); this.topOff = 1.5; } }
+      if (g.fill < 0.999) { g.fill = Math.min(1, g.fill + dt * 0.075 * Math.max(0.05, this.valve ?? 1)); this.saveT = (this.saveT || 0) - dt; if (this.saveT <= 0 || g.fill >= 1) { this.saveT = 0.3; g.build.refreshCheckout(); } if (g.fill >= 1) { g.saveState(); g.toast('Tanks full. Rocket is fueled.', 2000); this.ix.sfx.chime(2); this.topOff = 1.5; } }
       else this.topOff -= dt;
       this.frost = Math.min(1, this.frost + dt * 0.12); this.tankFrost = Math.min(0.75, this.tankFrost + dt * 0.08);
       if (!this.hiss) this.hiss = this.ix.sfx.loop('hiss');
       this.hiss.set(0.7 + 0.3 * Math.sin(performance.now() / 300));
-      this.wheel.rotation.z += dt * 2;
+      this.wheel.rotation.z = (this.valve ?? 1) * Math.PI * 3.2;
     } else {
       if (this.hiss) { this.hiss.stop(); this.hiss = null; }
       this.frost = Math.max(0, this.frost - dt * 0.006); this.tankFrost = Math.max(0.15, this.tankFrost - dt * 0.01);

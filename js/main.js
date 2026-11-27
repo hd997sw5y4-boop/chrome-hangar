@@ -13,6 +13,7 @@ import { dressHangar } from './props.js';
 import { Intro, shouldPlayIntro } from './intro.js';
 import { Training } from './train.js';
 import { Interactive } from './interactive.js';
+import { Hands } from './interact2.js';
 import { Robots } from './robots.js';
 
 const $ = id => document.getElementById(id);
@@ -55,7 +56,10 @@ class Game {
     step(80, 'Polishing the steel…');
     this.build = new BuildMode(this); this.test = new TestMode(this); this.flight = new FlightMode(this);
     this.training = new Training(this);
-    this.interact = new Interactive(this); this.interact.load();
+    this.interact = new Interactive(this);
+    this.hands = new Hands(this);
+    await this.interact.load();
+    await this.hands.load();
     this.robots = new Robots(this);
     await this.makeThumbs();
     this.build.makeTray();
@@ -269,8 +273,8 @@ class Game {
     const rows = IS_TOUCH ? [
       ['Look', 'Drag anywhere on the screen'], ['Walk', 'Left stick'], ['Pick a part', 'Tap it in the tray'], ['Place', 'Tap a glowing ring (or near it)'], ['Remove', 'Pick Delete in the tray, then tap a part'],
       ['Stand', '⟲ ⟳ turn (the stand is bolted to the floor)'], ['Fly', 'Throttle slider on the right, steer with the left stick'], ['Flight views', 'Drag to orbit · pinch to zoom · View button cycles · Views ▾ opens the picker']]
-      : [['Look / walk', 'Mouse (click to grab the mouse) · WASD'], ['Walk outside', 'Open the bay doors with the wall lever and walk out onto the apron'], ['Pick a part', 'Click it in the tray, or keys 1–9 · Delete tool: 0'], ['Place', 'Aim at a glowing ring and click'], ['Remove', 'Right-click a part, or the Delete tool'],
-        ['Undo / redo', 'Z / Y (or Ctrl+Z / Ctrl+Y)'], ['Stand', 'Q / E turn (the stand is bolted to the floor)'], ['Test stand', 'Space fire / shut down · Shift / R and F throttle'],
+      : [['Look / walk', 'Mouse (click to grab the mouse) · WASD'], ['Walk outside', 'Open the bay doors with the wall lever and walk out onto the apron. Lift the gate arm to reach the viewing stand.'], ['Pick a part', 'Click it in the tray, or keys 1–9 · Delete tool: 0'], ['Place', 'Aim at a glowing ring and click'], ['Look at a part', 'Click it (no drag) when no tool is selected. If a tool is selected, hold Alt and click. Esc to come back.'], ['Remove', 'Right-click a part, or the Delete tool'],
+        ['Undo / redo', 'Z / Y (or Ctrl+Z / Ctrl+Y)'], ['Stand', 'Q / E turn (the stand is bolted to the floor)'], ['Test stand', 'Space or the Fire button, or pull the red lever on the stand · Shift / R and F throttle'],
         ['Flight', 'Space launch · Shift or R throttle up, F down, Z full, X cut · WASD / arrows steer · drag mouse to orbit · wheel zoom · 1–8 pick view · C next view · V view menu · H assist · P rocket health panel'], ['Menu', 'Esc']];
     const pad = [['DualSense', 'Left stick walk / steer · Right stick look · ✕ place / launch · □ delete tool · ○ undo · △ redo · L1/R1 pick part · D-pad stand · R2 throttle · in flight: right stick orbit, L2 zoom in, L1 zoom out, △ or D-pad ◀▶ change view, D-pad ▲ view menu · Options menu']];
     this.openPanel('How to play', `<p>Build a rocket on the stand, read the checkout panel, static-fire it on the test stand, then launch. If it fails, you get one plain "Try this" tip and your rocket is still on the stand.</p><table class="help">${rows.concat(pad).map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('')}</table>
@@ -341,6 +345,7 @@ class Game {
       else {
         const paused = this.menuOpen || this.panelOpen;
         const held = this.interact?.frame(dt, paused);
+        this.hands?.frame(dt, paused);
         if (this.modeObj) { if (!paused && !held) this.modeObj.update(dt, this.resultsOpen); else if (paused) this.modeObj.idle?.(dt); }
       }
       this.smoke.update(dt, this.windNow || { x: 0, z: 0 }, this.world.h * this.world.renderer.getPixelRatio() / Math.tan(this.world.camera.fov * Math.PI / 360) / 2);

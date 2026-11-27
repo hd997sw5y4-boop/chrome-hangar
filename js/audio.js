@@ -151,6 +151,19 @@ export class Audio {
       };
       d.a.load();
     };
+    const names = ['Puppy Love', 'New Shoes', 'Poor, But Happy'];
+    this.trackIndex = () => idx;
+    this.trackName = () => names[idx] || names[0];
+    this.skipTrack = () => {
+      if (!this.ctx) return this.trackName();
+      if (advancing) return this.trackName();
+      advancing = true;
+      arm ^= 1;
+      idx = (idx + 1) % tracks.length;
+      cue(idx, false);
+      setTimeout(() => { advancing = false; }, 400);
+      return this.trackName();
+    };
     cue(idx, true);
   }
 }

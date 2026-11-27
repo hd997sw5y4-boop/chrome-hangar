@@ -2,7 +2,7 @@
 // along the contact normal so corners don't feel sticky. Used by the player and the robots.
 import { HANGAR, SPOTS } from './env.js';
 import { HALF } from './stand.js';
-import { FENCE } from './outdoor.js';
+import { FENCE, VIEW_STAND } from './outdoor.js';
 
 export const R_PLAYER = 0.36, R_ROBOT = 0.3;
 
@@ -106,7 +106,6 @@ export function hangarObstacles() {
   list.push(B(15.5, 10, 1.9, 1.15));
   list.push(B(9, 5, 2.6, 0.8));
   list.push(B(8.2, 5.1, 0.55, 0.45));
-  list.push(C(5.2, 7.4, 0.5), C(-6, -9.5, 0.5));
   list.push(C(-19.2, -13.1, 1.15), C(18.8, -13.4, 0.45));
   list.push(B(16.5, 15.3, 2.1, 0.5));
   list.push(B(-21.4, 0, 0.7, 3.6));
@@ -118,8 +117,6 @@ export function hangarObstacles() {
   list.push(B(21.25, -10.7, 0.55, 1.0));
   list.push(C(19.8, -12.4, 0.7));
   list.push(C(-14.6, 4.3, 0.9));
-  list.push(C(12.6, -10.2, 0.55));
-  list.push(C(-9.9, 9.3, 0.55));
   return _hangar = list;
 }
 
@@ -184,9 +181,25 @@ export function insideHangar(x, z, slop = 0.2) {
   return Math.abs(x) < H.x - slop && Math.abs(z) < H.z - slop;
 }
 
+// When the west gate arm is up, allow a corridor out to the public viewing stand.
+export let westYardOpen = () => false;
+export function setWestYard(fn) { westYardOpen = fn || (() => false); }
+
 export function clampSite(x, z, r) {
   const F = FENCE, m = 1.15 + r * 0.15;
-  return { x: Math.max(F.x0 + m, Math.min(F.x1 - m, x)), z: Math.max(F.z0 + m, Math.min(F.z1 - m, z)) };
+  const xLo = F.x0 + m, xHi = F.x1 - m, zLo = F.z0 + m, zHi = F.z1 - m;
+  if (westYardOpen()) {
+    const xW = VIEW_STAND.x - 14;
+    const zGA = F.gateZ - F.gateW / 2 + 1.4, zGB = F.gateZ + F.gateW / 2 - 1.4;
+    const zYA = VIEW_STAND.z - 20, zYB = VIEW_STAND.z + 14;
+    const atGate = z >= zGA && z <= zGB;
+    const inYard = x >= xW && x <= F.x0 + 8 && z >= zYA && z <= zYB;
+    const inLink = x >= xW && x <= xLo + 2 && z >= Math.min(zGA, zYA) && z <= Math.max(zGB, zYB);
+    if (atGate || inYard || (x < xLo && inLink)) {
+      return { x: Math.max(xW, Math.min(xHi, x)), z: Math.max(Math.min(zLo, zYA), Math.min(Math.max(zHi, zYB), z)) };
+    }
+  }
+  return { x: Math.max(xLo, Math.min(xHi, x)), z: Math.max(zLo, Math.min(zHi, z)) };
 }
 
 export function walk(x, z, r, obs) {
@@ -195,7 +208,7 @@ export function walk(x, z, r, obs) {
 }
 
 export function hangarFrame(game) {
-  return hangarObstacles().concat(hangarWalls(), doorObstacles(game), dynamicObstacles(game));
+  return hangarObstacles().concat(hangarWalls(), doorObstacles(game), dynamicObstacles(game), game?.hands?.obstacles?.() || []);
 }
 
 export function playerFrame(game) {

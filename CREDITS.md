@@ -110,3 +110,6 @@ Interactive hangar models and textures, Poly Haven (polyhaven.com), CC0 1.0
   Hanging Industrial Lamp: Kuutti Siitonen. Industrial Storage Cart: Jule Bielitz. Portable Welding Cart: Georgii Gorbunov.
   Modular Industrial Pipes 01, Modular Factory Facade (a few wall pieces): Poly Haven. Painted Metal Shutter texture: Poly Haven.
 Bay doors, crane controls, launch console, monitors, cryo tank, fuel hose, pad clamps and umbilical are original code-built designs.
+
+Hands-on hangar extras (workbench, drawers, radio, climb views, walk-around, test-stand fire lever, outdoor gate / lights / beacon / seat) are original code-built designs. The radio plays the same CC0 HoliznaCC0 lo-fi tracks listed above. Prop animations use the existing Poly Haven CC0 models (tool chest, bench vice, portable generator, tool cart, storage cart, welding cart). Extra clicks and motion use synthesized Web Audio sounds already described above, not new samples.
+
