@@ -3,12 +3,14 @@
 import { SKIES } from './env.js';
 import * as THREE from 'three';
 import { PadRelease } from './padrelease.js';
-import { PARTS, stats } from './rocket.js';
+import { PARTS, stats, cloneRocket } from './rocket.js';
 import { rocketMesh, disposeTree } from './parts3d.js';
 import { newFlight, flightStep, airDensity, DT } from './sim.js';
 import { SPOTS, IS_TOUCH } from './env.js';
 import { attachFlames, flameSize } from './fx.js';
 import { overheatHint } from './testfire.js';
+import { RocketHealth } from './health.js';
+import { HealthPanel } from './healthui.js';
 
 const $ = id => document.getElementById(id);
 // Flight views (keys 1-8, C cycles). Index order is what the picker and the saved setting use.
@@ -38,6 +40,7 @@ export class FlightMode {
     const line = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 1, 0)]);
     this.guideLine = new THREE.Line(line, new THREE.LineDashedMaterial({ color: 0x7fe7ff, dashSize: 3, gapSize: 2, transparent: true, opacity: 0.8 }));
     this.guideLine.frustumCulled = false; this.guideLine.visible = false; this.w.scene.add(this.guideLine);
+    this.health = new RocketHealth(); this.hpUI = new HealthPanel(game);
     this.syncButtons();
   }
   syncButtons() {
@@ -59,9 +62,11 @@ export class FlightMode {
   enter() {
     this.w.setIndoor(false); this.w.camera.fov = 60; this.w.camera.updateProjectionMatrix();
     const m = this.g.mission;
-    this.f = newFlight(this.g.rocket, { fill: this.g.fill, padPos: { x: SPOTS.pad.x, y: 0, z: SPOTS.pad.z }, assist: this.g.settings.assist, wind: m?.wind ?? 2, windDir: 0.6 });
+    // the flight flies its own copy: parts that break off (fins) come off this one, never the saved build
+    this.f = newFlight(cloneRocket(this.g.rocket), { fill: this.g.fill, padPos: { x: SPOTS.pad.x, y: 0, z: SPOTS.pad.z }, assist: this.g.settings.assist, wind: m?.wind ?? 2, windDir: 0.6 });
     this.clear();
     this.group = rocketMesh(this.g.rocket); this.w.scene.add(this.group);
+    this.health.reset(this.f.rocket, this.g.fill); this.lostSeen = 0; this.hpUI.attach(this.health);
     const eng = PARTS[this.g.rocket.engine];
     const lite = this.w.quality === 'phone' || this.w.quality === 'low';
     this.flame = attachFlames(this.group.userData.engine, eng.color, lite);
@@ -77,7 +82,7 @@ export class FlightMode {
     this.syncPose(); this.syncButtons(); this.setCam(this.cam, true); this.zoomT = this.zoom = 1;
     if (this.g.mission && !this.g.training?.active) this.g.prompt(IS_TOUCH ? 'Tap <b>Launch</b>. Throttle on the right, steer with the left stick.' : 'Press <b>Space</b> to launch. Shift / R throttle up, F down, WASD steer, C camera.');
   }
-  exit() { this.w.post.setDOF(false); this.w.post.setBlur(0); this.w.post.setHeat(new THREE.Vector4(0, 0, 0, 0)); this.w.setAltitude(0); this.w.camera.far = 60000; this.w.camera.updateProjectionMatrix(); this.clear(); $('camPicker').classList.add('hidden'); this.w.camera.up.set(0, 1, 0); this.guideLine.visible = false; this.g.prompt(null); $('landGuide').classList.add('hidden'); this.g.audio.setEngine(0); this.padRel?.reset(null); }
+  exit() { this.w.post.setDOF(false); this.w.post.setBlur(0); this.w.post.setHeat(new THREE.Vector4(0, 0, 0, 0)); this.w.setAltitude(0); this.w.camera.far = 60000; this.w.camera.updateProjectionMatrix(); this.clear(); $('camPicker').classList.add('hidden'); this.w.camera.up.set(0, 1, 0); this.guideLine.visible = false; this.hpUI.detach(); this.g.prompt(null); $('landGuide').classList.add('hidden'); this.g.audio.setEngine(0); this.padRel?.reset(null); }
   st0Top() { return stats(this.g.rocket, this.g.fill).top; }
   clear() { if (this.group) { this.group.removeFromParent(); disposeTree(this.group); this.group = null; } }
   back() {
@@ -118,6 +123,7 @@ export class FlightMode {
       let z = inp.zoom; if (inp.pad) z += ((inp.pad.b[4] || 0) - (inp.pad.b[6] || 0)) * 2.5 * dt;
       if (z) this.zoomT = THREE.MathUtils.clamp(this.zoomT * Math.exp(z * 0.18), 0.12, 60);
       if (inp.hit('KeyH') || inp.hit('Pad2')) { this.g.settings.assist = !this.g.settings.assist; this.g.applySettingsLight(); this.g.toast('Hold upright ' + (this.g.settings.assist ? 'on' : 'off')); }
+      if (inp.hit('KeyP')) this.hpUI.toggle();
       if (inp.hit('KeyG')) { this.g.settings.guide = !this.g.settings.guide; this.g.applySettingsLight(); }
       if (inp.hit('KeyB') || inp.hit('Pad1')) { this.back(); return; }
       // throttle: keys are incremental, R2 / touch slider are absolute
@@ -144,7 +150,8 @@ export class FlightMode {
     if (this.armed && !this.ended) f.e.cmd = this.thr;
     // fixed-rate physics
     this.acc += dt;
-    while (this.acc >= DT) { flightStep(f, DT); this.acc -= DT; }
+    while (this.acc >= DT) { flightStep(f, DT); this.health.step(f, DT); this.acc -= DT; }
+    while (this.lostSeen < this.health.lost.length) this.partLost(this.health.lost[this.lostSeen++]);
     for (const ev of f.events.splice(0)) this.onEvent(ev);
     // mission 2 checkpoint
     const m = this.g.mission;
@@ -154,6 +161,7 @@ export class FlightMode {
     this.visuals(dt);
     this.hud();
     this.camera(dt);
+    this.hpUI.update(dt, this.g.audio);
     if (this.g.training?.active) this.g.training.onFlightFrame();
     if (this.ended) { this.endT += dt; if (this.endT > 2.6 && !this.g.resultsOpen && !this.resultsShown) { this.resultsShown = true; if (this.g.mission && this.result) this.g.showResults(this.result); } }
   }
@@ -165,6 +173,18 @@ export class FlightMode {
     if (ev.type === 'cutoff') a.coolTicks();
     if (ev.type === 'landed') { a.clamp(); a.coolTicks(); this.endFlight('landed'); }
     if (ev.type === 'crash') this.crash(ev.kind);
+  }
+  // a cluster bell that quit goes dark; fins that tore off leave the stack (sim + mesh) and tumble away
+  partLost(p) {
+    if (p.lost === 'out') this.flame?.setOut?.(p.nz);
+    if (p.lost !== 'detach' || !this.group) return;
+    const f = this.f;
+    if (p.kind === 'fins') { const s = f.rocket.stack[p.i]; if (s) delete s.fins; }
+    if (p.kind === 'legs') f.legs = false;
+    const tmp = new THREE.Group(); this.w.scene.add(tmp);
+    for (const pk of this.group.userData.picks) if (pk.t.type === p.kind && pk.t.index === p.i && pk.obj.parent) tmp.attach(pk.obj);
+    this.g.debris.explode(tmp, new THREE.Vector3(f.vel.x, f.vel.y, f.vel.z), new THREE.Vector3(f.pos.x, f.pos.y, f.pos.z));
+    tmp.removeFromParent(); this.g.audio.noise(0.25, 1400, 1, 0.2, 0, 'bandpass', 0.2);
   }
   crash(kind) {
     const f = this.f;
@@ -390,6 +410,8 @@ function failureText(kind, f, st) {
     case 'wind': return { title: 'Tipped in the wind', reason: 'The wind pushed it over while it was still slow.', hint: 'turn Hold upright on, or add fins so it points into the wind.' };
     case 'noLegs': return { title: 'No legs', reason: 'It touched down gently, but with nothing to stand on it toppled.', hint: 'add Landing Legs to the lowest tank.' };
     case 'tippedLanding': return { title: 'Landed leaning', reason: `Touched down tilted ${fmt(f.tilt)}° and fell over.`, hint: 'level out before touchdown; let Hold upright straighten it in the last 50 m.' };
+    case 'structure': return { title: 'Structure gave way', reason: `The ${f.failure.part || 'stack'} buckled under the load at ${fmt(f.speed)} m/s.`, hint: 'ease the throttle through max-Q (the health panel turns yellow), steer gently while fast, and keep Hold upright on.' };
+    case 'burnup': return { title: 'Burned up', reason: `The ${f.failure.part || 'rocket'} overheated in the thick air at ${fmt(f.speed)} m/s.`, hint: 'coming back from high up, burn the engine early to slow down before the air gets thick.' };
     case 'outOfFuel': return { title: 'Out of fuel', reason: `The tanks ran dry and it fell from ${fmt(f.apex)} m.`, hint: 'start back down sooner, lower the throttle, or add a tank.' };
     case 'cantThrottle': return { title: 'Hard landing', reason: `Hit at ${f.landSpeed.toFixed(1)} m/s. ${eng.name} can't throttle below ${Math.round(eng.minThrottle * 100)}%, so it can't hover.`, hint: 'swap to Spark for landing missions; it throttles down to 20%.' };
     default: return { title: 'Hard landing', reason: `Hit the ground at ${f.landSpeed.toFixed(1)} m/s.`, hint: 'start the landing burn higher and follow the green descent number.' };

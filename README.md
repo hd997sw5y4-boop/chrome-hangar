@@ -15,7 +15,8 @@ Static three.js site, no build step. three.js r187 is vendored in `vendor/`.
 - `js/build.js`, `js/train.js`: hangar build plus Training (menu button; part-by-part rocket facts, then flight controls; Skip always available)
 - `js/testfire.js`: test stand static fire
 - `js/flight.js`: launch, cameras, assists, landing guide, failures
-- `js/sim.js`: fixed-step single-rigid-body flight + engine/heat model (pure JS)
+- `js/sim.js`: fixed-step single-rigid-body flight + engine/heat model, cluster engine-out (pure JS)
+- `js/health.js`, `js/healthui.js`: live part health (load vs max-Q / g, re-entry heat, engine heat, fin loss) and the flight's Rocket health panel (P or Settings hides it)
 - `js/rocket.js`: part data, layout, mass / CoM / CoP stats, snap rules (pure JS)
 - `js/parts3d.js`, `js/env.js` (renderer, HDRI skies), `js/fx.js`, `js/audio.js`, `js/input.js`
 - `js/terrain.js`, `js/outdoor.js`: DEM terrain LOD, ocean, range structures, scatter

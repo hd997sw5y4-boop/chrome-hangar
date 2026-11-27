@@ -115,7 +115,20 @@ input[type=text]{font:inherit;background:#1d242b;color:var(--ink);border:1px sol
 body.touch.build #tray{left:calc(160px + var(--sl))}body.touch.build #standCtl{top:calc(60px + var(--st));transform:none}
 body.menuopen #hud,body.menuopen #buildUI,body.menuopen #testUI,body.menuopen #flightUI,body.menuopen #stickL,body.menuopen #crosshair{display:none!important}
 body.touch #fBtns{max-width:calc(100% - 320px - var(--sl) - var(--sr))}
+/* rocket health panel: under the flight readouts on the left; next to them on short / phone screens */
+#hpPanel{position:absolute;left:calc(14px + var(--sl));top:calc(276px + var(--st));width:150px;background:var(--glass);border:1px solid var(--line);border-radius:14px;padding:6px 8px 7px;pointer-events:none}
+#flightUI #hpPanel *{pointer-events:none}#flightUI #hpPanel canvas,#flightUI #hpPanel button{pointer-events:auto}
+.hpHead{display:flex;justify-content:space-between;align-items:center;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);font-weight:700}
+.hpHead button{min-height:0;height:18px;width:18px;padding:0;font-size:10px;border-radius:6px;color:var(--dim)}
+.hpBody{position:relative}
+#hpCanvas{display:block;width:128px;height:196px;margin:2px auto 0;touch-action:none}
+#hpTip{position:absolute;left:100%;margin-left:12px;white-space:nowrap;background:var(--glass);border:1px solid var(--line);border-radius:8px;padding:4px 8px;font-size:12px;line-height:1.25}
+#hpTip b{font-weight:600;margin-right:4px}#hpTip small{display:block;color:var(--dim);font-size:10px}
+#hpWarn div{font:700 10px/1.25 system-ui,sans-serif;letter-spacing:.05em;min-height:0;opacity:1;transition:opacity .9s ease;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+#hpWarn div{height:12.5px}#hpWarn div.gone{opacity:0}
+#hpWarn .ok{color:var(--go)}#hpWarn .warn{color:var(--warn)}#hpWarn .crit{color:#ff9a3c}#hpWarn .bad{color:#ff7a6e}
 @media (max-height:500px){
+ #hpPanel{top:calc(52px + var(--st));left:calc(184px + var(--sl));width:112px;padding:4px 6px 5px}#hpCanvas{width:96px;height:147px}#hpWarn div{font-size:9px;height:11.5px}
  .logo{font-size:30px}.menuBtns{gap:5px}.menuBtns button{min-height:36px;padding:6px 14px}button.big{font-size:16px;padding:8px 18px}
  .tile{width:66px;height:70px}.tile img{width:46px;height:40px}.tile .ico{font-size:22px;line-height:40px}.tile .nm{font-size:10px}.traySec{padding:3px 5px}.traySec h4{display:none}
  #checkout{width:210px;top:calc(56px + var(--st));padding:6px 8px;max-height:calc(100% - 150px - var(--st) - var(--sb))}#ckDiagram{width:54px;height:114px}#ckStats{font-size:11px}

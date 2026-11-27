@@ -50,6 +50,8 @@ export class Audio {
     s.start(t, Math.random()); s.stop(t + dur + 0.1);
   }
   // UI and build
+  // health panel: a soft double tick for a warning, a lower pair for a critical one (rides the effects volume)
+  alertTick(bad) { const f = bad ? 660 : 1180; this.tone(f, 0.05, 'sine', 0.05, 0.08); this.tone(f * (bad ? 0.84 : 1.12), 0.06, 'sine', 0.045, 0.08, 0.09); }
   hover() { this.tone(1500, 0.05, 'sine', 0.035, 0.1); }
   tap() { this.tone(900, 0.08, 'sine', 0.08, 0.2); this.noise(0.03, 3000, 2, 0.04); }
   snap() { // magnetic thunk + soft tink
@@ -100,12 +102,12 @@ export class Audio {
     ];
     const fade = 2.5;
     const decks = [0, 1].map(() => {
-      const a = new Audio(); a.preload = 'auto'; a.crossOrigin = 'anonymous';
+      const a = new window.Audio(); a.preload = 'auto'; a.crossOrigin = 'anonymous';
       const g = this.ctx.createGain(); g.gain.value = 0;
       this.ctx.createMediaElementSource(a).connect(g); g.connect(this.music);
       return { a, g };
     });
-    tracks.forEach((src) => { const p = new Audio(); p.preload = 'auto'; p.src = src; });
+    tracks.forEach((src) => { const p = new window.Audio(); p.preload = 'auto'; p.src = src; });
     let arm = 0, idx = Math.floor(Math.random() * tracks.length), advancing = false;
     const fadeOut = (d) => {
       const t = this.ctx.currentTime;

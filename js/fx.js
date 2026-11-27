@@ -125,9 +125,10 @@ export class ClusterFlame {
       uniforms: { scale: { value: 800 }, uCol: { value: new THREE.Color(1.0, 0.86, 0.62) }, uK: { value: 3.5 } } }));
     this.glows.material.userData.own = true; this.glows.frustumCulled = false; this.group.add(this.glows);
     this.light = new THREE.PointLight(0xff9a4a, 0, 260, 1.5); this.light.position.y = -3; this.group.add(this.light);
-    this.group.visible = false; this.power = 0;
+    this.group.visible = false; this.power = 0; this.off = new Uint8Array(n);   // off[i] = 1: that bell has shut down
     this._o = new THREE.Object3D();
   }
+  setOut(i, out = true) { if (i >= 0 && i < this.off.length) this.off[i] = out ? 1 : 0; }
   setScale(viewH) { this.glows.material.uniforms.scale.value = viewH; }
   update(t, power, radius, len, rho = 1.2, thrust = 115000) {
     this.group.visible = power > 0.01; this.power = power;
@@ -138,7 +139,7 @@ export class ClusterFlame {
       const l = L * lK, r = radius * rK, ex = exK ? expand * exK : 1.15;
       const u = o.material.uniforms; u.uTime.value = t; u.uPower.value = power; u.uExpand.value = ex; u.uDiam.value = diam; u.uLen.value = (radius * 2.2 * (1 + thin)) / l;
       for (let i = 0; i < n; i++) {
-        const z = nz[i]; this._o.position.set(z.x, z.y, z.z); this._o.scale.set(r, l, r); this._o.updateMatrix(); o.setMatrixAt(i, this._o.matrix);
+        const z = nz[i], k = this.off[i] ? 0 : 1; this._o.position.set(z.x, z.y, z.z); this._o.scale.set(r * k + 1e-4, l * k + 1e-4, r * k + 1e-4); this._o.updateMatrix(); o.setMatrixAt(i, this._o.matrix);
       }
       o.instanceMatrix.needsUpdate = true;
     }
@@ -150,7 +151,7 @@ export class ClusterFlame {
         const j = i * gN + k, y = k === 0 ? -0.15 : -(k - 0.1) * sp;
         P.position.setXYZ(j, z.x, z.y + y, z.z);
         P.size.setX(j, k === 0 ? radius * 4.5 : radius * (2.0 - k * 0.18) * (1 + thin));
-        P.bright.setX(j, power * 0.5 * (k === 0 ? 1.4 : diam * Math.exp(-k * 0.35) * (0.8 + 0.2 * Math.sin(t * 50 + k + i))));
+        P.bright.setX(j, this.off[i] ? 0 : power * 0.5 * (k === 0 ? 1.4 : diam * Math.exp(-k * 0.35) * (0.8 + 0.2 * Math.sin(t * 50 + k + i))));
       }
     }
     P.position.needsUpdate = P.size.needsUpdate = P.bright.needsUpdate = true;
@@ -208,7 +209,7 @@ export class Smoke {
           float raw = size * scale / max(vZ, 0.15);
           // cap screen size so a close cam never sees a full-frame polygon, and fade huge sprites
           float caps = min(raw, 180.0); vSoft = size;
-          vA *= smoothstep(2.2, 12.0, vZ) * min(1.0, 140.0 / max(raw, 1.0));
+          vA *= smoothstep(2.2, 12.0, vZ) * min(1.0, 140.0 / max(raw, 1.0)) * (1.0 - smoothstep(2500.0, 12000.0, vZ));   // far puffs melt into the haze instead of hanging as a dark blob over the planet
           gl_PointSize = caps; gl_Position = projectionMatrix * mv; }`,
       fragmentShader: `uniform sampler2D map, tDepth; uniform vec3 uSky, uSun; uniform float uHasDepth, uNear, uFar, uSoft; uniform vec2 uRes;
         varying float vA, vH, vR, vK, vL, vZ, vSoft;

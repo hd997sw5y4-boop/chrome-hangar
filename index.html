@@ -112,6 +112,11 @@
     <button id="btnGuide">Landing guide: On</button>
     <button id="btnFlightBack">Back to hangar</button>
   </div>
+  <div id="hpPanel" class="hidden">
+    <div class="hpHead"><span>Rocket health</span><button id="hpHide" title="Hide (P)">P</button></div>
+    <div class="hpBody"><canvas id="hpCanvas"></canvas><div id="hpTip" class="hidden"></div></div>
+    <div id="hpWarn"><div></div><div></div><div></div></div>
+  </div>
   <div id="camPicker" class="hidden"></div>
   <div id="camName"></div>
   <div id="thrTouch" class="touchOnly"><div class="track"><i></i><em></em></div><span>Throttle</span></div>

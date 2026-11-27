@@ -15,7 +15,17 @@ export const vec = { v3, add, mul, dot, cross, len, norm };
 export const airDensity = h => 1.225 * Math.exp(-Math.max(0, h) / 8500);
 
 // ---------- engine ----------
-export function newEngine() { return { on: false, thr: 0, cmd: 0, heat: 0, temp: 20, failed: false, spool: 0, peakHeat: 0 }; }
+export function newEngine() { return { on: false, thr: 0, cmd: 0, heat: 0, temp: 20, failed: false, spool: 0, peakHeat: 0, out: 0 }; }
+
+// Engine-out in a cluster: a third of the bells (outer ring) are the weak ones and quit one by one as heat
+// climbs past 80..98, each taking its share of thrust with it. The rest only go when the whole cluster fails at 100.
+const WEAK = {};
+export function weakEngines(n) {
+  if (WEAK[n]) return WEAK[n];
+  const weak = n > 1 ? Math.ceil(n / 3) : 0, start = n === 3 ? 0 : n === 9 ? 1 : n > 9 ? 7 : 0, ring = n - start, out = [];
+  for (let j = 0; j < weak; j++) out.push({ idx: start + Math.floor(j * ring / weak), th: 80 + 18 * j / weak });
+  return (WEAK[n] = out);
+}
 
 // Advances one engine; returns {thrust, mdot}. fuelLeft gates it.
 export function engineStep(e, d, dt, fuelLeft, rho = 1.225) {
@@ -37,9 +47,12 @@ export function engineStep(e, d, dt, fuelLeft, rho = 1.225) {
   const t0 = e.on ? h.baseTemp + h.spanTemp * eff : 20 + (e.temp - 20) * Math.exp(-dt / 2.5);
   e.temp = e.on ? t0 + (h.limitTemp - t0) * Math.min(1, e.heat / 100) : t0;
   if (e.heat >= 100 && !e.failed) { e.failed = true; e.on = false; e.reason = 'overheat'; }
+  const n = d.engines || 1;
+  if (n > 1) { const w = weakEngines(n); while (e.out < w.length && e.heat >= w[e.out].th) e.out++; }
+  const live = 1 - e.out / n;
   const vacBoost = 1 + 0.1 * (1 - rho / 1.225);
-  const thrust = d.thrust * eff * vacBoost;
-  return { thrust, mdot: e.on ? d.thrust * eff / (d.isp * G0) : 0 };
+  const thrust = d.thrust * eff * vacBoost * live;
+  return { thrust, mdot: e.on ? d.thrust * eff * live / (d.isp * G0) : 0 };
 }
 
 // ---------- wind ----------
@@ -88,6 +101,8 @@ export function contactPoints(f) {
   return pts;
 }
 
+// Also used by the part-health model when a part breaks (structure / burn-up).
+export function failFlight(f, kind, extra) { fail(f, kind, extra); }
 function fail(f, kind, extra = {}) {
   if (f.failure) return;
   f.failure = { kind, t: f.t, alt: f.alt, speed: f.speed, ...extra };
