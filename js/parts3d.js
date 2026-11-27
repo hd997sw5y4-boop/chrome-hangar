@@ -133,7 +133,7 @@ export function initMaterials() {
   M = {
     mirror: new THREE.MeshPhysicalMaterial({ color: 0xffffff, metalness: 1, roughness: 1, anisotropy: 0.35 }),
     brushed: new THREE.MeshPhysicalMaterial({ color: 0xd9dde2, metalness: 1, roughness: 0.32, anisotropy: 0.7 }),
-    chromeTrim: new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 1, roughness: 0.06 }),
+    chromeTrim: new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 1, roughness: 0.1 }),
     dark: new THREE.MeshStandardMaterial({ color: 0x25282d, metalness: 0.8, roughness: 0.4 }),
     darkMatte: new THREE.MeshStandardMaterial({ color: 0x15171a, metalness: 0.5, roughness: 0.62 }),
     copper: new THREE.MeshStandardMaterial({ color: 0xb87333, metalness: 1, roughness: 0.3 }),

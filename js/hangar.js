@@ -19,12 +19,12 @@ const V = (x, y, z) => new THREE.Vector3(x, y, z);
 export function buildInterior(w, g, H, M, lite) {
   const k = new Kit(), shell = new THREE.Group(); shell.name = 'shell'; g.add(shell);
   const steel = new THREE.MeshStandardMaterial({ color: 0xd8dadc, metalness: 0.55, roughness: 0.42 });           // white-painted structure
-  const steelDark = new THREE.MeshStandardMaterial({ color: 0x2c3036, metalness: 0.7, roughness: 0.45 });
+  const steelDark = new THREE.MeshStandardMaterial({ color: 0x2c3036, metalness: 0.7, roughness: 0.38 });
   const yellow = new THREE.MeshStandardMaterial({ color: 0xe0a816, metalness: 0.3, roughness: 0.5 });
   const rubber = new THREE.MeshStandardMaterial({ color: 0x141518, roughness: 0.75 });
 
   // ---- walls: insulated white panels above a concrete dado, steel columns between bays ----
-  const panel = new THREE.MeshStandardMaterial({ color: 0xc9ccd0, metalness: 0.25, roughness: 0.55 });
+  const panel = new THREE.MeshStandardMaterial({ color: 0xc9ccd0, metalness: 0.15, roughness: 0.44 });   // painted steel: a gentle sheen
   const dado = new THREE.MeshStandardMaterial({ color: 0x8e9196, roughness: 0.85 });
   const walls = [[H.x * 2, 0, H.z, Math.PI], [H.z * 2, -H.x, 0, Math.PI / 2], [H.z * 2, H.x, 0, -Math.PI / 2]];
   const side = H.x - H.door;

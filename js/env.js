@@ -137,13 +137,15 @@ export class World {
     const key = where === 'in' ? 'localIn' : 'localOut'; this[key]?.rt.dispose();
     this[key] = { rt, pos: pos.clone(), sky: this.skyKey };
   }
+  // drop the hangar capture so the next indoor frame re-shoots it (after late-loading set dressing)
+  refreshLocalIn() { this.localIn?.rt.dispose(); this.localIn = null; }
   pickEnv() {
     const cam = this.camera.position, L = this.localOut;
     setRocketEnv(this.indoor ? this.localIn?.rt.texture || null : L && L.sky === this.skyKey && cam.y < 400 && cam.distanceTo(L.pos) < 600 ? L.rt.texture : null);
   }
   setIndoor(v) {
     this.indoor = v;
-    if (this.envs.hangar && this.envs.sky) { this.scene.environment = v ? this.envs.hangar : this.envs.sky; this.scene.environmentIntensity = v ? 0.6 : 0.95; if (!v) this.applySky?.(); }
+    if (this.envs.hangar && this.envs.sky) { this.scene.environment = v ? this.localIn?.rt.texture || this.envs.hangar : this.envs.sky; this.scene.environmentIntensity = v ? 0.6 : 0.95; if (!v) this.applySky?.(); }
     this.spot.visible = false;   // the old hangar spot threw a hard circular cookie on the floor
     if (this.bayDir) { this.bayDir.visible = v; this.bayDir.castShadow = v && this.shadowSize > 0; }
     this.sun.castShadow = !v && this.shadowSize > 0;
@@ -191,7 +193,11 @@ export class World {
     for (const [m, b] of [[o?.terrainMat, fadeAll], [o?.terrainRingMat, earthOn], [o?.oceanMat, earthOn]]) if (m && m.transparent !== b) { m.transparent = b; m.needsUpdate = true; }
     if (o) o.group.visible = GLOBE_FADE.value < 0.999;
     this._dt = dt;
-    if (this.indoor && !this.localIn && this.envs.hangar && this.envs.sky && this.stand) this.captureLocal('in', new THREE.Vector3(0, 5, 0), [this.stand]);
+    // indoors everything (floor, steel, robot visors, tanks) reflects this capture of the real hangar, not a stock HDRI
+    if (this.indoor && !this.localIn && this.envs.hangar && this.envs.sky && this.stand) {
+      this.captureLocal('in', new THREE.Vector3(0, 5, 0), [this.stand, this.hangar.getObjectByName('robots')]);
+      if (this.indoor) this.scene.environment = this.localIn.rt.texture;
+    }
     this.pickEnv();
     if (this.post.enabled) this.post.render(dt);
     else { r.setRenderTarget(null); this.renderScene(); }
@@ -250,7 +256,7 @@ export class World {
     floorTex.repeat.set(1 / 6, 1 / 6);
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(H.x * 2, H.z * 2), new THREE.MeshStandardMaterial({ map: floorTex, color: 0xb8b8b8, roughness: 0.3, metalness: 0.0, envMapIntensity: 0.8 }));
     floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; g.add(floor); this.floor = floor;
-    applyPBR(floor.material, 'hangar_concrete_floor', [1 / 5, 1 / 5], { normalScale: 0.5 }).then(m => { m.color.set(0xd2d2d0); m.roughness = 0.55; m.envMapIntensity = 1.0; }).catch(() => {});
+    applyPBR(floor.material, 'hangar_concrete_floor', [1 / 5, 1 / 5], { normalScale: 0.5 }).then(m => { m.color.set(0xd2d2d0); m.roughness = 0.42; m.envMapIntensity = 1.1; }).catch(() => {});   // sealed, lightly polished: soft lamp streaks, no mirror
     // square steel assembly stand, floor markings, uplights and the fold-out work tower
     buildAssemblyStand(this, g, H, this.M, this.quality === 'phone' || this.quality === 'low');
     this.standDeck = STAND_DECK; this.standHalf = STAND_HALF;
