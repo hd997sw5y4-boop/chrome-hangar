@@ -10,7 +10,14 @@ const plumeVS = `uniform float uExpand, uTime; varying float vT; varying vec3 vN
   void main(){ vUv = uv; float t = -position.y; vT = t;
     float r = mix(1.0, uExpand, pow(t, 0.75)) * (1.0 + 0.04 * sin(t * 30.0 - uTime * 40.0));
     vec3 p = vec3(position.x * r, position.y, position.z * r);
-    vec4 mv = modelViewMatrix * vec4(p, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`;
+#ifdef USE_INSTANCING
+    vec4 wp = instanceMatrix * vec4(p, 1.0);
+    vec4 mv = modelViewMatrix * wp;
+    vN = normalize(normalMatrix * mat3(instanceMatrix) * normal);
+#else
+    vec4 mv = modelViewMatrix * vec4(p, 1.0); vN = normalize(normalMatrix * normal);
+#endif
+    vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`;
 const plumeFS = `uniform float uTime, uPower, uDiam, uCoreK, uLen, uGain; uniform vec3 uCore, uEdge; varying float vT; varying vec3 vN, vV; varying vec2 vUv;
   float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
   float n(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f); return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + 1.), f.x), f.y); }
@@ -69,6 +76,82 @@ export class Flame {
       const y = i === 0 ? -0.15 : -(i - 0.1) * sp;
       P.position.setY(i, y); P.size.setX(i, i === 0 ? radius * 4.5 : radius * (2.0 - i * 0.18) * (1 + thin));
       P.bright.setX(i, power * 0.5 * (i === 0 ? 1.4 : diam * Math.exp(-i * 0.35) * (0.8 + 0.2 * Math.sin(t * 50 + i))));
+    }
+    P.position.needsUpdate = P.size.needsUpdate = P.bright.needsUpdate = true;
+    this.light.intensity = power * (250 + thrust / 500) * (0.82 + 0.18 * Math.sin(t * 53) * Math.sin(t * 17));
+  }
+}
+
+// Per-nozzle plume size. Length follows one engine's thrust, not the cluster total.
+export function flameSize(eng, power) {
+  const n = Math.max(1, eng.engines || 1);
+  return { n, radius: (eng.bellRadius || eng.radius) * 0.95, len: 4 + 12 * power * Math.sqrt((eng.thrust / n) / 115000) };
+}
+export function attachFlames(engineGroup, color, lite = false) {
+  const nz = engineGroup?.userData?.nozzles;
+  const f = (nz && nz.length > 1) ? new ClusterFlame(color, nz, lite) : new Flame(color);
+  engineGroup.add(f.group);
+  return f;
+}
+
+// Many nozzles, few draw calls: instanced plume shells, one glow Points buffer, one light.
+export class ClusterFlame {
+  constructor(color, nozzles, lite = false) {
+    this.nozzles = nozzles; this.lite = !!lite;
+    this.group = new THREE.Group(); this.group.userData.noAO = true;
+    const n = nozzles.length, segs = lite ? 12 : 20, stacks = lite ? 10 : 18;
+    const geo = new THREE.CylinderGeometry(1, 1, 1, segs, stacks, true); geo.translate(0, -0.5, 0); geo.userData.keep = true;
+    const edge = new THREE.Color(color);
+    const mk = (core, ed, coreK, gain) => {
+      const m = new THREE.ShaderMaterial({ vertexShader: plumeVS, fragmentShader: plumeFS, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+        uniforms: { uTime: { value: 0 }, uPower: { value: 0 }, uExpand: { value: 1.4 }, uDiam: { value: 1 }, uCoreK: { value: coreK }, uLen: { value: 10 }, uGain: { value: gain }, uCore: { value: new THREE.Color(core) }, uEdge: { value: ed.clone() } } });
+      m.userData.own = true;
+      const o = new THREE.InstancedMesh(geo, m, n); o.frustumCulled = false; o.userData.noAO = true; o.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      this.group.add(o); return o;
+    };
+    this.layers = [];
+    if (!lite) this.layers.push([mk('#ffd9a0', edge.clone().multiplyScalar(0.8), 0.3, 0.6), 1.15, 1.25, 1.25]); // sheath
+    this.layers.push([mk('#fff4dc', edge, 1.0, 1.7), 1, 1, 1]);
+    this.layers.push([mk('#ffffff', new THREE.Color('#cfe8ff'), 2.5, 3.0), 0.32, 0.5, 0]);
+    this.sheath = lite ? this.layers[0][0] : this.layers[0][0];
+    this.main = lite ? this.layers[0][0] : this.layers[1][0];
+    // glow points: 3 diamonds per nozzle on phones, 7 on desktop
+    this.gN = lite ? 3 : 7;
+    const N = n * this.gN, pg = new THREE.BufferGeometry();
+    pg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 3), 3));
+    pg.setAttribute('size', new THREE.BufferAttribute(new Float32Array(N), 1));
+    pg.setAttribute('bright', new THREE.BufferAttribute(new Float32Array(N), 1));
+    this.glows = new THREE.Points(pg, new THREE.ShaderMaterial({ vertexShader: glowVS, fragmentShader: glowFS, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+      uniforms: { scale: { value: 800 }, uCol: { value: new THREE.Color(1.0, 0.86, 0.62) }, uK: { value: 3.5 } } }));
+    this.glows.material.userData.own = true; this.glows.frustumCulled = false; this.group.add(this.glows);
+    this.light = new THREE.PointLight(0xff9a4a, 0, 260, 1.5); this.light.position.y = -3; this.group.add(this.light);
+    this.group.visible = false; this.power = 0;
+    this._o = new THREE.Object3D();
+  }
+  setScale(viewH) { this.glows.material.uniforms.scale.value = viewH; }
+  update(t, power, radius, len, rho = 1.2, thrust = 115000) {
+    this.group.visible = power > 0.01; this.power = power;
+    const thin = 1 - Math.min(1, rho / 1.225), expand = 1.35 + thin * 3.5, diam = Math.max(0, 1 - thin * 1.6);
+    const L = len * (0.92 + 0.08 * Math.sin(t * 37)) * (1 + thin * 0.8);
+    const nz = this.nozzles, n = nz.length;
+    for (const [o, lK, rK, exK] of this.layers) {
+      const l = L * lK, r = radius * rK, ex = exK ? expand * exK : 1.15;
+      const u = o.material.uniforms; u.uTime.value = t; u.uPower.value = power; u.uExpand.value = ex; u.uDiam.value = diam; u.uLen.value = (radius * 2.2 * (1 + thin)) / l;
+      for (let i = 0; i < n; i++) {
+        const z = nz[i]; this._o.position.set(z.x, z.y, z.z); this._o.scale.set(r, l, r); this._o.updateMatrix(); o.setMatrixAt(i, this._o.matrix);
+      }
+      o.instanceMatrix.needsUpdate = true;
+    }
+    if (!this.lite) this.layers[0][0].material.uniforms.uPower.value = power * (0.35 + thin * 0.8);
+    const P = this.glows.geometry.attributes, gN = this.gN, sp = radius * 2.2 * (1 + thin);
+    for (let i = 0; i < n; i++) {
+      const z = nz[i];
+      for (let k = 0; k < gN; k++) {
+        const j = i * gN + k, y = k === 0 ? -0.15 : -(k - 0.1) * sp;
+        P.position.setXYZ(j, z.x, z.y + y, z.z);
+        P.size.setX(j, k === 0 ? radius * 4.5 : radius * (2.0 - k * 0.18) * (1 + thin));
+        P.bright.setX(j, power * 0.5 * (k === 0 ? 1.4 : diam * Math.exp(-k * 0.35) * (0.8 + 0.2 * Math.sin(t * 50 + k + i))));
+      }
     }
     P.position.needsUpdate = P.size.needsUpdate = P.bright.needsUpdate = true;
     this.light.intensity = power * (250 + thrust / 500) * (0.82 + 0.18 * Math.sin(t * 53) * Math.sin(t * 17));

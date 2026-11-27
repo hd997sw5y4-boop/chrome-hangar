@@ -10,13 +10,14 @@ import { Earth, GLOBE_FADE, GLOBE_EDGE } from './earth.js';
 import { Post } from './post.js';
 import { buildInterior } from './hangar.js';
 import { buildPadComplex, TRENCH } from './pad.js';
+import { buildAssemblyStand, DECK as STAND_DECK, HALF as STAND_HALF } from './stand.js';
 
 export const SPOTS = {
   stand: new THREE.Vector3(0, 0, 0),
   test: new THREE.Vector3(48, 0, -72),
   pad: new THREE.Vector3(0, 0, -115),
 };
-export const HANGAR = { x: 22, z: 16, h: 28, door: 10, doorH: 26, pitR: 2.6, pitDepth: 22 };
+export const HANGAR = { x: 22, z: 16, h: 28, door: 10, doorH: 26, pitR: 3.0, pitDepth: 22 };
 export const IS_TOUCH = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 export const IS_IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
@@ -222,7 +223,7 @@ export class World {
 
   buildHangar() {
     const H = HANGAR, s = this.scene, g = this.hangar = new THREE.Group(); s.add(g);
-    // polished concrete floor with a hole for the stand pit
+    // sealed concrete floor (no pit — the assembly stand is bolted flush to the slab)
     const floorTex = canvasTex(1024, 1024, (c, w, h) => {
       c.fillStyle = '#8d8f91'; c.fillRect(0, 0, w, h);
       for (let i = 0; i < 9000; i++) { const v = 110 + rnd() * 60 | 0; c.fillStyle = `rgba(${v},${v},${v - 4},${0.08 + rnd() * 0.15})`; c.fillRect(rnd() * w, rnd() * h, 2 + rnd() * 3, 2 + rnd() * 3); }
@@ -230,31 +231,12 @@ export class World {
       c.strokeStyle = 'rgba(40,40,40,0.55)'; c.lineWidth = 3; c.strokeRect(0, 0, w, h);
     }, 1);
     floorTex.repeat.set(1 / 6, 1 / 6);
-    const shape = new THREE.Shape(); shape.moveTo(-H.x, -H.z); shape.lineTo(H.x, -H.z); shape.lineTo(H.x, H.z); shape.lineTo(-H.x, H.z); shape.closePath();
-    const hole = new THREE.Path(); hole.absarc(0, 0, H.pitR, 0, Math.PI * 2, true); shape.holes.push(hole);
-    const floorGeo = new THREE.ShapeGeometry(shape, 48);
-    const floor = new THREE.Mesh(floorGeo, new THREE.MeshStandardMaterial({ map: floorTex, color: 0xb8b8b8, roughness: 0.3, metalness: 0.0, envMapIntensity: 0.8 }));
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(H.x * 2, H.z * 2), new THREE.MeshStandardMaterial({ map: floorTex, color: 0xb8b8b8, roughness: 0.3, metalness: 0.0, envMapIntensity: 0.8 }));
     floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; g.add(floor); this.floor = floor;
-    applyPBR(floor.material, 'hangar_concrete_floor', [1 / 5, 1 / 5], { normalScale: 0.5 }).then(m => { m.color.set(0xd2d2d0); m.roughness = 0.55; m.envMapIntensity = 1.0; })   // sealed, lightly polished.catch(() => {});
-    // pit
-    const pit = new THREE.Mesh(new THREE.CylinderGeometry(H.pitR, H.pitR, H.pitDepth, 48, 1, true), new THREE.MeshStandardMaterial({ color: 0x2a2d31, metalness: 0.7, roughness: 0.5, side: THREE.BackSide }));
-    pit.position.y = -H.pitDepth / 2; g.add(pit);
-    const pitFloor = new THREE.Mesh(new THREE.CircleGeometry(H.pitR, 32), this.M.darkMatte); pitFloor.rotation.x = -Math.PI / 2; pitFloor.position.y = -H.pitDepth; g.add(pitFloor);
-    // hazard ring
-    const haz = canvasTex(512, 32, (c, w, h) => { c.fillStyle = '#e8b21c'; c.fillRect(0, 0, w, h); c.fillStyle = '#16171a'; for (let x = -h; x < w; x += 32) { c.beginPath(); c.moveTo(x, h); c.lineTo(x + 16, h); c.lineTo(x + 16 + h, 0); c.lineTo(x + h, 0); c.fill(); } });
-    haz.repeat.set(6, 1);
-    const ring = new THREE.Mesh(new THREE.RingGeometry(H.pitR, H.pitR + 0.45, 64, 1), new THREE.MeshStandardMaterial({ map: haz, roughness: 0.5 }));
-    ring.rotation.x = -Math.PI / 2; ring.position.y = 0.01; ring.receiveShadow = true; g.add(ring);
-    // railing posts + rail (gap facing the player)
-    const rail = new THREE.Mesh(new THREE.TorusGeometry(H.pitR + 0.8, 0.04, 8, 64, Math.PI * 1.5), this.M.chromeTrim);
-    rail.rotation.x = -Math.PI / 2; rail.rotation.z = Math.PI * 0.75 + Math.PI; rail.position.y = 1.05; g.add(rail);
-    for (let i = 0; i <= 8; i++) { const a = Math.PI * 1.75 + i / 8 * Math.PI * 1.5; const p = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 1.05, 8), this.M.chromeTrim); p.position.set(Math.cos(a) * (H.pitR + 0.8), 0.525, Math.sin(a) * (H.pitR + 0.8)); g.add(p); }
-    // stand: telescoping column + turntable (moved by the build code)
-    const stand = this.stand = new THREE.Group(); g.add(stand);
-    const col = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, H.pitDepth + 8, 24), this.M.brushed); col.position.y = -(H.pitDepth + 8) / 2; stand.add(col);
-    const table = new THREE.Mesh(new THREE.CylinderGeometry(2.3, 2.4, 0.3, 64), this.M.dark); table.position.y = -0.15; table.receiveShadow = true; table.castShadow = true; stand.add(table);
-    const glow = this.standGlow = new THREE.Mesh(new THREE.TorusGeometry(2.36, 0.025, 6, 96), new THREE.MeshBasicMaterial({ color: 0x7fe7ff }));
-    glow.rotation.x = Math.PI / 2; glow.position.y = 0.01; stand.add(glow);
+    applyPBR(floor.material, 'hangar_concrete_floor', [1 / 5, 1 / 5], { normalScale: 0.5 }).then(m => { m.color.set(0xd2d2d0); m.roughness = 0.55; m.envMapIntensity = 1.0; }).catch(() => {});
+    // square steel assembly stand, floor markings, uplights and the fold-out work tower
+    buildAssemblyStand(this, g, H, this.M, this.quality === 'phone' || this.quality === 'low');
+    this.standDeck = STAND_DECK; this.standHalf = STAND_HALF;
     // interior architecture (walls, truss roof, lamps, shafts, cables, scaffold) lives in hangar.js
     this.interior = buildInterior(this, g, H, this.M, this.quality === 'phone' || this.quality === 'low');
     this._liteHangar = this.quality === 'phone' || this.quality === 'low';
@@ -300,7 +282,7 @@ export class World {
     rack(-19, 10, 'tank_tall'); rack(-19, 6, 'tank_short'); rack(14, 10, 'tank_short');
     const bench = new THREE.Mesh(new THREE.BoxGeometry(5, 0.12, 1.4), this.M.brushed); bench.position.set(9, 1.0, 5); bench.castShadow = true; g.add(bench);
     for (const [x, z] of [[-2.3, -0.6], [2.3, -0.6], [-2.3, 0.6], [2.3, 0.6]]) { const l = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1, 0.1), frameMat); l.position.set(9 + x, 0.5, 5 + z); g.add(l); }
-    if (this._liteHangar) { const st = this.stand; g.remove(st); bake(g); g.add(st); }
+    if (this._liteHangar) { const skip = [this.stand, this.workTower].filter(Boolean); skip.forEach(o => g.remove(o)); bake(g); skip.forEach(o => g.add(o)); }
   }
 
   buildOutside() {

@@ -158,7 +158,7 @@ export class Fueling {
       if (d > HOSE_MAX && !this.ix.ctl) { P.x = TANK.x + dx / d * HOSE_MAX; P.z = TANK.z + dz / d * HOSE_MAX; if (!this.stretchT || performance.now() - this.stretchT > 4000) { this.stretchT = performance.now(); g.toast('That’s the full hose length.', 1400); } }
       // rocket proxy around the stand
       const rg = g.build.rocketGroup, L = rg?.userData.layout;
-      if (rg && L) { const top = L.top + 1; this.rocketHit.scale.set(1, top, 1); this.rocketHit.position.set(0, g.build.standH + top / 2 - (L.bottom || 0), 0); }
+      if (rg && L) { const top = L.top + 1; this.rocketHit.scale.set(1, top, 1); this.rocketHit.position.set(0, (rg.position.y || 0) + top / 2, 0); }
     } else if (this.state === 'connected') {
       const rg = g.build.rocketGroup; if (!rg || !this.tankItem().length) { this.state = 'carry'; this.port.visible = false; }
       else { rg.updateWorldMatrix(true, false); const p = rg.localToWorld(this.portLocal.clone()), c = rg.localToWorld(new THREE.Vector3(0, this.portLocal.y, 0)); this.nozDir.copy(c).sub(p).normalize(); this.nozzle.copy(p).addScaledVector(this.nozDir, -0.22); this.port.position.copy(p); this.port.lookAt(c); this.port.rotateX(Math.PI / 2); }

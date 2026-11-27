@@ -125,7 +125,7 @@ export class Crane {
     const sfx = this.ix.sfx;
     if (this.loadObj) {
       const L = this.loadObj, p = L.g.position;
-      if (Math.hypot(p.x, p.z) < H.pitR + 1 + L.r) { this.g.toast('Not over the stand pit: move it clear first.'); this.g.audio.bad(); return; }
+      if (Math.hypot(p.x, p.z) < H.pitR + 1 + L.r) { this.g.toast('Not over the assembly stand: move it clear first.'); this.g.audio.bad(); return; }
       L.held = false; L.vy = 0; this.loadObj = null; sfx.clunk(0.4); this.g.toast(`Released the ${L.name}.`, 1400); return;
     }
     const hb = this.hookBottom();

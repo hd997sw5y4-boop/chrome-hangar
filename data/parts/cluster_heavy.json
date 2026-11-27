@@ -1,0 +1,28 @@
+{
+ "id": "cluster_heavy",
+ "name": "Heavy Ring",
+ "section": "propulsion",
+ "kind": "engine",
+ "attach": "engine",
+ "engines": 19,
+ "bellRadius": 0.2,
+ "bellGap": 0.045,
+ "length": 1.65,
+ "radius": 1.22,
+ "dryMass": 4790,
+ "thrust": 1900000,
+ "isp": 280,
+ "minThrottle": 0.5,
+ "gimbalDeg": 3,
+ "heat": {
+  "safeThrottle": 0.85,
+  "risePerSec": 16,
+  "coolPerSec": 6,
+  "baseTemp": 680,
+  "spanTemp": 2400,
+  "limitTemp": 3550
+ },
+ "color": "#ff8a4a",
+ "blurb": "Inner and outer rings of engines on a shared heat shield. A heavy booster uses a cluster like this to lift a huge stack, and it burns through fuel fast.",
+ "unlockStars": 7
+}

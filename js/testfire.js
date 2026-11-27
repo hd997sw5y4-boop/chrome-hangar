@@ -4,7 +4,7 @@ import { PARTS, PART_IDS, stats, cloneRocket } from './rocket.js';
 import { rocketMesh, disposeTree } from './parts3d.js';
 import { newStatic, staticStep, DT } from './sim.js';
 import { SPOTS } from './env.js';
-import { Flame } from './fx.js';
+import { attachFlames, flameSize } from './fx.js';
 
 const $ = id => document.getElementById(id);
 
@@ -33,7 +33,8 @@ export class TestMode {
     this.group = rocketMesh(r); this.group.position.copy(SPOTS.test).add(new THREE.Vector3(0, this.w.testTop, 0));
     this.w.scene.add(this.group);
     const eng = PARTS[r.engine];
-    this.flame = new Flame(eng.color); this.group.userData.engine.add(this.flame.group);
+    const lite = this.w.quality === 'phone' || this.w.quality === 'low';
+    this.flame = attachFlames(this.group.userData.engine, eng.color, lite);
     this.s = newStatic(r, this.g.fill); this.acc = 0; this.done = false;
     this.st0 = stats(r, this.g.fill);
     // clamp rings sit at the rocket's tank levels
@@ -94,7 +95,7 @@ export class TestMode {
     if (this.g.mission?.type === 'static' && s.e.on && s.fireT >= this.g.mission.goalSeconds && !this.done) { this.done = true; this.g.toast('5 seconds! Shut down when ready.'); this.g.audio.star(0); }
     // visuals
     const t = performance.now() / 1000;
-    this.flame.update(t, thrDisp * (s.e.spool || 0), eng.radius * 0.95, 3 + 9 * thrDisp * eng.thrust / 115000, 1.225);
+    { const pw = thrDisp * (s.e.spool || 0), fs = flameSize(eng, pw); this.flame.update(t, pw, fs.radius, 3 + 0.75 * (fs.len - 4), 1.225, eng.thrust); }
     const noz = this.group.userData.engine.userData.nozMat; noz.emissiveIntensity = Math.max(0, (s.e.temp - 400) / 900);
     this.g.audio.setEngine(thrDisp * Math.min(1, eng.thrust / 120000 + 0.4), 0.55);
     if (s.e.on) {

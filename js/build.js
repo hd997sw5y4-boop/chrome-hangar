@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { PARTS, PART_IDS, layout, stats, stability, problems, candidates, applyPlace, applyRemove, cloneRocket, partCount } from './rocket.js';
 import { rocketMesh, partMesh, finPair, legSet, ghostify, disposeTree, initMaterials } from './parts3d.js';
 import { HANGAR, IS_TOUCH } from './env.js';
+import { DECK } from './stand.js';
 
 const $ = id => document.getElementById(id);
 const EYE = 1.65;
@@ -103,7 +104,8 @@ export class BuildMode {
     if (this.rocketGroup) { this.rocketGroup.removeFromParent(); disposeTree(this.rocketGroup); }
     const g = this.rocketGroup = rocketMesh(this.g.rocket);
     const L = g.userData.layout;
-    g.position.y = -L.bottom; this.w.stand.add(g);
+    g.position.y = DECK - L.bottom; this.w.stand.add(g);
+    this.fitClamps();
     if (placedAt) { // the new part drops in softly
       const pk = g.userData.picks.filter(p => p.t.type === placedAt.type && p.t.index === placedAt.index).pop();
       if (pk) this.settle = { obj: pk.obj, y: pk.obj.position.y, t: 0 };
@@ -123,14 +125,14 @@ export class BuildMode {
       ['Burn time', st.burnTime ? Math.round(st.burnTime) + ' s' : '—'],
       ['Δv', st.dv ? Math.round(st.dv) + ' m/s' : '—'],
       ['Balance', `<span class="${stabC}">${stab.level === 2 ? '◆ above ○' : stab.level === 1 ? '◆ ≈ ○' : '◆ below ○'} ${stab.word}</span>`],
-      ['Engine', eng ? `${eng.name} · min ${Math.round(eng.minThrottle * 100)}%` : '—'],
+      ['Engine', eng ? `${eng.name}${eng.engines > 1 ? ' · ' + eng.engines + ' nozzles' : ''} · min ${Math.round(eng.minThrottle * 100)}%` : '—'],
       ['Parts', partCount(r)],
     ].map(([a, b]) => `<div><span>${a}</span><b>${b}</b></div>`).join('');
     $('ckProblems').textContent = probs[0] || (stab.level === 0 ? 'The gem sits below the ring, so it will flip. Add fins to the lowest tank.' : '');
     $('fillBtns').querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.f === this.g.fill));
     this.drawDiagram(st);
     // 3D markers beside the rocket
-    const off = -this.rocketGroup.userData.layout.bottom;
+    const off = this.rocketGroup.position.y;
     this.gem.position.set(2.6, off + st.com, 0); this.ringM.position.set(2.6, off + st.cop, 0);
     this.cg.visible = r.stack.length > 0;
   }
@@ -145,7 +147,12 @@ export class BuildMode {
       if (it.s.fins) { g.fillStyle = '#9aa6b2'; g.beginPath(); g.moveTo(x0 - rw, y(it.y0 + 1.4)); g.lineTo(x0 - rw - 1.25 * s, y(it.y0 - 0.2)); g.lineTo(x0 - rw, y(it.y0 - 0.35)); g.moveTo(x0 + rw, y(it.y0 + 1.4)); g.lineTo(x0 + rw + 1.25 * s, y(it.y0 - 0.2)); g.lineTo(x0 + rw, y(it.y0 - 0.35)); g.fill(); g.fillStyle = '#cfd6dd'; }
       if (it.s.legs) { g.strokeStyle = '#555c63'; g.lineWidth = 2; g.beginPath(); g.moveTo(x0 - rw, y(it.y0 + 0.9)); g.lineTo(x0 - 2.3 * s, y(L.bottom)); g.moveTo(x0 + rw, y(it.y0 + 0.9)); g.lineTo(x0 + 2.3 * s, y(L.bottom)); g.stroke(); }
     }
-    if (L.engLen) { const e = PARTS[r.engine]; g.fillStyle = '#3a3f45'; g.beginPath(); g.moveTo(x0 - e.radius * 0.35 * s, y(L.engLen)); g.lineTo(x0 + e.radius * 0.35 * s, y(L.engLen)); g.lineTo(x0 + e.radius * s, y(0)); g.lineTo(x0 - e.radius * s, y(0)); g.fill(); }
+    if (L.engLen) {
+      const e = PARTS[r.engine], n = e.engines || 1, br = (e.bellRadius || e.radius);
+      g.fillStyle = '#3a3f45';
+      if (n === 1) { g.beginPath(); g.moveTo(x0 - br * 0.35 * s, y(L.engLen)); g.lineTo(x0 + br * 0.35 * s, y(L.engLen)); g.lineTo(x0 + br * s, y(0)); g.lineTo(x0 - br * s, y(0)); g.fill(); }
+      else { const xs = n === 3 ? [-br, 0, br] : n === 9 ? [-2 * br, -br, 0, br, 2 * br] : [-3 * br, -1.5 * br, 0, 1.5 * br, 3 * br]; for (const dx of xs) { g.beginPath(); g.moveTo(x0 + (dx - br * 0.28) * s, y(L.engLen)); g.lineTo(x0 + (dx + br * 0.28) * s, y(L.engLen)); g.lineTo(x0 + (dx + br) * s, y(0)); g.lineTo(x0 + (dx - br) * s, y(0)); g.fill(); } }
+    }
     if (!r.stack.length) return;
     // gem = centre of mass, ring = centre of drag (shape + word, never colour alone)
     const gy = y(st.com), cy = y(st.cop);
@@ -154,23 +161,34 @@ export class BuildMode {
     g.font = '9px sans-serif'; g.fillStyle = '#ffd34d'; g.fillText('mass', x0 + rw + 20, gy + 3); g.fillStyle = '#7fe7ff'; g.fillText('drag', x0 + rw + 20, cy + 3);
   }
 
+  fitClamps() {
+    const r = this.g.rocket, a = this.w.assembly; if (!a) return;
+    if (!r.stack.length && !r.engine) { a.openClamps(); return; }
+    const eng = r.engine && PARTS[r.engine];
+    a.fitClamps((eng && (eng.radius || eng.bellRadius)) || 0.9);
+  }
+
   // ---------- stand ----------
   autoStand(id) {
     const r = this.g.rocket, L = layout(r), d = PARTS[id]; let wy = L.top;
     if (d.kind === 'engine' || d.kind === 'mount') wy = L.engLen;
     else if (d.kind === 'fins' || d.kind === 'legs') { const t = L.items.find(it => it.d.kind === 'tank'); wy = t ? t.y0 + 0.8 : L.top; }
-    this.standTarget = THREE.MathUtils.clamp(1.2 - (wy - L.bottom), -(HANGAR.pitDepth - 1.5), 3);
+    // Keep the pad flush on the hangar floor. Only drop it into the pit so tall stacks stay at work height.
+    this.standTarget = THREE.MathUtils.clamp(Math.min(0, 1.2 - (wy - L.bottom)), -(HANGAR.pitDepth - 1.5), 0);
   }
 
   // ---------- mode hooks ----------
   enter() {
     this.w.setIndoor(true); this.w.camera.fov = 70; this.w.camera.updateProjectionMatrix();
-    this.w.stand.visible = true; this.rebuild(); this.applyCam();
+    this.w.stand.visible = true; this.w.assembly?.setFold(0, true); this.standH = this.standTarget = 0;
+    this.w.stand.position.y = 0;
+    for (const b of $('standCtl').querySelectorAll('[data-s="up"], [data-s="down"]')) b.classList.add('hidden');
+    this.rebuild(); this.applyCam();
     this.g.scene = this.w.scene;
   }
   exit() { this.g.input.exitLock(); this.clearGhost(); this.markers.clear(); $('aimReason').classList.add('hidden'); this.g.prompt(null); }
   idle() {
-    this.applyCam(); this.w.stand.position.y = this.standH; this.w.stand.rotation.y = this.standYaw;
+    this.applyCam(); this.w.stand.position.y = 0; this.w.stand.rotation.y = this.standYaw;
   }
   applyCam() { const P = this.player; this.w.camera.position.set(P.x, EYE, P.z); this.w.camera.rotation.set(P.pitch, P.yaw, 0, 'YXZ'); }
 
@@ -294,19 +312,16 @@ export class BuildMode {
     const nx = P.x + (fx * -inp.move.y + -fz * inp.move.x) * sp, nz = P.z + (fz * -inp.move.y + fx * inp.move.x) * sp;
     const moved = Math.hypot(nx - P.x, nz - P.z);
     P.x = THREE.MathUtils.clamp(nx, -HANGAR.x + 1, HANGAR.x - 1); P.z = THREE.MathUtils.clamp(nz, -HANGAR.z + 1, HANGAR.z - 1);
-    const pr = Math.hypot(P.x, P.z), keep = HANGAR.pitR + 1.25; if (pr < keep) { P.x *= keep / pr; P.z *= keep / pr; }
+    const keep = (this.w.standHalf || 2.5) + 1.15, pr = Math.hypot(P.x, P.z); if (pr < keep) { P.x *= keep / pr; P.z *= keep / pr; }
     if (moved > 0.001) { this.stepT += moved; if (this.stepT > 0.75) { this.stepT = 0; this.g.audio.step(); } }
     this.applyCam();
     // stand: R/F raise/lower, Q/E turn (also d-pad and on-screen buttons)
     const k = c => inp.down(c) ? 1 : 0, pb = inp.pad?.b || [];
     const up = k('KeyR') + (pb[12] > 0.5) + (this.held.up ? 1 : 0) - k('KeyF') - (pb[13] > 0.5) - (this.held.down ? 1 : 0);
     const turn = k('KeyE') + (pb[15] > 0.5) + (this.held.right ? 1 : 0) - k('KeyQ') - (pb[14] > 0.5) - (this.held.left ? 1 : 0);
-    if (up) this.standTarget = THREE.MathUtils.clamp(this.standTarget + up * 4 * dt, -(HANGAR.pitDepth - 1.5), 3);
+    this.standTarget = 0; this.standH = 0;
     this.standYaw += turn * 1.4 * dt;
-    const prevH = this.standH;
-    this.standH += (this.standTarget - this.standH) * Math.min(1, dt * 4);
-    this.w.stand.position.y = this.standH; this.w.stand.rotation.y = this.standYaw;
-    this.g.audio.setEngine(Math.min(0.05, Math.abs(this.standH - prevH) * 2), 0.2);
+    this.w.stand.position.y = 0; this.w.stand.rotation.y = this.standYaw;
     if (this.settle) { const s = this.settle; s.t += dt * 4; const e = Math.max(0, 1 - s.t); s.obj.position.y = s.y + 0.5 * e * e; if (s.t >= 1) { s.obj.position.y = s.y; this.settle = null; } }
     this.w.standGlow.material.color.setHSL(0.53, 0.9, 0.55 + 0.15 * Math.sin(performance.now() / 600));
     this.gem.rotation.y += dt * 1.5;
@@ -363,7 +378,7 @@ export class BuildMode {
       { text: 'Aim at the glowing ring on the stand and place it.', part: 'mount', fact: f.mount, check: () => has('mount') },
       { text: 'Engines bolt under the mount. Pick <b>Spark</b> and place it.', part: 'spark', fact: f.engine, check: () => this.g.rocket.engine === 'spark' },
       { text: 'Now a <b>Short Tank</b> on top of the mount. This is the rocket’s fuel.', part: 'tank_short', fact: f.tank, check: () => has('tank') },
-      { text: 'Cap it with the <b>Nose Cone</b>. The stand moves the work to chest height for you.', part: 'nose', fact: f.nose, check: () => has('nose') },
+      { text: 'Cap it with the <b>Nose Cone</b>.', part: 'nose', fact: f.nose, check: () => has('nose') },
       { text: 'Add a <b>Fin Pair</b>. It snaps on as a mirrored pair.', part: 'fins', fact: f.fins, check: () => this.g.rocket.stack.some(s => s.fins) },
       { text: 'Add <b>Landing Legs</b> to the tank.', part: 'legs', fact: f.legs, check: () => this.g.rocket.stack.some(s => s.legs), star: 0 },
       { text: 'Try the <b>Delete</b> tool: remove the fin pair.', part: 'delete', check: () => !this.g.rocket.stack.some(s => s.fins) },

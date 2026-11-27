@@ -1,0 +1,28 @@
+{
+ "id": "cluster_tri",
+ "name": "Tri Cluster",
+ "section": "propulsion",
+ "kind": "engine",
+ "attach": "engine",
+ "engines": 3,
+ "bellRadius": 0.34,
+ "bellGap": 0.06,
+ "length": 1.5,
+ "radius": 0.88,
+ "dryMass": 750,
+ "thrust": 300000,
+ "isp": 290,
+ "minThrottle": 0.35,
+ "gimbalDeg": 5,
+ "heat": {
+  "safeThrottle": 0.9,
+  "risePerSec": 12,
+  "coolPerSec": 7,
+  "baseTemp": 660,
+  "spanTemp": 2300,
+  "limitTemp": 3450
+ },
+ "color": "#ffb347",
+ "blurb": "Three engines share the load. Big rockets use several engines because one engine can't lift that much weight. More thrust, but the tanks empty faster.",
+ "unlockStars": 3
+}

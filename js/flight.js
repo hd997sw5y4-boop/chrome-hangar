@@ -7,7 +7,7 @@ import { PARTS, stats } from './rocket.js';
 import { rocketMesh, disposeTree } from './parts3d.js';
 import { newFlight, flightStep, airDensity, DT } from './sim.js';
 import { SPOTS, IS_TOUCH } from './env.js';
-import { Flame } from './fx.js';
+import { attachFlames, flameSize } from './fx.js';
 import { overheatHint } from './testfire.js';
 
 const $ = id => document.getElementById(id);
@@ -63,8 +63,10 @@ export class FlightMode {
     this.clear();
     this.group = rocketMesh(this.g.rocket); this.w.scene.add(this.group);
     const eng = PARTS[this.g.rocket.engine];
-    this.flame = new Flame(eng.color); this.group.userData.engine.add(this.flame.group);
+    const lite = this.w.quality === 'phone' || this.w.quality === 'low';
+    this.flame = attachFlames(this.group.userData.engine, eng.color, lite);
     this.padRel ??= new PadRelease(this.w, this.g.audio); this.padRel.reset(this.group, this.f.origin.y);
+    this.w.assembly?.setFold(1);   // rollout: work platforms swing in around the stack
     const pad = this.w.pad; if (pad) { pad.arm.rotation.y = 0; pad.arm.position.y = THREE.MathUtils.clamp(this.st0Top() - 3, 5, 38); }
     this.flash = 0; this.armT = 0; this.w.captureLocal('out', new THREE.Vector3(SPOTS.pad.x, 8, SPOTS.pad.z), [this.group]);
     this.thr = Math.min(1, eng.heat.safeThrottle); this.touchThr = null; this.hotWarned = false; this.countdown = null; this.acc = 0; this.ended = false; this.endT = 0; this.reached = null; this.shake = 0; this.camInit = false; this.armed = false;
@@ -82,6 +84,7 @@ export class FlightMode {
   launch() {
     if (this.countdown != null || this.f.phase !== 'pad' || this.f.e.on) return;
     this.countdown = 3.999; $('btnLaunch').classList.add('hidden'); this.g.prompt(null); this.g.audio.beep(false); this.lastBeep = 3;
+    this.w.assembly?.setFold(0);   // swing the work platforms back before ignition
   }
 
   syncPose() {
@@ -221,7 +224,7 @@ export class FlightMode {
     const f = this.f, post = this.w.post; if (!this.group) { this.g.audio.setEngine(0); post.setHeat(new THREE.Vector4(0, 0, 0, 0)); return; }
     const eng = f.eng, t = performance.now() / 1000;
     const p = f.e.on ? f.e.thr * f.e.spool : 0, rho = airDensity(f.origin.y);
-    const radius = eng.radius * 0.95, len = 4 + 12 * p * Math.sqrt(eng.thrust / 115000);
+    const { radius, len } = flameSize(eng, p);
     this.flash = Math.max(0, this.flash - dt * 1.4);
     this.flame.update(t, p, radius, len, rho, eng.thrust);
     this.flame.setScale(this.w.h * this.w.renderer.getPixelRatio() / Math.tan(this.w.camera.fov * Math.PI / 360) / 2);
@@ -253,7 +256,11 @@ export class FlightMode {
       } else if (h < 70) {
         for (let i = 0; i < 8 * n * (1 - h / 70) * p + 0.5; i++) { const a = Math.random() * 6.283, s = 16 + Math.random() * 18; sm.emit(noz.x + Math.cos(a) * 2, 0.6, noz.z + Math.sin(a) * 2, Math.cos(a) * s, 2 + Math.random() * 5, Math.sin(a) * s, 2.4 + Math.random() * 2, 5 + Math.random() * 3.5, 0.55, 1.4); }
       }
-      if (h < 6000) for (let i = 0; i < 2 * n * p + 0.3; i++) { const j = () => (Math.random() - 0.5) * 1.5; sm.emit(noz.x - up.x * 3 + j(), noz.y - up.y * 3 + j(), noz.z - up.z * 3 + j(), f.vel.x * 0.2 - up.x * 25, f.vel.y * 0.2 - up.y * 25, f.vel.z * 0.2 - up.z * 25, 1.4 + Math.random(), 2.5 + Math.random() * 2, 0.5, 1.2); }
+      if (h < 6000) {
+        const nzs = this.group.userData.engine.userData.nozzles || [{ x: 0, y: 0, z: 0 }];
+        const qx = g => { const q = this.group.quaternion; return new THREE.Vector3(g.x, g.y, g.z).applyQuaternion(q); };
+        for (let i = 0; i < 2 * n * p + 0.3; i++) { const j = () => (Math.random() - 0.5) * 1.5; const off = qx(nzs[i % nzs.length]); sm.emit(noz.x + off.x - up.x * 3 + j(), noz.y + off.y - up.y * 3 + j(), noz.z + off.z - up.z * 3 + j(), f.vel.x * 0.2 - up.x * 25, f.vel.y * 0.2 - up.y * 25, f.vel.z * 0.2 - up.z * 25, 1.4 + Math.random(), 2.5 + Math.random() * 2, 0.5, 1.2); }
+      }
     }
     this.shake = Math.max(this.shake * Math.exp(-dt * 2), p * near * Math.min(1.6, eng.thrust / 90000) * (h < 80 ? 1 : 0.3) * 0.55 + this.flash * near * 0.8);
     // post: heat shimmer behind the nozzle, DOF on long-lens shots, motion blur on the chase cam

@@ -227,7 +227,72 @@ function mountMesh(d) {
   k.add(new THREE.CircleGeometry(R, 48), M.dark, xf([0, L, 0], [-Math.PI / 2, 0, 0]));
   return k.build(g);
 }
+
+// Engine-centre offsets for a cluster (tri, 8-around-1, or inner+outer rings). Units in metres.
+export function clusterOffsets(n, bellR, gap = 0.05) {
+  const out = [], pitch = 2 * bellR + gap;
+  const ring = (count, r, a0 = 0) => { for (let i = 0; i < count; i++) { const a = a0 + i / count * TAU; out.push({ x: Math.cos(a) * r, z: Math.sin(a) * r }); } };
+  if (n === 3) ring(3, pitch / Math.sqrt(3), Math.PI / 6);
+  else if (n === 9) { out.push({ x: 0, z: 0 }); ring(8, pitch / (2 * Math.sin(Math.PI / 8))); }
+  else { out.push({ x: 0, z: 0 }); ring(6, pitch); const o = n - 7; ring(o, pitch / (2 * Math.sin(Math.PI / o)), Math.PI / o); }
+  return out;
+}
+function clusterMesh(d) {
+  initMaterials();
+  const n = d.engines, L = d.length, bellR = d.bellRadius, gap = d.bellGap ?? 0.05, offs = clusterOffsets(n, bellR, gap);
+  const plateR = Math.max(d.radius, Math.max(...offs.map(o => Math.hypot(o.x, o.z))) + bellR + 0.08);
+  const g = new THREE.Group(), k = new Kit(), segs = n > 12 ? 20 : 24;
+  const plateH = 0.12, bellL = (L - plateH) * 0.7, ch = L - plateH - bellL, top = L, throat = bellR * 0.3;
+  // heat-shield plate, rim, underside soot ring, mount flange
+  k.add(new THREE.CylinderGeometry(plateR, plateR, plateH, 48), M.darkMatte, xf([0, top - plateH / 2, 0]));
+  k.add(new THREE.CylinderGeometry(plateR + 0.02, plateR, 0.04, 48), M.titanium, xf([0, top - plateH - 0.01, 0]));
+  k.add(new THREE.CylinderGeometry(plateR * 0.55, plateR * 0.98, 0.035, 40), M.pad, xf([0, top - plateH - 0.03, 0]));
+  k.add(new THREE.CylinderGeometry(plateR * 0.42, plateR * 0.42, 0.07, 24), M.titanium, xf([0, top + 0.02, 0]));
+  boltRing(k, plateR - 0.06, top - 0.02, n > 9 ? 24 : 18, 0.022, M.chromeTrim);
+  boltRing(k, plateR * 0.42, top + 0.05, 12, 0.02, M.chromeTrim);
+  // per-engine: collar through the plate, chamber, injector, small turbopump in the 30° gap, feed lines
+  for (const o of offs) {
+    k.add(new THREE.CylinderGeometry(bellR + 0.04, bellR + 0.055, 0.07, 16), M.titanium, xf([o.x, top - plateH - 0.02, o.z]));
+    k.add(new THREE.CylinderGeometry(throat * 1.7, throat * 1.05, ch * 0.5, 16), M.copper, xf([o.x, bellL + ch * 0.25, o.z]));
+    k.add(new THREE.SphereGeometry(throat * 1.7, 14, 8, 0, TAU, 0, Math.PI / 2), M.titanium, xf([o.x, bellL + ch * 0.5, o.z], [0, 0, 0], [1, 0.55, 1]));
+    k.add(new THREE.CylinderGeometry(throat * 0.9, throat * 1.1, ch * 0.3, 12), M.dark, xf([o.x, top - plateH - ch * 0.12, o.z]));
+    k.add(new THREE.TorusGeometry(bellR * 0.72, 0.022, 5, 20), M.copper, xf([o.x, bellL * 0.42, o.z], [Math.PI / 2, 0, 0]));
+    k.add(new THREE.TorusGeometry(bellR, 0.02, 5, 24), M.titanium, xf([o.x, 0.01, o.z], [Math.PI / 2, 0, 0]));
+    const a0 = Math.atan2(o.z, o.x), a = a0 + Math.PI / 6, pr = bellR * 0.55;
+    const px = o.x + Math.cos(a) * pr, pz = o.z + Math.sin(a) * pr, py = bellL + ch * 0.38;
+    k.add(new THREE.CylinderGeometry(bellR * 0.13, bellR * 0.13, bellR * 0.38, 12), M.dark, xf([px, py, pz]));
+    k.add(new THREE.TorusGeometry(bellR * 0.14, bellR * 0.045, 6, 12), M.titanium, xf([px, py + bellR * 0.1, pz], [Math.PI / 2, 0, 0]));
+    k.tube([V(px, py + bellR * 0.18, pz), V(px * 0.4 + o.x * 0.6, top - plateH * 0.4, pz * 0.4 + o.z * 0.6), V(o.x, top - 0.02, o.z)], bellR * 0.045, M.hose, 8);
+    k.tube([V(px, py, pz), V(o.x + Math.cos(a0 || a) * throat * 1.6, bellL + ch * 0.28, o.z + Math.sin(a0 || a) * throat * 1.6)], bellR * 0.035, M.hose, 6);
+  }
+  // ring manifold under the plate plus two cluster-level gimbal actuators
+  const manR = n === 3 ? plateR * 0.48 : (n === 9 ? plateR * 0.62 : plateR * 0.55);
+  k.add(new THREE.TorusGeometry(manR, 0.035, 6, 32), M.hose, xf([0, top - plateH - 0.08, 0], [Math.PI / 2, 0, 0]));
+  for (const a of [Math.PI * 0.75, Math.PI * 1.25]) {
+    const p0 = V(Math.cos(a) * plateR * 0.7, top, Math.sin(a) * plateR * 0.7), p1 = V(Math.cos(a) * plateR * 0.38, top - plateH - 0.16, Math.sin(a) * plateR * 0.38), mid = p0.clone().lerp(p1, 0.55);
+    k.rod(p0, mid, 0.05, 0.05, M.dark, 8); k.rod(mid, p1, 0.025, 0.025, M.chromeTrim, 8);
+  }
+  k.build(g);
+  // bells share one regen-tube material so a single emissiveIntensity lights every nozzle
+  const prof = []; for (let i = 0; i <= 24; i++) { const t = i / 24; prof.push(new THREE.Vector2(throat + (bellR - throat) * (1 - Math.pow(1 - t, 2.2)) * 0.15 + (bellR - throat) * Math.pow(t, 0.62) * 0.85, (1 - t) * bellL)); }
+  const bm = bellMaps();
+  const nozMat = new THREE.MeshStandardMaterial({ color: 0xffffff, map: bm.color, normalMap: bm.normal, normalScale: new THREE.Vector2(0.9, 0.9), metalness: 0.85, roughness: 0.42, side: THREE.DoubleSide, emissive: 0xff6a2a, emissiveMap: bm.emissive, emissiveIntensity: 0 });
+  nozMat.userData.own = true; track(nozMat);
+  const unit = new THREE.LatheGeometry(prof.reverse(), segs), bells = [];
+  const ik = new Kit(), innerMat = new THREE.MeshBasicMaterial({ color: 0x000000 }); innerMat.userData.own = true;
+  for (const o of offs) {
+    bells.push(unit.clone().applyMatrix4(xf([o.x, 0, o.z])));
+    ik.add(new THREE.CircleGeometry(throat * 1.1, 16), innerMat, xf([o.x, bellL - 0.02, o.z], [Math.PI / 2, 0, 0]));
+  }
+  unit.dispose();
+  const bell = new THREE.Mesh(mergeGeometries(bells, false), nozMat); bell.castShadow = true; bell.receiveShadow = true; g.add(bell); bells.forEach(b => b.dispose());
+  ik.build(g, false);
+  g.userData.nozMat = nozMat; g.userData.innerMat = innerMat;
+  g.userData.nozzles = offs.map(o => ({ x: o.x, y: 0, z: o.z, radius: bellR }));
+  return g;
+}
 export function engineMesh(d) {
+  if ((d.engines || 1) > 1) return clusterMesh(d);
   const g = new THREE.Group(), k = new Kit(), L = d.length, R = d.radius, throat = R * 0.3, bellL = L * 0.7, top = L;
   // bell: parabolic contour from throat to exit, regen tubes + temper gradient
   const prof = []; for (let i = 0; i <= 32; i++) { const t = i / 32; prof.push(new THREE.Vector2(throat + (R - throat) * (1 - Math.pow(1 - t, 2.2)) * 0.15 + (R - throat) * Math.pow(t, 0.62) * 0.85, (1 - t) * bellL)); }
@@ -262,6 +327,7 @@ export function engineMesh(d) {
   const innerMat = new THREE.MeshBasicMaterial({ color: 0x000000 }); innerMat.userData.own = true;
   const inner = new THREE.Mesh(new THREE.CircleGeometry(throat * 1.1, 24), innerMat); inner.rotation.x = Math.PI / 2; inner.position.y = bellL - 0.02; g.add(inner);
   g.userData.nozMat = nozMat; g.userData.innerMat = innerMat;
+  g.userData.nozzles = [{ x: 0, y: 0, z: 0, radius: R }];
   return g;
 }
 function finGeo(d) {

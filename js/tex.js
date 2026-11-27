@@ -2,7 +2,7 @@
 // Phone/Low: 1K colour + ARM only (no normal maps). Medium: 1K with normals. High/Ultra: 2K where shipped.
 import * as THREE from 'three';
 
-const HAS2K = new Set(['hangar_concrete_floor', 'corrugated_iron_02', 'concrete_floor_worn_001']);
+const HAS2K = new Set(['hangar_concrete_floor', 'corrugated_iron_02', 'concrete_floor_worn_001', 'diamond_plate']);
 const loader = new THREE.TextureLoader();
 const cache = new Map();
 let tier = 'high', maxAniso = 8;

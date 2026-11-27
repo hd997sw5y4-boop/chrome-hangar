@@ -1,0 +1,28 @@
+{
+ "id": "cluster_nine",
+ "name": "Nine Cluster",
+ "section": "propulsion",
+ "kind": "engine",
+ "attach": "engine",
+ "engines": 9,
+ "bellRadius": 0.26,
+ "bellGap": 0.05,
+ "length": 1.55,
+ "radius": 1.14,
+ "dryMass": 2240,
+ "thrust": 900000,
+ "isp": 285,
+ "minThrottle": 0.4,
+ "gimbalDeg": 4,
+ "heat": {
+  "safeThrottle": 0.88,
+  "risePerSec": 14,
+  "coolPerSec": 6,
+  "baseTemp": 670,
+  "spanTemp": 2350,
+  "limitTemp": 3500
+ },
+ "color": "#ffc078",
+ "blurb": "A ring of eight plus one in the middle. One engine that size couldn't lift a heavy stack, so this spreads the work across nine. Needs big tanks — it drinks fuel quickly.",
+ "unlockStars": 5
+}

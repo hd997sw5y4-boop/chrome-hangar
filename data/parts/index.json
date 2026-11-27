@@ -1,1 +1,26 @@
-{"parts": ["tank_short", "tank_tall", "nose", "mount", "spark", "ember", "thunder", "fins", "legs", "tank_mini", "tank_mid", "tank_carbon", "tank_long", "nose_needle", "nose_dome", "flicker", "vesper", "ridge", "titan"]}
+{
+ "parts": [
+  "tank_short",
+  "tank_tall",
+  "nose",
+  "mount",
+  "spark",
+  "ember",
+  "thunder",
+  "fins",
+  "legs",
+  "tank_mini",
+  "tank_mid",
+  "tank_carbon",
+  "tank_long",
+  "nose_needle",
+  "nose_dome",
+  "flicker",
+  "vesper",
+  "ridge",
+  "titan",
+  "cluster_tri",
+  "cluster_nine",
+  "cluster_heavy"
+ ]
+}
