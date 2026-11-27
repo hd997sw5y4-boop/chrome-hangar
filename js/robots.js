@@ -1,14 +1,15 @@
-// Worker robots: original, realistic humanoid service robots (about 1.75 m) built procedurally.
-// White clear-coated (or satin-silver) shell panels with thin seams, brushed-metal joints (procedural anisotropic),
-// a graphite under-suit, plain dark rubber soles and fingertips, a glossy black glass faceplate and visible linear
-// actuators at the elbows and knees. Every robot shares one rigidly-skinned geometry set (6 draw calls per robot),
-// with its own skeleton. Legs use planted-foot IK (no foot sliding); upper body is code-animated and smoothed.
-// Jobs: patrol, inspect (reach toward the rocket), console (hands on a panel). Click one: it stops, turns, looks at
-// you and waves with a soft servo whir. Pad crews walk clear at countdown and are gone by liftoff.
+// Hangar helper robots: a pair of original, realistic humanoid service robots (about 1.75 m) built procedurally,
+// one satin silver and one dark gunmetal. Clear-coated shell panels with thin seams, brushed-metal joints (procedural anisotropic), a graphite
+// under-suit, plain dark rubber soles and fingertips, a black glass faceplate with a soft emissive eye display and
+// visible linear actuators at the elbows and knees. One shared rigidly-skinned geometry set (6 draw calls each).
+// Walk: a phase-locked gait (the cycle advances with distance walked, so planted feet never slide) with a full
+// stride, heel strike and toe-off, arm swing, hip turn and a soft torso bob; upper body is code-animated and smoothed.
+// Jobs: rounds (inspect the rocket, work the console, walk the floor), inspect, console, check the stand, follow you.
+// Click one: he turns, looks at you and waves, and a small job bar shows. Click him twice quickly: he follows you.
+// Hooks: game.robots.list / .byId, robot.state, .jobKey, .enabled, .setJob({ type: 'custom', tick }), robots.send(r, key).
 import * as THREE from 'three';
 import { mergeGeometries } from '../vendor/three/addons/utils/BufferGeometryUtils.js';
-import { SPOTS } from './env.js';
-import { C, R_ROBOT, detour, resolve, hangarFrame, padObstacles } from './collide.js';
+import { C, R_ROBOT, R_PLAYER, detour, resolve, hangarFrame, playerFrame } from './collide.js';
 
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const UP = V3(0, 1, 0);
@@ -107,6 +108,8 @@ function buildParts() {
   add('head', 'shell', sph(0.093, 0.118, 0.108, 0, 0.088, -0.006, 32, 24));
   { const g = new THREE.SphereGeometry(1, 40, 28, Math.PI / 2 - 0.98, 1.96, 0.5, 1.72); g.scale(0.0962, 0.1205, 0.1105); g.translate(0, 0.088, -0.004); add('head', 'visor', g); }
   add('head', 'dark', sph(0.072, 0.03, 0.07, 0, 0.0, -0.005));   // jaw/neck housing
+  // face display: two soft eye bars just under the glass, tilted to follow its curve
+  for (const s of [1, -1]) { const g = new THREE.SphereGeometry(1, 20, 10); g.scale(0.0165, 0.0062, 0.0032); g.rotateY(s * 0.41); g.translate(s * 0.034, 0.1, 0.0975); add('head', 'glow', g); }
   for (const s of [1, -1]) {
     add('head', 'metal', cylX(0.03, 0.022, s * 0.093, 0.085, -0.01, 24));
     const ring = new THREE.TorusGeometry(0.022, 0.0025, 6, 24); ring.rotateY(Math.PI / 2); ring.translate(s * 0.1045, 0.085, -0.01); add('head', 'glow', ring);
@@ -202,53 +205,68 @@ function brushedTex() {   // grey streaks along u (lathe/cylinder circumference)
 }
 function makeMaterials(lite) {
   const Phys = lite ? THREE.MeshStandardMaterial : THREE.MeshPhysicalMaterial;
-  const shellW = new Phys({ color: 0xeeeff0, roughness: 0.3, metalness: 0.0, ...(lite ? {} : { clearcoat: 0.7, clearcoatRoughness: 0.12, specularIntensity: 0.6 }) });
-  const shellS = new Phys({ color: 0xc4c8cc, roughness: 0.27, metalness: 0.88, ...(lite ? {} : { clearcoat: 0.35, clearcoatRoughness: 0.2 }) });
+  // two shell finishes so the pair reads apart at a glance: satin silver, and dark gunmetal under a clear coat.
+  // Both get a soft, readable highlight from the hangar probe, never a mirror.
+  const silver = new Phys({ color: 0xc8ccd0, roughness: 0.28, metalness: 0.85, envMapIntensity: 1.0, ...(lite ? {} : { clearcoat: 0.35, clearcoatRoughness: 0.18 }) });
+  const gunmetal = new Phys({ color: 0x3a3e44, roughness: 0.36, metalness: 0.6, envMapIntensity: 1.0, ...(lite ? {} : { clearcoat: 0.6, clearcoatRoughness: 0.14, specularIntensity: 0.7 }) });
   // brushed metal in code: fine streak texture drives roughness/colour grain; anisotropic highlights on desktop
   const brush = brushedTex();
-  const metal = new Phys({ color: 0xd6d9dc, metalness: 1, roughness: 0.42, map: brush, roughnessMap: brush, ...(lite ? {} : { anisotropy: 0.75, anisotropyRotation: Math.PI / 2 }) });
+  const metal = new Phys({ color: 0xd6d9dc, metalness: 1, roughness: 0.4, map: brush, roughnessMap: brush, envMapIntensity: 1.0, ...(lite ? {} : { anisotropy: 0.6, anisotropyRotation: Math.PI / 2 }) });
   const dark = new THREE.MeshStandardMaterial({ color: 0x1b1d21, metalness: 0.35, roughness: 0.48 });
   const rubber = new THREE.MeshStandardMaterial({ color: 0x1e1f21, metalness: 0, roughness: 0.82 });   // plain dark rubber
-  const visor = new Phys({ color: 0x030405, roughness: 0.06, metalness: 0.3, ...(lite ? {} : { clearcoat: 1, clearcoatRoughness: 0.03, specularIntensity: 1 }) });
+  // black glass faceplate: a dielectric (no metal tint) so it only reflects the real hangar at a glancing angle,
+  // with a sharp clear-coat glint on top; the face itself is the soft emissive eye display (glow material)
+  const visor = new Phys({ color: 0x050607, roughness: 0.1, metalness: 0.0, envMapIntensity: 0.9, ...(lite ? {} : { clearcoat: 1, clearcoatRoughness: 0.05, specularIntensity: 0.8 }) });
   const glow = new THREE.MeshStandardMaterial({ color: 0x0a1418, emissive: 0x6fdcff, emissiveIntensity: 1.6, roughness: 0.4 });
-  return { shellW, shellS, metal, dark, rubber, visor, glow };
+  return { silver, gunmetal, metal, dark, rubber, visor, glow };
 }
 
-// ---------------- one robot ----------------
+// ---------------- the robot ----------------
 const JOINTS = ['spineX', 'spineY', 'chestX', 'chestZ', 'neckX', 'neckY', 'headX', 'headZ',
   'shLx', 'shLy', 'shLz', 'elL', 'wrLx', 'wrLz', 'curlL', 'shRx', 'shRy', 'shRz', 'elR', 'wrRx', 'wrRz', 'curlR'];
 const REST = { spineX: 0, spineY: 0, chestX: 0, chestZ: 0, neckX: 0, neckY: 0, headX: 0, headZ: 0, shLx: 0.04, shLy: 0, shLz: 0.07, elL: -0.22, wrLx: 0, wrLz: 0, curlL: 0.45, shRx: 0.04, shRy: 0, shRz: -0.07, elR: -0.22, wrRx: 0, wrRz: 0, curlR: 0.45 };
+// gait: one cycle = two steps. Each foot swings for SWING of the cycle and is planted (world-locked) the rest.
+const SWING = 0.4, WALK = 1.1, RATE_MIN = 0.9;
+// stride (two steps) grows with speed like a person's: ~1.1 m at 1.1 m/s, ~1.3 m at a brisk 1.45 m/s
+const strideFor = v => clamp(0.5 + 0.56 * v, 0.7, 1.32);
 
 class Robot {
   constructor(sys, opts) {
     const T = template(), M = sys.M;
-    this.sys = sys; this.opts = opts;
+    this.sys = sys; this.id = opts.id; this.finish = opts.finish; this.where = 'hangar';
+    this.enabled = true;   // false = frozen in place (no steering, no animation); for hooks such as a breakdown
     this.group = new THREE.Group(); this.group.name = 'robot';
     const { map, list } = makeBones(); this.b = map;
     this.group.add(map.root);
     const sk = new THREE.Skeleton(list, T.inverses);
     for (const m of MATS) {
       if (!T.geos[m]) continue;
-      const mat = m === 'shell' ? (opts.silver ? M.shellS : M.shellW) : M[m];
-      const mesh = new THREE.SkinnedMesh(T.geos[m], mat);
+      const mesh = new THREE.SkinnedMesh(T.geos[m], m === 'shell' ? M[opts.finish] : M[m]);
       mesh.bind(sk, new THREE.Matrix4());
       mesh.frustumCulled = false; mesh.castShadow = !sys.lite && m !== 'glow'; mesh.receiveShadow = m === 'shell' || m === 'metal';
       this.group.add(mesh);
     }
-    this.ground = opts.ground || 0;
-    this.pos = V3(opts.pos[0], this.ground, opts.pos[1]); this.yaw = opts.yaw ?? 0; this.v = 0; this.yawRate = 0;
+    this.ground = 0;
+    this.pos = V3(opts.pos[0], 0, opts.pos[1]); this.yaw = opts.yaw ?? 0; this.v = 0; this.yawRate = 0;
     this.pose = { ...REST }; this.t = Math.random() * 10; this.phase = Math.random() * 10;
-    this.feet = ['L', 'R'].map(S => { const s = S === 'L' ? 1 : -1; return { S, s, pos: this.footIdeal(s, this.pos, this.yaw), yaw: this.yaw, sw: null }; });
-    this.lastStep = 1; this.sway = 0; this.bob = 0; this.restT = 0;
-    this.job = opts.job; this.wp = 0; this.wait = 1 + Math.random() * 2;
+    this.ph = 0.42;   // gait phase, parked where both feet are planted
+    this.feet = ['L', 'R'].map((S, i) => { const s = S === 'L' ? 1 : -1; return { S, s, off: i * 0.5, pos: this.footIdeal(s, this.pos, this.yaw), yaw: this.yaw, swinging: false, from: null, fy: 0, lift: 0, pitch: 0 }; });
+    this.walkK = 0; this.py = HIP_Y;
+    this.setJob(opts.job);
     this.glanceT = 2; this.glance = { yaw: 0, pitch: 0 };
-    this.greet = null; this.look = null; this.workT = Math.random() * 6;
+    this.greet = null; this.workT = Math.random() * 6;
     this.group.position.copy(this.pos);
   }
+  // job: { type: 'patrol' | 'inspect' | 'console' | 'follow' | 'custom', ... }. A 'custom' job's
+  // tick(robot, dt, ctx) returns { goal, speed, look, gesture } each frame, so other systems can drive him.
+  setJob(job, key = job.type) { this.job = job; this.jobKey = key; this.wp = 0; this.wait = job.type === 'patrol' ? 1 : 0; this.workT = 0; }
+  // what he is doing right now, for UI and hooks: 'greeting' | 'walking' | 'working' | 'following' | 'idle'
+  get state() { return this.greet ? 'greeting' : this.jobKey === 'follow' ? 'following' : this.gesture ? 'working' : this.v > 0.05 ? 'walking' : 'idle'; }
   footIdeal(s, p, yaw) { return V3(p.x + Math.cos(yaw) * 0.105 * s, this.ground, p.z - Math.sin(yaw) * 0.105 * s); }
   fwd(yaw = this.yaw) { return V3(Math.sin(yaw), 0, Math.cos(yaw)); }
+  at(x, z, face, tol = 0.15) { return Math.hypot(x - this.pos.x, z - this.pos.z) < tol && (face == null || Math.abs(wrapA(face - this.yaw)) < 0.2); }
 
-  // ---- locomotion: steer toward a goal, turn in place when the heading is far off ----
+  // ---- locomotion: steer toward a goal; gentle curves while walking, turn in place when the heading is far off ----
   steer(dt, goal, speed, obs) {
     let wantV = 0, wantYaw = this.yaw, aim = goal;
     if (goal && obs?.length) {
@@ -257,52 +275,60 @@ class Robot {
     }
     if (aim) {
       const dx = aim.x - this.pos.x, dz = aim.z - this.pos.z, d = Math.hypot(dx, dz);
-      if (goal.face != null && d < 0.06 && aim === goal) wantYaw = goal.face;
-      else if (d > 0.04) { wantYaw = Math.atan2(dx, dz); const err = Math.abs(wrapA(wantYaw - this.yaw)); wantV = err < 0.5 ? speed * clamp(d / 0.6, 0.25, 1) * (1 - err) : 0; }
-      else if (goal.face != null && aim === goal) wantYaw = goal.face;
+      const stopAt = goal.stop ?? 0.04;
+      if (d > stopAt) {
+        wantYaw = Math.atan2(dx, dz); const err = Math.abs(wrapA(wantYaw - this.yaw));
+        const brake = aim === goal ? clamp((d - stopAt) / 0.9, 0.2, 1) : 1;   // ease into the stop over the last metre
+        wantV = speed * brake * clamp(1 - err / 1.1, 0, 1);
+      } else if (goal.face != null && aim === goal) wantYaw = goal.face;
     }
-    // speed ramps gently, and the body never outruns a planted foot (keeps every stance leg within reach)
-    this.v = wantV > this.v ? Math.min(wantV, this.v + 0.9 * dt) : Math.max(wantV, this.v - 1.8 * dt);
-    const fw0 = this.fwd(); let lag = 0;
-    for (const f of this.feet) if (!f.sw) lag = Math.min(lag, (f.pos.x - this.pos.x) * fw0.x + (f.pos.z - this.pos.z) * fw0.z);
-    if (lag < -0.24) this.v = Math.max(0, this.v - 4 * dt);
-    const err = wrapA(wantYaw - this.yaw), maxR = 1.6;
-    const rate = clamp(err * 3, -maxR, maxR);
-    this.yawRate = damp(this.yawRate, rate, 6, dt);
+    this.v = wantV > this.v ? Math.min(wantV, this.v + 1.1 * dt) : Math.max(wantV, this.v - 2.0 * dt);
+    const err = wrapA(wantYaw - this.yaw), maxR = this.v > 0.3 ? 1.3 : 1.8;
+    this.yawRate = damp(this.yawRate, clamp(err * 3, -maxR, maxR), 6, dt);
     this.yaw += this.yawRate * dt;
-    const f = this.fwd(); this.pos.addScaledVector(f, this.v * dt);
+    this.pos.addScaledVector(this.fwd(), this.v * dt);
     if (obs?.length) { const p = resolve(this.pos.x, this.pos.z, R_ROBOT, obs); this.pos.x = p.x; this.pos.z = p.z; }
-    return Math.hypot((goal?.x ?? this.pos.x) - this.pos.x, (goal?.z ?? this.pos.z) - this.pos.z);
   }
 
-  // ---- planted-foot gait: a foot only moves while it is swinging, so stance feet never slide ----
+  // ---- phase-locked gait: the cycle advances with distance walked, so planted feet never slide ----
   gait(dt) {
-    const swinging = this.feet.find(f => f.sw);
-    if (swinging) {
-      const sw = swinging.sw; sw.t = Math.min(1, sw.t + dt / sw.dur);
-      const k = smooth(sw.t); swinging.pos.lerpVectors(sw.from, sw.to, k); swinging.yaw = sw.fy + wrapA(sw.ty - sw.fy) * k;
-      swinging.lift = Math.sin(Math.PI * sw.t) * sw.h; swinging.pitch = Math.sin(Math.PI * sw.t) * 0.35 * (sw.t < 0.5 ? 1 : -0.6) * sw.h / 0.08;
-      if (sw.t >= 1) { swinging.sw = null; swinging.lift = 0; swinging.pitch = 0; this.restT = 0; }
-      return;
-    }
-    this.restT += dt;
-    const moving = this.v > 0.06 || Math.abs(this.yawRate) > 0.25;
-    const dur = clamp(0.5 - this.v * 0.08, 0.36, 0.5);
-    const pY = this.yaw + this.yawRate * dur * 0.9;
-    const pPos = this.pos.clone().addScaledVector(this.fwd(), this.v * dur * 1.5);
-    let best = null, bestE = 0;
+    const v = this.v, kv = clamp(v / 0.3, 0, 1);
+    const stride = strideFor(v);
+    let need = false;   // a foot is far from where it should rest (stopping, turning in place)
+    for (const f of this.feet) if (!f.swinging && (f.pos.distanceTo(this.footIdeal(f.s, this.pos, this.yaw)) > 0.06 || Math.abs(wrapA(f.yaw - this.yaw)) > 0.22)) need = true;
+    const midSwing = this.feet.some(f => f.swinging);
+    const moving = v > 0.05 || Math.abs(this.yawRate) > 0.35 || need || midSwing;
+    const rate = moving ? Math.max(v / stride, RATE_MIN) : 0;   // cycles per second
+    this.ph = (this.ph + rate * dt) % 1;
+    this.rate = rate; this.walkK = damp(this.walkK, kv, 5, dt);
+    const stepLen = rate > 0 ? v / rate : 0;   // the stride we actually cover at this cadence
     for (const f of this.feet) {
-      const ideal = this.footIdeal(f.s, pPos, pY);
-      const e = f.pos.distanceTo(this.footIdeal(f.s, this.pos, this.yaw)) + Math.abs(wrapA(f.yaw - this.yaw)) * 0.25;
-      const score = (moving ? (f.S === this.lastFoot ? -1 : 1) : 0) + e;
-      if (!best || score > bestE) { best = f; bestE = score; best._ideal = ideal; best._e = e; }
+      const u = (this.ph + f.off) % 1;
+      if (u < SWING && moving) {
+        if (!f.swinging) { f.swinging = true; f.from = f.pos.clone(); f.fy = f.yaw; }
+        const s = u / SWING, tLeft = (SWING - u) / Math.max(rate, 1e-3);
+        // land under where the body will be, ahead of the hip by half the stance travel
+        const pyaw = this.yaw + this.yawRate * tLeft;
+        const pp = this.pos.clone().addScaledVector(this.fwd(), v * tLeft);
+        const land = this.footIdeal(f.s, pp, pyaw).addScaledVector(this.fwd(pyaw), stepLen * (1 - SWING) * 0.5 * kv);
+        const e = smooth(clamp(s * 1.08, 0, 1));
+        f.pos.lerpVectors(f.from, land, e);
+        f.yaw = f.fy + wrapA(pyaw - f.fy) * e;
+        const h = clamp(0.035 + stepLen * 0.05, 0.035, 0.1) * (0.45 + 0.55 * kv);
+        f.lift = h * Math.sin(Math.PI * Math.pow(s, 0.85));
+        // toes stay pointed down right after push-off, heel leads into the landing
+        f.pitch = (0.35 * (1 - smooth(clamp(s / 0.35, 0, 1))) - 0.22 * smooth(clamp((s - 0.55) / 0.4, 0, 1)) * (1 - smooth(clamp((s - 0.93) / 0.07, 0, 1)))) * kv;
+      } else {
+        f.swinging = false;
+        f.lift = 0;
+        // stance: heel rolls flat after strike, then the heel peels up before toe-off
+        const p = moving ? (u - SWING) / (1 - SWING) : 0.5;
+        const strike = -0.12 * (1 - smooth(clamp(p / 0.12, 0, 1)));
+        const peel = 0.38 * smooth(clamp((p - 0.7) / 0.3, 0, 1));
+        f.pitch = (strike + peel) * kv;
+        f.lift = Math.sin(Math.max(0, peel * kv)) * 0.13;   // ankle rises as the foot pivots on its toes
+      }
     }
-    const need = moving ? this.restT > 0.02 : (best._e > 0.035 && this.restT > 0.12);
-    if (!need) return;
-    const dist = best.pos.distanceTo(best._ideal);
-    if (dist < 0.01 && !moving) return;
-    best.sw = { from: best.pos.clone(), to: best._ideal, fy: best.yaw, ty: pY, t: 0, dur: moving ? dur : 0.34, h: clamp(0.03 + dist * 0.14, 0.03, 0.085) };
-    this.lastFoot = best.S;
   }
 
   // ---- two-bone leg IK in the pelvis frame ----
@@ -317,11 +343,11 @@ class Robot {
     const knee = Math.PI - Math.acos(clamp((L_THIGH ** 2 + L_SHIN ** 2 - r * r) / (2 * L_THIGH * L_SHIN), -1, 1));
     const a1 = Math.acos(clamp((L_THIGH ** 2 + r * r - L_SHIN ** 2) / (2 * L_THIGH * r), -1, 1));
     const phi = beta + a1;
-    hip.rotation.set(-phi, clamp(wrapA(f.yaw - this.yaw), -0.7, 0.7), roll);
+    hip.rotation.set(-phi, clamp(wrapA(f.yaw - this.yaw) - b.pelvis.rotation.y, -0.7, 0.7), roll);
     kn.rotation.set(knee, 0, 0);
-    const pelvisPitch = b.pelvis.rotation.x;
-    an.rotation.set(phi - knee - pelvisPitch - (f.pitch || 0) * 0.6, 0, -roll);
-    toe.rotation.set(Math.max(0, f.pitch || 0) * 0.9, 0, 0);
+    // foot pitch: + = heel up / toes down; the toe joint bends back so the toes stay flat while the heel peels
+    an.rotation.set(phi - knee - b.pelvis.rotation.x + (f.pitch || 0), 0, -roll);
+    toe.rotation.set(-Math.max(0, f.pitch || 0), 0, 0);
   }
 
   // ---- head/torso look at a world point ----
@@ -334,7 +360,7 @@ class Robot {
   update(dt, ctx) {
     this.t += dt;
     const P = { ...REST }, t = this.t, job = this.job;
-    let goal = null, speed = 0.85, look = null, gesture = null; let waveT = 0;
+    let goal = null, speed = WALK, look = null, gesture = null, waveT = 0;
 
     if (this.greet) {
       const g = this.greet; g.t += dt;
@@ -345,22 +371,40 @@ class Robot {
       look = ctx.cam; waveT = g.t; if (g.t > 0.35 && g.t < 3.1) gesture = 'wave';
       if (!g.whir2 && g.t > 0.4) { g.whir2 = true; this.sys.whir(0.5, 1.3); }
       if (g.t > 3.4) this.greet = null;
-    } else if (job.type === 'patrol' || job.type === 'leave') {
-      const pts = job.path, w = pts[this.wp % pts.length];
-      if (this.wait > 0 && job.type === 'patrol') { this.wait -= dt; goal = { x: this.pos.x, z: this.pos.z, face: w.face ?? null }; if (w.look) look = w.look; }
-      else {
-        goal = w; speed = job.speed || 0.85;
-        const d = Math.hypot(w.x - this.pos.x, w.z - this.pos.z);
-        if (d < 0.2) { if (job.type === 'leave') { if (this.wp < pts.length - 1) this.wp++; else goal = { x: w.x, z: w.z }; } else { this.wp = (this.wp + 1) % pts.length; this.wait = w.pause ?? (1.5 + Math.random() * 2.5); } }
+    } else if (job.type === 'follow') {
+      // walk to a spot just beside you, keep a polite distance, look at you while waiting
+      const p = ctx.player;
+      if (p) {
+        const dx = this.pos.x - p.x, dz = this.pos.z - p.z, d = Math.hypot(dx, dz) || 1;
+        const tx = p.x + dx / d * 1.6, tz = p.z + dz / d * 1.6;
+        if (d > 2.4 || (this.v > 0.05 && d > 1.8)) { goal = { x: tx, z: tz, stop: 0.15 }; speed = clamp(0.8 + (d - 2) * 0.35, 0.9, 1.5); }
+        else goal = { x: this.pos.x, z: this.pos.z, face: Math.atan2(p.x - this.pos.x, p.z - this.pos.z) };
+        look = ctx.cam;
       }
+    } else if (job.type === 'patrol') {
+      const pts = job.path, w = pts[this.wp % pts.length];
+      if (this.wait > 0) {
+        goal = { x: w.x, z: w.z, face: w.face ?? null }; if (w.look) look = w.look;
+        if (!w.act || this.at(w.x, w.z, w.face, 0.25)) this.wait -= dt;
+        if (w.act && this.at(w.x, w.z, w.face, 0.25)) { gesture = w.act; if (w.act === 'inspect') look = w.target; }
+        if (this.wait <= 0) this.wp = (this.wp + 1) % pts.length;
+      } else {
+        goal = w;
+        if (Math.hypot(w.x - this.pos.x, w.z - this.pos.z) < 0.2) this.wait = w.dur ?? w.pause ?? (1.5 + Math.random() * 2.5);
+      }
+    } else if (job.type === 'custom') {
+      const o = job.tick?.(this, dt, ctx) || {};
+      goal = o.goal ?? null; speed = o.speed ?? WALK; look = o.look ?? null; gesture = o.gesture ?? null;
     } else if (job.type === 'inspect' || job.type === 'console') {
       goal = { x: job.at[0], z: job.at[1], face: job.face };
-      if (Math.hypot(job.at[0] - this.pos.x, job.at[1] - this.pos.z) < 0.15 && Math.abs(wrapA(job.face - this.yaw)) < 0.2) gesture = job.type;
+      if (this.at(job.at[0], job.at[1], job.face)) gesture = job.type;
       if (job.type === 'inspect') look = job.target;
     }
 
+    this.gesture = gesture;
     this.steer(dt, goal, speed, ctx?.obs);
     this.gait(dt);
+    const wk = this.walkK, ph = this.ph;
 
     // idle breathing + sway, occasional glances
     const br = Math.sin(t * 1.25 + this.phase);
@@ -369,13 +413,17 @@ class Robot {
     this.glanceT -= dt;
     if (this.glanceT < 0) { this.glanceT = 2.5 + Math.random() * 4; this.glance = Math.random() < 0.4 ? { yaw: 0, pitch: 0 } : { yaw: (Math.random() - 0.5) * 1.2, pitch: (Math.random() - 0.5) * 0.3 }; }
 
-    // walking arm swing, opposite to the legs, from where the feet are relative to the body
-    if (this.v > 0.05 || this.feet.some(f => f.sw)) {
-      const fw = this.fwd(), off = f => (f.pos.x - this.pos.x) * fw.x + (f.pos.z - this.pos.z) * fw.z;
-      const fl = off(this.feet[0]), fr = off(this.feet[1]), k = clamp(this.v / 0.85, 0, 1);
-      P.shLx = 0.04 - fr * 1.5 * k; P.shRx = 0.04 - fl * 1.5 * k;
-      P.elL = -0.25 - Math.max(0, -P.shLx) * 0.6; P.elR = -0.25 - Math.max(0, -P.shRx) * 0.6;
-      P.spineY = (fl - fr) * 0.25 * k; P.chestX = 0.035 * k;
+    // walking: arms swing opposite the legs (left arm forward as the right heel strikes), elbows bend more going forward,
+    // the chest counter-turns against the hips and leans a touch into the walk
+    const hipYaw = -0.075 * wk * Math.cos(TAU * (ph - SWING));       // left hip forward at left heel strike
+    if (wk > 0.01) {
+      const A = 0.3 * wk * clamp(this.v / WALK, 0.5, 1.25);
+      const sL = Math.cos(TAU * (ph - (0.5 + SWING)));                 // +1 when the right heel strikes
+      P.shLx = 0.04 - A * sL; P.shRx = 0.04 + A * sL;
+      P.elL = -0.24 - 0.32 * wk * Math.max(0, sL); P.elR = -0.24 - 0.32 * wk * Math.max(0, -sL);
+      P.shLz = 0.09; P.shRz = -0.09; P.curlL = P.curlR = 0.5;
+      P.spineY = -hipYaw * 1.4; P.spineX = 0.03 * wk; P.chestX += 0.025 * wk;
+      P.neckX = -0.02 * wk;
     }
 
     if (gesture === 'wave') {
@@ -398,36 +446,35 @@ class Robot {
     }
 
     // head + torso aim
-    let ly = this.glance.yaw, lp = this.glance.pitch + (gesture === 'console' ? 0.25 : 0);
+    let ly = this.glance.yaw * (1 - wk * 0.6), lp = this.glance.pitch + (gesture === 'console' ? 0.25 : 0);
     if (look) { const a = this.lookAngles(look); ly = clamp(a.yaw, -1.4, 1.4); lp = clamp(a.pitch, -0.6, 0.7); }
     P.spineY += ly * 0.15; P.neckY = ly * 0.45; P.headX = lp * 0.65; P.neckX += lp * 0.35;
     P.headZ = Math.sin(t * 0.5 + this.phase) * 0.02;
 
-    // smooth every joint toward its target
-    const k = this.greet ? 7 : 4.5;
+    // smooth every joint toward its target (arms follow the gait closely so the swing stays in time)
+    const k = this.greet ? 7 : wk > 0.2 ? 10 : 4.5;
     for (const j of JOINTS) this.pose[j] = damp(this.pose[j], P[j], j === 'neckY' || j === 'headX' ? 5 : k, dt);
     const q = this.pose, b = this.b;
 
-    // pelvis: height bob and lateral sway toward the stance foot
-    const sw = this.feet.find(f => f.sw);
-    const bobT = sw ? Math.sin(Math.PI * sw.sw.t) : 0;
-    this.bob = damp(this.bob, (sw ? 0.008 * bobT : 0) - clamp(this.v / 0.85, 0, 1) * 0.03, 10, dt);
-    this.sway = damp(this.sway, sw ? -sw.s * 0.018 * bobT : 0, 8, dt);
+    // pelvis: highest over the planted foot at mid-stance, lowest in double support (a soft ~2 cm bob),
+    // shifts over the stance foot, turns with the stride; then drops only as far as it must to keep both legs in reach
+    const bob = 0.011 * wk * Math.cos(2 * TAU * (ph - (SWING + (1 - SWING) / 2)));
+    const sway = 0.017 * wk * Math.cos(TAU * (ph - (SWING + (1 - SWING) / 2)));   // + = over the left foot
     const crouch = gesture === 'inspect' ? 0.01 : 0;
-    // drop the hips when a foot is far out so every leg stays within reach (long strides, stopping mid-step)
-    let py = HIP_Y - 0.022 + this.bob - crouch + br * 0.002;
+    let py = HIP_Y - 0.022 - 0.022 * wk + bob - crouch + br * 0.002;
     const cy = Math.cos(this.yaw), sy = Math.sin(this.yaw), reach = (L_THIGH + L_SHIN) * 0.995;
     for (const f of this.feet) {
-      const hx = this.pos.x + cy * (HIP_OFF[0] * f.s + this.sway), hz = this.pos.z - sy * (HIP_OFF[0] * f.s + this.sway);
+      const hx = this.pos.x + cy * (HIP_OFF[0] * f.s + sway), hz = this.pos.z - sy * (HIP_OFF[0] * f.s + sway);
       const h = Math.min(reach - 0.01, Math.hypot(f.pos.x - hx, f.pos.z - hz));
       py = Math.min(py, Math.sqrt(reach * reach - h * h) - HIP_OFF[1] + ANKLE_H + (f.lift || 0) + f.pos.y - this.ground);
     }
-    b.pelvis.position.set(this.sway, py, 0);
-    b.pelvis.rotation.set(0.02, sw ? sw.s * 0.05 * bobT : 0, -this.sway * 0.8);
+    this.py = py < this.py ? py : damp(this.py, py, 14, dt);   // drop at once (reach), rise smoothly
+    b.pelvis.position.set(sway, this.py, 0);
+    b.pelvis.rotation.set(0.02 + 0.03 * wk, hipYaw, -sway * 0.9);
 
     b.spine.rotation.set(q.spineX, q.spineY, 0);
-    b.chest.rotation.set(q.chestX, q.spineY * 0.6, q.chestZ);
-    b.neck.rotation.set(q.neckX, q.neckY, 0);
+    b.chest.rotation.set(q.chestX, q.spineY * 0.6, q.chestZ + sway * 0.6);
+    b.neck.rotation.set(q.neckX, q.neckY - q.spineY * 0.5, 0);
     b.head.rotation.set(q.headX, q.neckY * 0.5, q.headZ);
     for (const S of ['L', 'R']) {
       b['sh' + S].rotation.set(q['sh' + S + 'x'], q['sh' + S + 'y'], q['sh' + S + 'z']);
@@ -446,61 +493,117 @@ class Robot {
   }
 }
 
-// ---------------- robot crew ----------------
+// ---------------- the hangar helpers: two robots, clickable, each can follow you or take a job ----------------
+const ROCKET = V3(0, 3.2, 0);
+const CONSOLE_AT = [16.35, -4.4], CONSOLE_FACE = -Math.PI / 2;   // operator side of the launch console (console.js POS)
+const JOBS = {
+  rounds: () => ({ type: 'patrol', path: [
+    { x: -3.75, z: -2.8, act: 'inspect', face: Math.atan2(3.75, 2.8), target: ROCKET, dur: 9 },
+    { x: 8.3, z: -6 },
+    { x: CONSOLE_AT[0], z: CONSOLE_AT[1], act: 'console', face: CONSOLE_FACE, dur: 10 },
+    { x: 8.3, z: 6, look: ROCKET, pause: 2.5 },
+    { x: -4, z: 9.6 },
+    { x: -8.3, z: 3, look: ROCKET, pause: 2 },
+  ] }),
+  rounds2: () => ({ type: 'patrol', path: [
+    { x: 8.3, z: 6, look: ROCKET, pause: 2 },
+    { x: 3.0, z: 3.4, act: 'inspect', face: Math.atan2(-3.0, -3.4), target: V3(0, 0.55, 0), dur: 8 },
+    { x: 8.3, z: -11.5 },
+    { x: 4, z: -11.8, look: ROCKET, pause: 3 },
+    { x: -8.3, z: -10 },
+    { x: -8.3, z: 9, look: ROCKET, pause: 2 },
+  ] }),
+  inspect: () => ({ type: 'inspect', at: [-3.75, -2.8], face: Math.atan2(3.75, 2.8), target: ROCKET }),
+  console: () => ({ type: 'console', at: CONSOLE_AT.slice(), face: CONSOLE_FACE }),
+  stand: () => ({ type: 'inspect', at: [3.0, 3.4], face: Math.atan2(-3.0, -3.4), target: V3(0, 0.55, 0) }),
+  follow: () => ({ type: 'follow' }),
+};
+const JOB_NAMES = { rounds: 'Back to his rounds', inspect: 'Inspecting the rocket', console: 'Heading to the console', stand: 'Checking the stand', follow: 'Following you' };
+
+export { JOBS };
 export class Robots {
   constructor(game) {
     this.g = game; const w = game.world;
     this.lite = w.quality === 'phone' || w.quality === 'low';
     this.M = makeMaterials(this.lite);
     this.hangar = new THREE.Group(); this.hangar.name = 'robots'; w.hangar.add(this.hangar);
-    this.padG = new THREE.Group(); this.padG.name = 'padRobots'; w.scene.add(this.padG);
-    this.list = []; this.ray = new THREE.Raycaster(); this.padState = 'idle';
-    const R = (grp, o) => { const r = new Robot(this, o); r.where = grp === this.hangar ? 'hangar' : 'pad'; grp.add(r.group); this.list.push(r); return r; };
-    const rocketPt = V3(0, 3.2, 0);
-    // hangar crew (hangar group sits at the world origin; the stand pit is at 0,0 and the door faces -z)
-    R(this.hangar, { pos: [-3.75, -2.8], yaw: Math.atan2(3.75, 2.8), job: { type: 'inspect', at: [-3.75, -2.8], face: Math.atan2(3.75, 2.8), target: rocketPt } });
-    R(this.hangar, { pos: [8.3, 6], yaw: Math.PI, silver: true, job: { type: 'patrol', path: [{ x: 8.3, z: 6, look: rocketPt }, { x: 8.3, z: -11.5 }, { x: 4, z: -11.8, look: rocketPt }, { x: 8.3, z: -6 }] } });
-    if (!this.lite) {
-      R(this.hangar, { pos: [-8.3, -10], yaw: 0, job: { type: 'patrol', path: [{ x: -8.3, z: -10 }, { x: -8.3, z: 9, look: rocketPt }, { x: -4, z: 9.6 }, { x: -8.3, z: 3 }] } });
-      R(this.hangar, { pos: [10.0, 6.15], yaw: Math.PI, silver: true, job: { type: 'console', at: [10.0, 6.15], face: Math.PI } });
-    }
-    // pad crew, laid out in the launch complex frame (local +x along the flame trench, tower toward local -z)
-    const pad = w.pad, P = SPOTS.pad;
-    const toW = (x, z) => { if (pad?.frame) { pad.frame.updateMatrixWorld(true); const v = pad.frame.localToWorld(V3(x, 0, z)); return [v.x, v.z]; } return [P.x + x, P.z + z]; };
-    const tower = pad?.tower ? pad.tower.getWorldPosition(V3()) : V3(P.x, 0, P.z - 10);
-    const padSpecs = [
-      { pos: toW(-9, 6), job: (a = toW(-9, 6), b2 = toW(9, 6), c = toW(9, 9.5)) => ({ type: 'patrol', path: [{ x: a[0], z: a[1], look: V3(P.x, 4, P.z) }, { x: b2[0], z: b2[1] }, { x: c[0], z: c[1], look: V3(P.x, 8, P.z) }] }) },
-      { pos: toW(4.2, -6.4), silver: true, job: (a = toW(4.2, -6.4)) => ({ type: 'console', at: a, face: Math.atan2(tower.x - a[0], tower.z - a[1]) }) },
-    ].slice(0, this.lite ? 1 : 2);
-    for (const s of padSpecs) { const r = R(this.padG, { pos: s.pos, ground: 0.02, silver: s.silver, job: s.job() }); r.home = { pos: s.pos.slice(), job: s.job }; }
-    // walk-clear: side waypoints so the countdown walk-off goes around the launch stand
-    this.exitPts = [toW(-14, 18), toW(-4, 21)];
-    this.leavePaths = [
-      [toW(-14, 8), toW(-14, 18)],
-      [toW(12, -6.4), toW(12, 16), toW(-4, 21)],
-    ];
-    this.padG.visible = false;
-    // click / tap a robot: it stops, turns, looks at you and waves
+    this.ray = new THREE.Raycaster();
+    // the pair: `list` is the public roster (hooks: robot.id, .finish, .pos, .yaw, .state, .jobKey, .enabled, .group, .setJob)
+    this.list = [
+      { id: 'silver', finish: 'silver', pos: [-3.75, -2.8], yaw: Math.atan2(3.75, 2.8), rounds: 'rounds' },
+      { id: 'gunmetal', finish: 'gunmetal', pos: [8.3, 6], yaw: Math.PI, rounds: 'rounds2' },
+    ].map(o => { const r = new Robot(this, { ...o, job: JOBS[o.rounds]() }); r.jobKey = r.rounds = o.rounds; this.hangar.add(r.group); return r; });
+    this.byId = Object.fromEntries(this.list.map(r => [r.id, r]));
+    this.makeBar();
+    // click / tap one: he stops, turns and waves (and the job bar shows); click him twice quickly: he follows you
     const c = w.renderer.domElement; let down = null;
     c.addEventListener('pointerdown', e => { down = { x: e.clientX, y: e.clientY, t: performance.now() }; });
     c.addEventListener('pointerup', e => { if (!down) return; const d = Math.hypot(e.clientX - down.x, e.clientY - down.y); if (d < 8 && performance.now() - down.t < 600) this.click(e.clientX, e.clientY); down = null; });
   }
-
-  click(x, y) {
+  // they are soft obstacles for you
+  obstacles() { return this.hangar.visible ? this.list.filter(r => r.enabled || r.solid).map(r => C(r.pos.x, r.pos.z, R_ROBOT)) : []; }
+  pick(x, y) {
     const w = this.g.world, cam = w.camera, locked = document.pointerLockElement === w.renderer.domElement;
     const ndc = locked ? new THREE.Vector2(0, 0) : new THREE.Vector2(x / innerWidth * 2 - 1, -(y / innerHeight) * 2 + 1);
     this.ray.setFromCamera(ndc, cam);
-    let best = null, bd = 1e9; const a = V3(), b = V3(), onRay = V3();
+    let best = null, bd = 60; const a = V3(), b = V3(), onRay = V3();
     for (const r of this.list) {
-      if (!r.group.visible || !r.group.parent.visible) continue;
-      a.set(r.pos.x, r.ground + 0.15, r.pos.z); b.set(r.pos.x, r.ground + 1.62, r.pos.z);
-      const d2 = this.ray.ray.distanceSqToSegment(a, b, onRay);
-      const along = onRay.distanceTo(cam.position);
-      if (d2 < 0.3 * 0.3 && along < bd && along < 60) { best = r; bd = along; }
+      if (!r.group.visible) continue;
+      a.set(r.pos.x, 0.15, r.pos.z); b.set(r.pos.x, 1.62, r.pos.z);
+      const d2 = this.ray.ray.distanceSqToSegment(a, b, onRay), along = onRay.distanceTo(cam.position);
+      if (d2 < 0.3 * 0.3 && along < bd) { best = r; bd = along; }
     }
-    if (!best) return false;
-    if (!best.greet) { best.greet = { t: 0 }; this.whir(0.7, 1); }
+    return best;
+  }
+  click(x, y) {
+    if (!this.hangar.visible || this.g.mode !== 'build') return false;
+    const r = this.pick(x, y); if (!r || !r.enabled) return false;
+    const now = performance.now();
+    if (this.last && this.last.r === r && now - this.last.t < 420) { this.last = null; this.send(r, r.jobKey === 'follow' ? r.rounds : 'follow'); return true; }
+    this.last = { r, t: now };
+    if (!r.greet) { r.greet = { t: 0 }; this.whir(0.7, 1); }
+    this.showBar(r);
     return true;
+  }
+  // send one robot on a job by key (see JOBS); only one follows you at a time
+  send(r, key) {
+    if (!JOBS[key] || !r) return;
+    if (key === 'follow') for (const o of this.list) if (o !== r && o.jobKey === 'follow') o.setJob(JOBS[o.rounds](), o.rounds);
+    r.setJob(JOBS[key](), key); r.greet = null;
+    this.whir(0.45, key === 'follow' ? 1.4 : 1.15);
+    const name = r.finish === 'silver' ? 'Silver robot' : 'Dark robot';
+    this.g.toast?.(`${name}: ${(key === r.rounds ? 'back to his rounds' : JOB_NAMES[key]).toLowerCase()}`, 1800);
+    this.showBar(null);
+  }
+
+  // small job bar for the robot you clicked (shows after a click, hides itself)
+  makeBar() {
+    const st = document.createElement('style');
+    st.textContent = `#robotBar{position:fixed;left:50%;top:calc(64px + env(safe-area-inset-top));transform:translateX(-50%);z-index:20;display:flex;gap:6px;align-items:center;padding:6px 8px;background:rgba(14,18,22,.78);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid rgba(127,231,255,.28);border-radius:14px;font:600 13px system-ui,sans-serif;color:#eef6fa}
+#robotBar.hidden{display:none}#robotBar span{padding:0 6px;opacity:.75;font-weight:700;letter-spacing:.04em;white-space:nowrap}
+#robotBar button{min-height:40px;padding:6px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:inherit;font:inherit;cursor:pointer;white-space:nowrap}
+#robotBar button:hover{background:rgba(127,231,255,.16);box-shadow:0 0 0 1px rgba(127,231,255,.55),0 0 14px rgba(127,231,255,.3)}
+#robotBar button.on{background:rgba(127,231,255,.24);box-shadow:0 0 0 1px #7fe7ff}
+#robotBar small{opacity:.6;font-weight:500;padding:0 4px;white-space:nowrap}body.menuopen #robotBar{display:none}
+@media (max-width:760px){#robotBar{flex-wrap:wrap;justify-content:center;width:calc(100vw - 24px)}#robotBar button{min-height:36px;padding:4px 9px;font-size:12px}}`;
+    document.head.appendChild(st);
+    const bar = this.bar = document.createElement('div'); bar.id = 'robotBar'; bar.className = 'hidden';
+    document.body.appendChild(bar);
+    bar.addEventListener('pointerdown', e => e.stopPropagation());
+    bar.addEventListener('click', e => {
+      const k = e.target.closest('button')?.dataset.job, r = this.barFor; if (!k || !r) return;
+      this.g.audio?.tap?.(); this.send(r, k === 'follow' && r.jobKey === 'follow' ? r.rounds : k === 'rounds' ? r.rounds : k);
+    });
+  }
+  showBar(r) {
+    clearTimeout(this.barT); this.barFor = r;
+    if (!r) { this.bar.classList.add('hidden'); return; }
+    const f = r.jobKey === 'follow', locked = !!document.pointerLockElement;
+    this.bar.innerHTML = `<span>${r.finish === 'silver' ? 'SILVER ROBOT' : 'DARK ROBOT'}</span><button data-job="follow" class="${f ? 'on' : ''}">${f ? 'Stop following' : 'Follow me'}</button>` +
+      `<button data-job="inspect">Inspect rocket</button><button data-job="console">Console</button><button data-job="stand">Check stand</button>` +
+      (r.jobKey !== r.rounds && !f ? '<button data-job="rounds">Free roam</button>' : '') + (locked ? '<small>Tab frees the cursor</small>' : '');
+    this.bar.classList.remove('hidden');
+    this.barT = setTimeout(() => this.bar.classList.add('hidden'), 7000);
   }
 
   // soft servo whir through the game's SFX bus
@@ -520,44 +623,18 @@ export class Robots {
 
   update(dt) {
     const g = this.g, w = g.world, cam = w.camera.position;
-    const nearHangar = w.indoor || Math.hypot(cam.x, cam.y, cam.z) < 90;
-    this.hangar.visible = nearHangar;
-    // pad crew: only around a rocket waiting on the pad; walk clear at countdown, gone at liftoff
-    const fl = g.flight, onPad = g.mode === 'flight' && fl?.f?.phase === 'pad' && !fl.f.e?.on;
-    const counting = onPad && fl.countdown != null;
-    const padNear = Math.hypot(cam.x - SPOTS.pad.x, cam.z - SPOTS.pad.z) < 600 && cam.y < 400;
-    if (!onPad) { if (this.padState !== 'idle') this.resetPad(); this.padState = 'idle'; this.padG.visible = false; }
-    else {
-      if (this.padState === 'idle') this.padState = 'work';
-      if (counting && this.padState === 'work') {
-        this.padState = 'leave';
-        this.list.filter(r => r.where === 'pad').forEach((r, i) => {
-          r.greet = null; r.wp = 0;
-          const pts = (this.leavePaths[i % this.leavePaths.length] || [this.exitPts[i % 2]]).map(p => ({ x: p[0], z: p[1] }));
-          r.job = { type: 'leave', speed: 1.45, path: pts };
-        });
-      }
-      this.padG.visible = padNear;
-    }
-    const hangObs = this.hangar.visible ? hangarFrame(g) : [];
-    const padObs = this.padG.visible ? padObstacles(w) : [];
+    this.hangar.visible = w.indoor || Math.hypot(cam.x, cam.y, cam.z) < 90;
+    if (!this.hangar.visible) return;
+    const P = g.mode === 'build' ? g.build?.player : null;
+    const base = hangarFrame(g), wide = this.list.some(r => r.jobKey === 'follow') ? playerFrame(g) : null;
     for (const r of this.list) {
-      const vis = r.where === 'hangar' ? this.hangar.visible : this.padG.visible;
-      if (!vis) continue;
-      const base = r.where === 'hangar' ? hangObs : padObs;
-      const peers = [];
-      for (const o of this.list) {
-        if (o === r || o.where !== r.where) continue;
-        if (!(o.where === 'hangar' ? this.hangar.visible : this.padG.visible)) continue;
-        peers.push(C(o.pos.x, o.pos.z, R_ROBOT));
-      }
-      r.update(dt, { cam, obs: base.concat(peers) });
-    }
-  }
-  resetPad() {
-    for (const r of this.list) if (r.where === 'pad' && r.home) {
-      r.pos.set(r.home.pos[0], r.ground, r.home.pos[1]); r.job = r.home.job(); r.wp = 0; r.greet = null; r.v = 0; r.yawRate = 0;
-      for (const f of r.feet) { f.pos = r.footIdeal(f.s, r.pos, r.yaw); f.sw = null; f.yaw = r.yaw; }
+      if (!r.enabled) continue;
+      const follow = r.jobKey === 'follow';
+      // a follower may step out onto the apron with you, so he uses your full collision frame
+      const obs = (follow ? wide : base).slice();
+      if (P) obs.push(C(P.x, P.z, R_PLAYER));
+      for (const o of this.list) if (o !== r) obs.push(C(o.pos.x, o.pos.z, R_ROBOT));
+      r.update(dt, { cam, obs, player: follow && P ? P : null });
     }
   }
 }
