@@ -340,33 +340,59 @@ export class BuildMode {
   }
 
   // ---------- tutorial: First bolt ----------
+  // Part-by-part build of a basic rocket, with a short fact card for each real part.
+  // No payload/capsule or staging/decoupler exists in the parts list, so those are omitted.
+  get tutFacts() {
+    return {
+      stack: { title: 'Why the order matters', body: 'The heavy engine goes at the bottom. That keeps the rocket’s balance point (the center of mass) above the spot where air pushes (the center of pressure), so it stays pointed straight.' },
+      mount: { title: 'Engine mount', body: 'Engines bolt under this mount at the very bottom. Putting the heavy engine down low helps the rocket stay upright.' },
+      engine: { title: 'Engine and nozzle', body: 'The engine and its nozzle push hot gas down, so the rocket goes up. That’s Newton’s third law: every action has an equal and opposite reaction.' },
+      tank: { title: 'Fuel and oxidizer tanks', body: 'This tank holds fuel and oxidizer — the rocket’s own oxygen. There is no air in space to burn, so a rocket has to bring oxygen with it.' },
+      nose: { title: 'Nose cone', body: 'The pointed nose cone cuts through the air and makes less drag. Less drag means the rocket can fly faster and higher.' },
+      fins: { title: 'Fins', body: 'Fins keep the rocket pointed straight, like feathers on an arrow. They pull the air-push point down so the rocket does not flip.' },
+      legs: { title: 'Landing legs', body: 'These legs let the rocket stand after it comes back down. You’ll need them later to land softly.' },
+      balance: { title: 'Center of mass and pressure', body: 'The gem ◆ is the center of mass (the balance point), and the ring ○ is the center of pressure (where the air pushes). Keep the gem above the ring, and thrust-to-weight above 1.0, so the rocket can lift off and fly straight.' },
+    };
+  }
   get tutSteps() {
     const has = k => this.g.rocket.stack.some(s => PARTS[s.p].kind === k);
+    const f = this.tutFacts;
     return [
-      { text: 'Welcome to the hangar. Pick the <b>Engine Mount</b> in the tray.', part: 'mount', check: () => this.sel === 'mount' || has('mount') },
-      { text: 'Aim at the glowing ring on the stand and place it.', part: 'mount', check: () => has('mount') },
-      { text: 'Engines bolt under the mount. Pick <b>Spark</b> and place it.', part: 'spark', check: () => this.g.rocket.engine === 'spark' },
-      { text: 'Now a <b>Short Tank</b> on top of the mount.', part: 'tank_short', check: () => has('tank') },
-      { text: 'Cap it with the <b>Nose Cone</b>. The stand moves the work to chest height for you.', part: 'nose', check: () => has('nose') },
-      { text: 'Add a <b>Fin Pair</b>. It snaps on as a mirrored pair.', part: 'fins', check: () => this.g.rocket.stack.some(s => s.fins) },
-      { text: 'Add <b>Landing Legs</b> to the tank.', part: 'legs', check: () => this.g.rocket.stack.some(s => s.legs) },
+      { text: 'We’ll build a basic rocket the real way: one part at a time, from the bottom up.', fact: f.stack, button: 'Let’s build' },
+      { text: 'Pick the <b>Engine Mount</b> in the tray. It is the base everything else stacks on.', part: 'mount', fact: f.mount, check: () => this.sel === 'mount' || has('mount') },
+      { text: 'Aim at the glowing ring on the stand and place it.', part: 'mount', fact: f.mount, check: () => has('mount') },
+      { text: 'Engines bolt under the mount. Pick <b>Spark</b> and place it.', part: 'spark', fact: f.engine, check: () => this.g.rocket.engine === 'spark' },
+      { text: 'Now a <b>Short Tank</b> on top of the mount. This is the rocket’s fuel.', part: 'tank_short', fact: f.tank, check: () => has('tank') },
+      { text: 'Cap it with the <b>Nose Cone</b>. The stand moves the work to chest height for you.', part: 'nose', fact: f.nose, check: () => has('nose') },
+      { text: 'Add a <b>Fin Pair</b>. It snaps on as a mirrored pair.', part: 'fins', fact: f.fins, check: () => this.g.rocket.stack.some(s => s.fins) },
+      { text: 'Add <b>Landing Legs</b> to the tank.', part: 'legs', fact: f.legs, check: () => this.g.rocket.stack.some(s => s.legs), star: 0 },
       { text: 'Try the <b>Delete</b> tool: remove the fin pair.', part: 'delete', check: () => !this.g.rocket.stack.some(s => s.fins) },
       { text: 'Oops. Press <b>Undo ↶</b> to put the fins back.', check: () => this.usedUndo && this.g.rocket.stack.some(s => s.fins), star: 1 },
-      { text: 'Check the <b>Checkout</b> panel: thrust-to-weight is above 1.0 and the gem ◆ sits above the ring ○. That means it can lift off and fly straight.', button: 'Got it', star: 2 },
+      { text: 'Look at the <b>Checkout</b> panel. These two markers tell you if the rocket can lift off and fly straight.', fact: f.balance, button: 'Got it', finish: true, star: 2 },
     ];
   }
   startTutorial() { this.tut = { i: 0, stars: [false, false, false] }; this.usedUndo = false; this.select(null); this.showTut(); if (IS_TOUCH) { $('ckBody').classList.remove('hidden'); $('ckToggle').textContent = '–'; } }
+  tutHtml(s) {
+    const fact = s.fact ? `<div class="factCard"><span class="factLabel">Did you know?</span><b>${s.fact.title}</b><p>${s.fact.body}</p></div>` : '';
+    return `<div class="tutDo">${s.text}</div>${fact}`;
+  }
   showTut() {
     const s = this.tutSteps[this.tut.i];
-    this.g.prompt(s.text, s.button, () => { this.tut.stars[2] = true; this.finishTutorial(); });
+    this.g.prompt(this.tutHtml(s), s.button, s.button ? () => this.tutButton() : null);
     this.refreshTray();
+  }
+  tutButton() {
+    const s = this.tutSteps[this.tut.i];
+    if (s.star === 2) this.tut.stars[2] = true;
+    if (s.finish) { this.finishTutorial(); return; }
+    this.tut.i++; this.g.audio.star(0); this.showTut();
   }
   tutCheck() { this.tutUpdate(); }
   tutUpdate() {
     if (!this.tut || this.g.mission?.type !== 'tutorial') { if (this.tut) { this.tut = null; this.g.prompt(null); this.refreshTray(); } return; }
     const s = this.tutSteps[this.tut.i];
     if (s.check && s.check()) {
-      if (this.tut.i === 6) this.tut.stars[0] = true;
+      if (s.star === 0) this.tut.stars[0] = true;
       if (s.star === 1) this.tut.stars[1] = true;
       this.tut.i++; this.g.audio.star(0); this.showTut();
     }
@@ -374,6 +400,6 @@ export class BuildMode {
   finishTutorial() {
     const stars = this.tut.stars; this.tut = null; this.g.prompt(null); this.refreshTray();
     this.g.award('m0', stars);
-    this.g.showResults({ ok: true, title: 'First bolt: done', reason: 'Your starter rocket is on the stand. Next, fire it on the test stand.', stars });
+    this.g.showResults({ ok: true, title: 'First bolt: done', reason: 'You built a basic rocket part by part. Next, fire it on the test stand.', stars });
   }
 }

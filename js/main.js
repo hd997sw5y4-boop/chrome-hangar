@@ -147,7 +147,7 @@ class Game {
     $('modeTitle').textContent = titles[this.mode] + (mi ? ' · ' + mi.name : ' · Sandbox');
     let o = '';
     if (!mi) o = 'Free build. Every part is unlocked.';
-    else if (mi.type === 'tutorial') o = 'Follow the prompts to bolt your first rocket together.';
+    else if (mi.type === 'tutorial') o = 'Build a basic rocket part by part. Each card teaches what that part is for.';
     else if (mi.type === 'static') o = this.mode === 'test' ? 'Hold the fire for 5 seconds without overheating.' : 'Build a rocket, then Send to stand.';
     else if (mi.type === 'altitude') o = this.mode === 'flight' ? 'Climb to 1,000 m.' : 'Build something that can reach 1,000 m, then Roll to pad.';
     else if (mi.type === 'landing') o = this.mode === 'flight' ? 'Climb above 100 m, then land under 3 m/s.' : 'You need landing legs. Spark is the easy lander.';
@@ -257,7 +257,7 @@ class Game {
         ['Flight', 'Space launch · Shift or R throttle up, F down, Z full, X cut · WASD / arrows steer · drag mouse to orbit · wheel zoom · 1–8 pick view · C next view · V view menu · H assist'], ['Menu', 'Esc']];
     const pad = [['DualSense', 'Left stick walk / steer · Right stick look · ✕ place / launch · □ delete tool · ○ undo · △ redo · L1/R1 pick part · D-pad stand · R2 throttle · in flight: right stick orbit, L2 zoom in, L1 zoom out, △ or D-pad ◀▶ change view, D-pad ▲ view menu · Options menu']];
     this.openPanel('How to play', `<p>Build a rocket on the stand, read the checkout panel, static-fire it on the test stand, then launch. If it fails, you get one plain "Try this" tip and your rocket is still on the stand.</p><table class="help">${rows.concat(pad).map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('')}</table>
-      <p><b>The two markers:</b> the gem ◆ is the center of mass, the ring ○ is the center of drag. Keep the gem above the ring or the rocket flips. Fins pull the ring down.</p>`);
+      <p><b>The two markers:</b> the gem ◆ is the center of mass (the balance point), the ring ○ is the center of pressure (where the air pushes). Keep the gem above the ring or the rocket flips. Fins pull the ring down.</p>`);
   }
   async showCredits() {
     let t = ''; try { t = await (await fetch('CREDITS.md')).text(); } catch (_) {}

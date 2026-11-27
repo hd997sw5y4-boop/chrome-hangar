@@ -28,8 +28,13 @@ body.build:not(.touch) #crosshair{display:block}
 #objective{font-size:14px;color:var(--ink);text-shadow:0 1px 3px #000}
 #topRight{position:absolute;right:calc(12px + var(--sr));top:calc(8px + var(--st));display:flex;gap:6px}
 #topRight button{width:44px;height:44px;padding:0;font-size:20px;background:var(--glass)}
-#prompt{position:absolute;left:50%;top:calc(58px + var(--st));transform:translateX(-50%);background:var(--glass);border:1px solid rgba(127,231,255,.45);padding:10px 18px;border-radius:14px;max-width:min(560px,70vw);text-align:center;box-shadow:0 0 24px rgba(127,231,255,.15);pointer-events:auto}
-#prompt button{margin-left:10px;min-height:32px;padding:5px 12px}
+#prompt{position:absolute;left:50%;top:calc(58px + var(--st));transform:translateX(-50%);background:var(--glass);border:1px solid rgba(127,231,255,.45);padding:10px 18px;border-radius:14px;max-width:min(560px,70vw);text-align:center;box-shadow:0 0 24px rgba(127,231,255,.15);pointer-events:auto;display:flex;flex-direction:column;align-items:center;gap:8px}
+#prompt .tutDo{margin:0}
+#prompt .factCard{margin:0;width:100%;text-align:left;background:rgba(127,231,255,.08);border:1px solid rgba(127,231,255,.35);border-radius:10px;padding:8px 12px}
+#prompt .factCard .factLabel{display:block;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);font-weight:700}
+#prompt .factCard b{display:block;margin:2px 0 4px;font-size:15px}
+#prompt .factCard p{margin:0;font-size:14px;color:var(--ink);line-height:1.35}
+#prompt button{margin:0;min-height:32px;padding:5px 14px}
 #toast{position:absolute;left:50%;top:38%;transform:translateX(-50%);background:var(--glass);padding:10px 20px;border-radius:14px;font-size:17px;border:1px solid var(--line);animation:pop .25s ease-out}
 @keyframes pop{from{transform:translateX(-50%) scale(.9);opacity:0}to{opacity:1}}
 /* build */
@@ -116,7 +121,7 @@ body.touch #fBtns{max-width:calc(100% - 320px - var(--sl) - var(--sr))}
  .meter{top:calc(210px + var(--st));width:160px}.vmeter{height:110px;width:20px}#fMeters{top:calc(52px + var(--st));padding:6px;right:calc(96px + var(--sr))}
  .ctlRow{padding:4px 8px;gap:6px}#testCtl1{bottom:calc(56px + var(--sb))}.ctlRow button{min-height:34px;padding:5px 10px;font-size:13px}.thrCtl{min-width:120px}#tFill{width:130px}
  #fBtns{padding:4px;gap:4px}#fBtns button{min-height:34px;padding:5px 8px;font-size:12px}#landGuide b{font-size:24px}#countdown{font-size:60px}
- #prompt{top:calc(48px + var(--st));padding:6px 12px;font-size:13px}#topRight button{width:40px;height:40px}
+ #prompt{top:calc(48px + var(--st));padding:6px 12px;font-size:13px;max-width:min(520px,86vw);gap:6px}#prompt .factCard{padding:6px 9px}#prompt .factCard b{font-size:13px;margin:1px 0 2px}#prompt .factCard p{font-size:12px}#topRight button{width:40px;height:40px}
  .stick{width:110px;height:110px}#thrTouch{height:160px}#thrTouch .track{height:140px}
 }
 

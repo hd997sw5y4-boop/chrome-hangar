@@ -1,5 +1,5 @@
 {"missions":[
- {"id":"m0","name":"First bolt","type":"tutorial","desc":"A two-minute guided build of a starter rocket.",
+ {"id":"m0","name":"First bolt","type":"tutorial","desc":"Build a basic rocket part by part, and learn what each piece is for.",
   "stars":["Finish the build","Use delete, then undo","Read the checkout panel"]},
  {"id":"m1","name":"Hold the fire","type":"static","goalSeconds":5,"desc":"Static-fire on the test stand for 5 seconds without overheating.",
   "stars":["Fire 5 seconds without overheating","Average throttle 80% or more","Peak heat under 75%"]},
