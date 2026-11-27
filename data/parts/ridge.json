@@ -1,0 +1,25 @@
+{
+ "id": "ridge",
+ "name": "Ridge",
+ "section": "propulsion",
+ "kind": "engine",
+ "attach": "engine",
+ "length": 1.45,
+ "radius": 0.66,
+ "dryMass": 420,
+ "thrust": 160000,
+ "isp": 282,
+ "minThrottle": 0.45,
+ "gimbalDeg": 6,
+ "heat": {
+  "safeThrottle": 0.9,
+  "risePerSec": 12,
+  "coolPerSec": 7,
+  "baseTemp": 660,
+  "spanTemp": 2300,
+  "limitTemp": 3450
+ },
+ "color": "#ffd36b",
+ "blurb": "Strong and steady. Runs hot above 90%.",
+ "unlockStars": 3
+}

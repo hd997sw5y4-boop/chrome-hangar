@@ -1,0 +1,25 @@
+{
+ "id": "titan",
+ "name": "Titan",
+ "section": "propulsion",
+ "kind": "engine",
+ "attach": "engine",
+ "length": 2.0,
+ "radius": 0.86,
+ "dryMass": 820,
+ "thrust": 380000,
+ "isp": 262,
+ "minThrottle": 0.7,
+ "gimbalDeg": 4,
+ "heat": {
+  "safeThrottle": 0.8,
+  "risePerSec": 26,
+  "coolPerSec": 5,
+  "baseTemp": 700,
+  "spanTemp": 2500,
+  "limitTemp": 3700
+ },
+ "color": "#ff4d6d",
+ "blurb": "Enormous thrust for long stacks. Can't throttle below 70%, cooks above 80%.",
+ "unlockStars": 6
+}

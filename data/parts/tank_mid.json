@@ -1,0 +1,16 @@
+{
+ "id": "tank_mid",
+ "name": "Mid Tank",
+ "section": "structure",
+ "kind": "tank",
+ "attach": "stack",
+ "length": 4.5,
+ "radius": 0.9,
+ "dryMass": 540,
+ "fuelMass": 5000,
+ "cnAlpha": 0.75,
+ "cd": 0.0,
+ "finish": "mirror",
+ "blurb": "5 t of fuel. The sensible middle.",
+ "unlockStars": 1
+}

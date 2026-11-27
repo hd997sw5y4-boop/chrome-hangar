@@ -1,0 +1,15 @@
+{
+ "id": "tank_mini",
+ "name": "Mini Tank",
+ "section": "structure",
+ "kind": "tank",
+ "attach": "stack",
+ "length": 1.6,
+ "radius": 0.9,
+ "dryMass": 220,
+ "fuelMass": 1500,
+ "cnAlpha": 0.3,
+ "cd": 0.0,
+ "finish": "brushed",
+ "blurb": "1.5 t of fuel. A spacer for fine-tuning balance."
+}

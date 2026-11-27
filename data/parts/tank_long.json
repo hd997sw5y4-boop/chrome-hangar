@@ -1,0 +1,16 @@
+{
+ "id": "tank_long",
+ "name": "Long Tank",
+ "section": "structure",
+ "kind": "tank",
+ "attach": "stack",
+ "length": 9.0,
+ "radius": 0.9,
+ "dryMass": 1000,
+ "fuelMass": 10400,
+ "cnAlpha": 1.5,
+ "cd": 0.0,
+ "finish": "brushed",
+ "blurb": "10.4 t of fuel. Needs big fins and a big engine.",
+ "unlockStars": 5
+}

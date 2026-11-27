@@ -34,6 +34,8 @@ export function loadModel(name) {
       if (lite && m.normalMap) { m.normalMap.dispose(); m.normalMap = null; m.needsUpdate = true; }
       if (m.map) m.map.anisotropy = 4;
       if (m.transparent && m.alphaTest === 0) { m.alphaTest = 0.4; m.transparent = false; }
+      // transmissive glass forces three.js to re-render every opaque object into an extra target each frame: use plain see-through glass
+      if (m.transmission > 0) { m.transmission = 0; m.transparent = true; m.opacity = 0.35; m.depthWrite = false; m.needsUpdate = true; }
     });
     return root;
   });

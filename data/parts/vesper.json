@@ -1,0 +1,25 @@
+{
+ "id": "vesper",
+ "name": "Vesper",
+ "section": "propulsion",
+ "kind": "engine",
+ "attach": "engine",
+ "length": 1.6,
+ "radius": 0.6,
+ "dryMass": 330,
+ "thrust": 85000,
+ "isp": 335,
+ "minThrottle": 0.3,
+ "gimbalDeg": 4,
+ "heat": {
+  "safeThrottle": 0.95,
+  "risePerSec": 6,
+  "coolPerSec": 7,
+  "baseTemp": 630,
+  "spanTemp": 2150,
+  "limitTemp": 3250
+ },
+ "color": "#c9a6ff",
+ "blurb": "Long bell, best fuel economy, modest push. Built for high climbs.",
+ "unlockStars": 2
+}

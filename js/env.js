@@ -142,6 +142,7 @@ export class World {
   render() {
     const r = this.renderer, cam = this.camera, now = performance.now(), dt = Math.min(0.1, (now - this._rt) / 1000); this._rt = now;
     const alt = cam.position.y, gf = THREE.MathUtils.smoothstep(alt, 4000, 14000);
+    this._props ??= this.hangar.getObjectByName('props'); if (this._props) this._props.visible = this.indoor || Math.hypot(cam.position.x, cam.position.y, cam.position.z) < 90;   // interior clutter only when it can be seen
     GLOBE_FADE.value = gf; GLOBE_EDGE.value = this.earth.ready && !this.indoor ? THREE.MathUtils.smoothstep(alt, 1200, 4000) : 0;
     const blend = GLOBE_FADE.value + GLOBE_EDGE.value > 0;   // terrain + sea alpha-blend into the planet pass only while it shows
     for (const m of [this.outdoor?.terrainMat, this.outdoor?.oceanMat]) if (m && m.transparent !== blend) { m.transparent = blend; m.needsUpdate = true; } if (this.outdoor) this.outdoor.group.visible = gf < 0.999;

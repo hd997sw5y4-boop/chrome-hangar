@@ -1,0 +1,16 @@
+{
+ "id": "tank_carbon",
+ "name": "Carbon Tank",
+ "section": "structure",
+ "kind": "tank",
+ "attach": "stack",
+ "length": 4.0,
+ "radius": 0.9,
+ "dryMass": 300,
+ "fuelMass": 4200,
+ "cnAlpha": 0.7,
+ "cd": 0.0,
+ "finish": "dark",
+ "blurb": "Wound carbon over a steel liner: 4.2 t of fuel at half the dry weight.",
+ "unlockStars": 3
+}

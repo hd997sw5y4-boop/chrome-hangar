@@ -67,7 +67,7 @@ export class Outdoor {
     await this.buildScatter();
     this.flushWires();
     if (this.lite) {   // iPhone budget: instanced props skip the shadow pass (their bounds span whole chunks), fewer grass tufts
-      this.group.traverse(o => { if (o.isInstancedMesh) o.castShadow = false; });
+      this.group.traverse(o => { o.castShadow = false; });   // the rocket, pad and hangar still cast
     }
     return mats;
   }

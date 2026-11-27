@@ -1,0 +1,15 @@
+{
+ "id": "nose_dome",
+ "name": "Dome Cap",
+ "section": "structure",
+ "kind": "nose",
+ "attach": "stack",
+ "length": 1.3,
+ "radius": 0.9,
+ "dryMass": 90,
+ "fuelMass": 0,
+ "cnAlpha": 1.4,
+ "cd": -0.25,
+ "finish": "mirror",
+ "blurb": "Short, light, blunt. Fine for hops, draggy for high flights."
+}

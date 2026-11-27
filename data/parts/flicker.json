@@ -1,0 +1,24 @@
+{
+ "id": "flicker",
+ "name": "Flicker",
+ "section": "propulsion",
+ "kind": "engine",
+ "attach": "engine",
+ "length": 0.75,
+ "radius": 0.32,
+ "dryMass": 110,
+ "thrust": 32000,
+ "isp": 300,
+ "minThrottle": 0.1,
+ "gimbalDeg": 8,
+ "heat": {
+  "safeThrottle": 1.0,
+  "risePerSec": 0,
+  "coolPerSec": 9,
+  "baseTemp": 600,
+  "spanTemp": 2000,
+  "limitTemp": 3100
+ },
+ "color": "#a8f0c8",
+ "blurb": "Tiny, gentle, throttles to 10%. Only lifts very light rockets."
+}

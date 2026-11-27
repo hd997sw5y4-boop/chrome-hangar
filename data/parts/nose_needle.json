@@ -1,0 +1,16 @@
+{
+ "id": "nose_needle",
+ "name": "Needle Nose",
+ "section": "structure",
+ "kind": "nose",
+ "attach": "stack",
+ "length": 3.4,
+ "radius": 0.9,
+ "dryMass": 190,
+ "fuelMass": 0,
+ "cnAlpha": 2.4,
+ "cd": -0.48,
+ "finish": "brushed",
+ "blurb": "Long and sharp: the least drag, but it lifts the drag ring a little.",
+ "unlockStars": 2
+}
