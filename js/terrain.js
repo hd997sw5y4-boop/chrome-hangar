@@ -230,7 +230,8 @@ float fb(vec2 p){ return vn(p)*0.5 + vn(p*2.03)*0.25 + vn(p*4.1)*0.125 + vn(p*8.
 vec3 two(sampler2D t, vec2 p, float far){ vec3 a = texture2D(t, p / 5.0).rgb, b = texture2D(t, p / 41.0 + 0.37).rgb, c = texture2D(t, p / 290.0).rgb;
   return mix(mix(a, b, 0.35), mix(b, c, 0.5), far); }`)
       .replace('#include <map_fragment>', `
-if (uGF + uGE > 0.0 && h21(floor(gl_FragCoord.xy)) < max(uGF, uGE * smoothstep(7000.0, 11000.0, max(abs(vWP.x), abs(vWP.z))))) discard;     // dissolve into the globe pass at high altitude
+float gFade = max(uGF, uGE * smoothstep(7000.0, 11000.0, max(abs(vWP.x), abs(vWP.z))));   // blend into the globe pass behind
+if (gFade > 0.995) discard;     // dissolve into the globe pass at high altitude
 {
   vec2 p = vWP.xz; float dist = length(vWP - cameraPosition); float far = smoothstep(80.0, 1400.0, dist);
   float n = fb(p / 90.0), n2 = fb(p / 900.0 + 3.1);
@@ -270,7 +271,7 @@ if (uGF + uGE > 0.0 && h21(floor(gl_FragCoord.xy)) < max(uGF, uGE * smoothstep(7
   }
 #endif
   float wet = smoothstep(uSea + 0.9, uSea + 0.05, vWP.y); col *= 1.0 - wet * 0.45; // wet sand at the waterline
-  diffuseColor.rgb *= col;
+  diffuseColor.rgb *= col; diffuseColor.a *= 1.0 - gFade;
   gTW = w; gTP = p; gFar = far;
 }`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>

@@ -99,7 +99,7 @@ export class World {
   setAltitude(a) { if (Math.abs((this.alt || 0) - a) > 1) { this.alt = a; this.applySky(); } }
   applySky() {
     const S = this.sky; if (!S) return;
-    const k = THREE.MathUtils.smoothstep(this.alt || 0, 1500, 40000), sp = 1 - 0.92 * k;
+    const k = THREE.MathUtils.smoothstep(this.alt || 0, 1500, 45000), sp = 1 - 0.99 * k;
     const sc = this.scene; sc.backgroundIntensity = this.skyNorm * sp;
     if (!this.indoor) sc.environmentIntensity = Math.min(2.5, Math.sqrt(this.skyNorm)) * S.env * (1 - 0.6 * k);
     sc.fog.density = S.fog * Math.exp(-(this.alt || 0) / 5000);   // thinner air, less haze
@@ -141,8 +141,10 @@ export class World {
   }
   render() {
     const r = this.renderer, cam = this.camera, now = performance.now(), dt = Math.min(0.1, (now - this._rt) / 1000); this._rt = now;
-    const alt = cam.position.y, gf = THREE.MathUtils.smoothstep(alt, 6000, 22000);
-    GLOBE_FADE.value = gf; GLOBE_EDGE.value = this.earth.ready && !this.indoor ? THREE.MathUtils.smoothstep(alt, 1200, 4000) : 0; if (this.outdoor) this.outdoor.group.visible = gf < 0.999;
+    const alt = cam.position.y, gf = THREE.MathUtils.smoothstep(alt, 4000, 14000);
+    GLOBE_FADE.value = gf; GLOBE_EDGE.value = this.earth.ready && !this.indoor ? THREE.MathUtils.smoothstep(alt, 1200, 4000) : 0;
+    const blend = GLOBE_FADE.value + GLOBE_EDGE.value > 0;   // terrain + sea alpha-blend into the planet pass only while it shows
+    for (const m of [this.outdoor?.terrainMat, this.outdoor?.oceanMat]) if (m && m.transparent !== blend) { m.transparent = blend; m.needsUpdate = true; } if (this.outdoor) this.outdoor.group.visible = gf < 0.999;
     if (alt > 600 && !this.indoor && this.earth.render(r, cam, dt)) {
       // planet pass drew sky + globe; local scene goes on top with fresh depth
       const bg = this.scene.background; this.scene.background = null;

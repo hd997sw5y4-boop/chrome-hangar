@@ -66,6 +66,9 @@ export class Outdoor {
     await Promise.all([this.buildModels(), this.buildVehicles(), this.buildPowerLine()]);
     await this.buildScatter();
     this.flushWires();
+    if (this.lite) {   // iPhone budget: instanced props skip the shadow pass (their bounds span whole chunks), fewer grass tufts
+      this.group.traverse(o => { if (o.isInstancedMesh) o.castShadow = false; });
+    }
     return mats;
   }
 
@@ -100,7 +103,8 @@ export class Outdoor {
       const [hi, lo] = await Promise.all([im(this.lite ? 'albedo_hi_1k' : 'albedo_hi_2k'), im('albedo_lo_1k')]).catch(() => []);
       if (hi && lo) { macro = { hi, lo, hiR: demRect(false), loR: demRect(true) }; this.w.earth?.setRegion(lo, macro.loR); }
     }
-    const t = buildTerrainLOD(terrainMaterial({ sand, dirt, grass, rock }, nor, macro), this.lite);
+    this.terrainMat = terrainMaterial({ sand, dirt, grass, rock }, nor, macro);
+    const t = buildTerrainLOD(this.terrainMat, this.lite);
     t.refine(new THREE.Vector3(0, 2, -60), Infinity);   // settle around the hangar and pad before the first frame
     this.group.add(t); this.terrain = t;
   }
@@ -122,7 +126,7 @@ export class Outdoor {
       fragmentShader: `uniform sampler2D tN; uniform float uT; uniform vec3 uSun, uDeep, uShallow, uHorizon, uZenith, uSunCol; uniform float uGF, uGE; varying vec3 vW;
         #include <fog_pars_fragment>
         void main(){
-          if (uGF + uGE > 0.0 && fract(sin(dot(floor(gl_FragCoord.xy), vec2(127.1, 311.7))) * 43758.5453) < max(uGF, uGE * smoothstep(7000.0, 11000.0, max(abs(vW.x), abs(vW.z))))) discard;
+          float gFade = max(uGF, uGE * smoothstep(7000.0, 11000.0, max(abs(vW.x), abs(vW.z)))); if (gFade > 0.995) discard;
           vec2 p = vW.xz;
           vec3 n1 = texture2D(tN, p / 61.0 + vec2(uT * 0.011, uT * 0.007)).xyz * 2.0 - 1.0;
           vec3 n2 = texture2D(tN, p / 17.0 - vec2(uT * 0.017, -uT * 0.013)).xyz * 2.0 - 1.0;
@@ -136,7 +140,7 @@ export class Outdoor {
           vec3 water = mix(uDeep, uShallow, 0.25 + 0.25 * n1.x);
           vec3 col = mix(water, sky, fres);
           col += uSunCol * pow(max(dot(R, uSun), 0.0), 380.0) * 6.0;
-          gl_FragColor = vec4(col, 1.0);
+          gl_FragColor = vec4(col, 1.0 - gFade);
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
           #include <fog_fragment>
@@ -487,11 +491,11 @@ export class Outdoor {
   async buildScatter() {
     const lite = this.lite;
     const kinds = [
-      { model: 'rock_moss_set_01', nodes: ['rock01', 'rock03', 'rock05'], n: lite ? 260 : 560, far: lite ? 900 : 2000, s: [0.4, 1.5], r: [60, 1700], slopeMax: 9, beach: true, shadow: true, sink: 0.25 },
-      { model: 'namaqualand_boulder_02', nodes: [null], n: lite ? 80 : 180, far: lite ? 900 : 2000, s: [0.5, 2.2], r: [60, 1700], slopeMax: 9, beach: true, shadow: true, sink: 0.1 },
+      { model: 'rock_moss_set_01', nodes: ['rock01', 'rock03', 'rock05'], n: lite ? 200 : 560, far: lite ? 700 : 2000, s: [0.4, 1.5], r: [60, 1700], slopeMax: 9, beach: true, shadow: true, sink: 0.25 },
+      { model: 'namaqualand_boulder_02', nodes: [null], n: lite ? 60 : 180, far: lite ? 700 : 2000, s: [0.5, 2.2], r: [60, 1700], slopeMax: 9, beach: true, shadow: true, sink: 0.1 },
       { model: 'shrub_02', nodes: ['shrub_02_b', 'shrub_02_d'], n: lite ? 220 : 520, far: lite ? 240 : 520, s: [0.5, 1.2], r: [20, 1300], slopeMax: 0.6, shadow: !lite },
       { model: 'wild_rooibos_bush', nodes: ['wild_rooibos_bush_d', 'wild_rooibos_bush_e'], n: lite ? 300 : 800, far: lite ? 180 : 380, s: [1.2, 2.6], r: [12, 1100], slopeMax: 0.6, shadow: !lite },
-      { model: 'grass_medium_01', nodes: ['tall_a', 'tall_b', 'tall_c'], n: lite ? 1400 : 3600, far: lite ? 90 : 170, s: [2.2, 3.6], r: [4, 420], slopeMax: 0.5, shadow: false },
+      { model: 'grass_medium_01', nodes: ['tall_a', 'tall_b', 'tall_c'], n: lite ? 900 : 3600, far: lite ? 70 : 170, s: [2.2, 3.6], r: [4, 420], slopeMax: 0.5, shadow: false },
     ];
     const C = 400, cx = -10, cz = -95, chunks = new Map();
     const F = FENCE;

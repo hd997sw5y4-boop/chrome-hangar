@@ -65,7 +65,7 @@ export class Earth {
         float mu = clamp(dot(N, V), 0.0, 1.0), rim = pow(1.0 - mu, 3.0);
         float dayK = smoothstep(-0.25, 0.35, ndl);
         vec3 atm = mix(vec3(0.9, 0.45, 0.2), vec3(0.32, 0.55, 1.0), smoothstep(-0.05, 0.4, ndl));
-        col = mix(col, atm * uSunI * 0.5 * dayK, clamp(rim * 0.85 + 0.08, 0.0, 1.0) * uAtmK * dayK);
+        col = mix(col, atm * uSunI * 0.28 * dayK, clamp(rim * 0.7 + 0.04, 0.0, 1.0) * uAtmK * dayK);
         // same aerial perspective as the local scene's FogExp2 (metres)
         float d = length(uCam - vW) * 1000.0, fog = 1.0 - exp(-uFogD * uFogD * d * d);
         col = mix(col, uFogC, clamp(fog, 0.0, 1.0));
@@ -84,10 +84,10 @@ export class Earth {
       void main(){
         vec3 D = normalize(vW - uCam), O = uCam - uC;
         float b = dot(O, D), tc = max(-b, 0.0); vec3 P = O + D * tc; float h = length(P) - uR;
-        float g = exp(-max(h, 0.0) / 9.0) * smoothstep(-1.0, 4.0, h + 4.0);
+        float g = exp(-max(h, 0.0) / 7.0) * smoothstep(-1.0, 4.0, h + 4.0);
         float sunK = dot(normalize(P), normalize(uSun));
         vec3 col = mix(vec3(1.0, 0.45, 0.18), vec3(0.3, 0.55, 1.0), smoothstep(-0.1, 0.35, sunK)) * smoothstep(-0.35, 0.2, sunK);
-        gl_FragColor = vec4(col * g * uSunI * 0.55 * uAtmK, 1.0);
+        gl_FragColor = vec4(col * g * uSunI * 0.32 * uAtmK, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }`,
