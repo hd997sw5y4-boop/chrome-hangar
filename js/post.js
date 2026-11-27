@@ -1,0 +1,134 @@
+// Post-processing pipeline (three.js addons): world (+ planet) pass -> GTAO -> depth of field -> HDR bloom
+// -> filmic tone map -> grade (vignette, chromatic aberration, lens dirt, grain, sun shafts, heat shimmer,
+// chase-cam motion blur) -> SMAA. Phone keeps bloom + grade on MSAA; low renders straight to screen.
+import * as THREE from 'three';
+import { EffectComposer } from '../vendor/three/addons/postprocessing/EffectComposer.js';
+import { Pass } from '../vendor/three/addons/postprocessing/Pass.js';
+import { ShaderPass } from '../vendor/three/addons/postprocessing/ShaderPass.js';
+import { UnrealBloomPass } from '../vendor/three/addons/postprocessing/UnrealBloomPass.js';
+import { GTAOPass } from '../vendor/three/addons/postprocessing/GTAOPass.js';
+import { SMAAPass } from '../vendor/three/addons/postprocessing/SMAAPass.js';
+import { OutputPass } from '../vendor/three/addons/postprocessing/OutputPass.js';
+import { BokehPass } from '../vendor/three/addons/postprocessing/BokehPass.js';
+
+class WorldPass extends Pass {
+  constructor(world) { super(); this.w = world; this.needsSwap = false; }
+  render(r, writeBuffer, readBuffer) { r.setRenderTarget(readBuffer); r.clear(); this.w.renderScene(); }
+}
+// GTAO, but transparent FX (flames, glow cones, glass) never write AO normals
+class AOPass extends GTAOPass {
+  _overrideVisibility() {
+    super._overrideVisibility();
+    const cache = this._visibilityCache;
+    this.scene.traverse(o => { if (o.visible && (o.userData.noAO || (o.material && !Array.isArray(o.material) && o.material.transparent))) { o.visible = false; cache.push(o); } });
+  }
+}
+
+function dirtTex() {
+  const S = 512, c = document.createElement('canvas'); c.width = c.height = S; const g = c.getContext('2d');
+  g.fillStyle = '#000'; g.fillRect(0, 0, S, S);
+  let s = 5; const r = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 26; i++) { const x = r() * S, y = r() * S, R = 30 + r() * 120, gr = g.createRadialGradient(x, y, 0, x, y, R);
+    gr.addColorStop(0, `rgba(255,255,255,${0.10 + r() * 0.12})`); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(x - R, y - R, R * 2, R * 2); }
+  for (let i = 0; i < 260; i++) { g.fillStyle = `rgba(255,255,255,${0.12 + r() * 0.35})`; g.beginPath(); g.arc(r() * S, r() * S, 0.6 + r() * 2.6, 0, 7); g.fill(); }
+  g.strokeStyle = 'rgba(255,255,255,0.08)'; g.lineWidth = 3; for (let i = 0; i < 7; i++) { g.beginPath(); const x = r() * S, y = r() * S; g.moveTo(x, y); g.bezierCurveTo(x + r() * 90, y + r() * 60, x + r() * 140, y - r() * 50, x + r() * 220, y + r() * 30); g.stroke(); }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.NoColorSpace; return t;
+}
+
+const GradeShader = {
+  uniforms: {
+    tDiffuse: { value: null }, tDirt: { value: null }, uRes: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 },
+    uVig: { value: 0.32 }, uCA: { value: 0.0008 }, uGrain: { value: 0.035 }, uDirtK: { value: 0.55 },
+    uBlur: { value: 0 }, uHeat: { value: new THREE.Vector4(0, 0, 0, 0) }, uHeatDir: { value: new THREE.Vector2(0, -1) },
+    uSun: { value: new THREE.Vector3(0.5, 0.5, 0) }, uShaft: { value: 0 }, uShaftN: { value: 20 }, uLift: { value: new THREE.Vector3(0.012, 0.010, 0.018) },
+    uGain: { value: new THREE.Vector3(1.03, 1.0, 0.95) }, uSat: { value: 1.12 }, uContrast: { value: 1.08 },
+  },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: `uniform sampler2D tDiffuse, tDirt; uniform vec2 uRes, uHeatDir; uniform float uTime, uVig, uCA, uGrain, uDirtK, uBlur, uShaft, uShaftN, uSat, uContrast;
+    uniform vec4 uHeat; uniform vec3 uSun, uLift, uGain; varying vec2 vUv;
+    float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+    float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f); return mix(mix(h(i), h(i+vec2(1,0)), f.x), mix(h(i+vec2(0,1)), h(i+vec2(1,1)), f.x), f.y); }
+    void main(){
+      vec2 uv = vUv, asp = vec2(uRes.x / uRes.y, 1.0);
+      // heat shimmer behind the exhaust: an elongated region below the nozzle
+      if (uHeat.w > 0.0) {
+        vec2 d = (uv - uHeat.xy) * asp; float along = dot(d, uHeatDir), across = dot(d, vec2(-uHeatDir.y, uHeatDir.x));
+        float m = smoothstep(uHeat.z * 4.0, 0.0, abs(along - uHeat.z * 2.0)) * smoothstep(uHeat.z * (1.0 + max(along, 0.0) / max(uHeat.z, 1e-4) * 0.35), 0.0, abs(across));
+        vec2 n = vec2(vn(uv * 60.0 + vec2(0.0, uTime * 9.0)), vn(uv * 60.0 + vec2(17.0, uTime * 11.0))) - 0.5;
+        uv += n * 0.012 * m * uHeat.w;
+      }
+      vec2 c = uv - 0.5; float r2 = dot(c * asp, c * asp);
+      // chromatic aberration grows toward the frame edge
+      vec2 off = c * uCA * smoothstep(0.08, 0.6, r2) * 3.0;
+      vec3 col = vec3(texture2D(tDiffuse, uv + off).r, texture2D(tDiffuse, uv).g, texture2D(tDiffuse, uv - off).b);
+      // chase-cam motion blur: radial streaks from the centre
+      if (uBlur > 0.0) { vec3 acc = col; for (int i = 1; i < 8; i++) { float k = float(i) / 8.0; acc += texture2D(tDiffuse, uv - c * k * uBlur).rgb; } col = acc / 8.0; }
+      // sun shafts: march toward the sun through bright sky pixels
+      if (uShaft > 0.0 && uSun.z > 0.0) {
+        vec2 dir = (uSun.xy - uv); float s = 0.0, wsum = 0.0; float j = h(uv * uRes + uTime);
+        for (int i = 0; i < 32; i++) { if (float(i) >= uShaftN) break; float k = (float(i) + j) / uShaftN; vec3 t = texture2D(tDiffuse, uv + dir * k * 0.85).rgb;
+          float w = 1.0 - k; s += smoothstep(0.82, 1.0, dot(t, vec3(0.299, 0.587, 0.114))) * w; wsum += w; }
+        float fall = exp(-length((uSun.xy - vUv) * asp) * 1.7);
+        col += vec3(1.0, 0.82, 0.58) * (s / wsum) * uShaft * fall * uSun.z;
+      }
+      // lens dirt lit by bright light around it and by the sun direction
+      vec3 b = vec3(0.0); for (int i = 0; i < 6; i++) { float a = float(i) * 1.0472; b += texture2D(tDiffuse, vUv + vec2(cos(a), sin(a)) * 0.09).rgb; }
+      float bl = max(0.0, dot(b / 6.0, vec3(0.333)) - 0.55) * 1.6 + uSun.z * exp(-length((uSun.xy - vUv) * asp) * 2.5) * 0.8;
+      col += texture2D(tDirt, vUv).rgb * bl * uDirtK * vec3(1.0, 0.9, 0.78);
+      // grade: lift / gain, contrast, saturation
+      col = col * uGain + uLift * (1.0 - col);
+      col = (col - 0.5) * uContrast + 0.5;
+      float l = dot(col, vec3(0.299, 0.587, 0.114)); col = mix(vec3(l), col, uSat);
+      col *= 1.0 - uVig * smoothstep(0.15, 0.95, r2);
+      col += (h(vUv * uRes + fract(uTime) * 61.0) - 0.5) * uGrain;
+      gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
+    }`,
+};
+
+export class Post {
+  constructor(world) { this.w = world; this.enabled = false; this.dof = { on: false, focus: 30 }; }
+  setup(q, w, h) {
+    const r = this.w.renderer;
+    this.dispose();
+    this.tier = q === 'low' ? 0 : (q === 'phone' || q === 'medium') ? 1 : 2;
+    this.enabled = this.tier > 0;
+    r.toneMapping = THREE.ACESFilmicToneMapping;
+    if (!this.enabled) return;
+    const pr = r.getPixelRatio(), W = Math.max(1, w * pr | 0), H = Math.max(1, h * pr | 0);
+    const rt = new THREE.WebGLRenderTarget(W, H, { type: THREE.HalfFloatType, samples: 4 });
+    const C = this.composer = new EffectComposer(r, rt); C.setPixelRatio(pr); C.setSize(w, h);
+    C.addPass(new WorldPass(this.w));
+    if (this.tier === 2) {
+      const ao = this.ao = new AOPass(this.w.scene, this.w.camera, W, H);
+      ao.updateGtaoMaterial({ radius: 1.4, distanceExponent: 1.6, thickness: 2.2, scale: 1.0, samples: 12, distanceFallOff: 1.0 });
+      ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 12 });
+      ao.blendIntensity = 0.9; C.addPass(ao);
+      const bk = this.bokeh = new BokehPass(this.w.scene, this.w.camera, { focus: 30, aperture: 0.00012, maxblur: 0.008 });
+      bk.enabled = false; C.addPass(bk);
+    }
+    const bloom = this.bloom = new UnrealBloomPass(new THREE.Vector2(W, H).multiplyScalar(this.tier === 2 ? 0.5 : 0.35), this.tier === 2 ? 0.6 : 0.5, 0.55, 3.0);   // only real light sources (flames, lamps, sun glints) cross the threshold
+    C.addPass(bloom);
+    C.addPass(new OutputPass());
+    const g = this.grade = new ShaderPass(GradeShader); g.uniforms.tDirt.value = dirtTex(); g.uniforms.uRes.value.set(W, H);
+    if (this.tier === 1) { g.uniforms.uShaftN.value = 12; g.uniforms.uGrain.value = 0.025; }
+    C.addPass(g);
+    if (q === 'ultra') C.addPass(new SMAAPass(W, H));
+  }
+  resize(w, h) { if (this.composer) { const pr = this.w.renderer.getPixelRatio(); this.composer.setPixelRatio(pr); this.composer.setSize(w, h); this.grade.uniforms.uRes.value.set(w * pr, h * pr); } }
+  dispose() { if (this.composer) { this.composer.passes.forEach(p => p.dispose?.()); this.composer.renderTarget1.dispose(); this.composer.renderTarget2.dispose(); this.composer = null; this.ao = this.bokeh = null; } }
+  // per-frame inputs from the modes
+  setDOF(on, focus = 30, aperture = 0.00012) { this.dof.on = on; if (this.bokeh) { this.bokeh.enabled = on; this.bokeh.uniforms.focus.value = focus; this.bokeh.uniforms.aperture.value = aperture; } }
+  setBlur(k) { if (this.grade) this.grade.uniforms.uBlur.value = k; }
+  setHeat(v4, dir) { if (this.grade) { this.grade.uniforms.uHeat.value.copy(v4); if (dir) this.grade.uniforms.uHeatDir.value.copy(dir); } }
+  render(dt) {
+    const g = this.grade.uniforms, w = this.w, cam = w.camera;
+    g.uTime.value += dt;
+    // sun position on screen for shafts and dirt
+    const sp = new THREE.Vector3().copy(w.sunDir || new THREE.Vector3(0, 1, 0)).multiplyScalar(5000).add(cam.position).project(cam);
+    const facing = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion).dot(w.sunDir || new THREE.Vector3(0, 1, 0));
+    g.uSun.value.set(sp.x * 0.5 + 0.5, sp.y * 0.5 + 0.5, w.indoor ? 0 : THREE.MathUtils.smoothstep(facing, 0.2, 0.75) * (sp.z < 1 ? 1 : 0));
+    g.uShaft.value = w.indoor ? 0 : (w.sky?.soft ? 0.25 : 0.55) * (1 - THREE.MathUtils.smoothstep(w.alt || 0, 3000, 30000));
+    if (this.ao) this.ao.enabled = (w.alt || 0) < 3000;
+    this.composer.render(dt);
+  }
+}

@@ -7,6 +7,7 @@ import { applyPBR, setTexTier } from './tex.js';
 import { setModelTier } from './models.js';
 import { Outdoor } from './outdoor.js';
 import { Earth, GLOBE_FADE, GLOBE_EDGE } from './earth.js';
+import { Post } from './post.js';
 
 export const SPOTS = {
   stand: new THREE.Vector3(0, 0, 0),
@@ -56,7 +57,7 @@ export class World {
     this.M = initMaterials();
     setTexTier(quality, r); setModelTier(quality);
     this.wind = { x: 2, z: 0.6 };
-    this.earth = new Earth(this); this._rt = performance.now();
+    this.earth = new Earth(this); this.post = new Post(this); this._rt = performance.now();
     this.buildLights(); this.buildHangar(); this.buildOutside(); this.buildTestStand(); this.buildPad();
   }
 
@@ -125,19 +126,22 @@ export class World {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, p.pr));
     this.shadowSize = p.shadow;
     this.renderer.shadowMap.enabled = p.shadow > 0;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     for (const l of [this.sun, this.spot]) {
-      l.shadow.mapSize.set(p.shadow || 512, p.shadow || 512);
+      l.shadow.mapSize.set(p.shadow || 512, p.shadow || 512); l.shadow.radius = q === 'high' || q === 'ultra' ? 4 : 2; l.shadow.blurSamples = 12;
       if (l.shadow.map) { l.shadow.map.dispose(); l.shadow.map = null; }
     }
     this.setIndoor(this.indoor ?? true);
     this.scene.traverse(o => { if (o.material) [].concat(o.material).forEach(m => m.needsUpdate = true); });
     this.resize(w, h);
+    this.post.setup(q, w, h);
     if (p.hdri !== (this.hdriSize || '1k') && this.envs.hangar) this.loadHDRIs(p.hdri, this.skyKey).catch(() => {});
   }
   resize(w, h) {
     this.w = w; this.h = h;
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
+    this.post?.resize(w, h);
   }
   render() {
     const r = this.renderer, cam = this.camera, now = performance.now(), dt = Math.min(0.1, (now - this._rt) / 1000); this._rt = now;
@@ -146,6 +150,13 @@ export class World {
     GLOBE_FADE.value = gf; GLOBE_EDGE.value = this.earth.ready && !this.indoor ? THREE.MathUtils.smoothstep(alt, 1200, 4000) : 0;
     const blend = GLOBE_FADE.value + GLOBE_EDGE.value > 0;   // terrain + sea alpha-blend into the planet pass only while it shows
     for (const m of [this.outdoor?.terrainMat, this.outdoor?.oceanMat]) if (m && m.transparent !== blend) { m.transparent = blend; m.needsUpdate = true; } if (this.outdoor) this.outdoor.group.visible = gf < 0.999;
+    this._dt = dt;
+    if (this.post.enabled) this.post.render(dt);
+    else { r.setRenderTarget(null); this.renderScene(); }
+  }
+  // world + planet into whatever target is bound (screen, or the post chain's HDR buffer)
+  renderScene() {
+    const r = this.renderer, cam = this.camera, alt = cam.position.y, dt = this._dt || 0.016;
     if (alt > 600 && !this.indoor && this.earth.render(r, cam, dt)) {
       // planet pass drew sky + globe; local scene goes on top with fresh depth
       const bg = this.scene.background; this.scene.background = null;
