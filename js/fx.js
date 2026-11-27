@@ -75,28 +75,34 @@ export class Flame {
   }
 }
 
-// puff sprite: overlapping sphere lobes. A = density, R = top-lit shading (self-shadowed billows), G = rim
+// Soft round billow sprite: layered value-noise puffs with a smooth circular falloff (no hard lobe facets).
+// R = top-lit shading, A = density.
 function smokeTex() {
-  const S = 128, c = document.createElement('canvas'); c.width = c.height = S; const g = c.getContext('2d'), img = g.createImageData(S, S);
-  let sd = 9; const r = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
-  const L = []; for (let i = 0; i < 22; i++) { const a = r() * 6.283, d = Math.sqrt(r()) * S * 0.24; L.push([S / 2 + Math.cos(a) * d, S / 2 + Math.sin(a) * d, S * (0.1 + r() * 0.13)]); }
+  const S = 256, c = document.createElement('canvas'); c.width = c.height = S; const g = c.getContext('2d'), img = g.createImageData(S, S);
+  const h = (x, y) => { const n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return n - Math.floor(n); };
+  const vn = (x, y) => { const ix = Math.floor(x), iy = Math.floor(y), fx = x - ix, fy = y - iy, u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy);
+    return (h(ix, iy) * (1 - u) + h(ix + 1, iy) * u) * (1 - v) + (h(ix, iy + 1) * (1 - u) + h(ix + 1, iy + 1) * u) * v; };
+  const fbm = (x, y) => vn(x, y) * 0.55 + vn(x * 2.07 + 17.2, y * 2.07) * 0.28 + vn(x * 4.13 + 9.4, y * 4.13) * 0.17;
   for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
-    let den = 0, hz = -1, nx = 0, ny = 0;
-    for (const [cx, cy, R] of L) { const dx = (x - cx) / R, dy = (y - cy) / R, q = 1 - dx * dx - dy * dy; if (q <= 0) continue; den += q; const z = Math.sqrt(q); if (z * R > hz) { hz = z * R; nx = dx; ny = dy; } }
-    const edge = Math.max(0, 1 - Math.hypot(x - S / 2, y - S / 2) / (S * 0.5)), A = Math.min(1, den * 0.9) * Math.min(1, edge * 3);
-    const lit = Math.max(0, 0.35 - ny * 0.75 - nx * 0.15 + Math.sqrt(Math.max(0, 1 - nx * nx - ny * ny)) * 0.4);
-    const o = (y * S + x) * 4; img.data[o] = Math.min(255, lit * 255); img.data[o + 1] = Math.min(255, Math.hypot(nx, ny) * 255); img.data[o + 2] = 0; img.data[o + 3] = A * 255;
+    const u = (x + 0.5) / S, v = (y + 0.5) / S, dx = u * 2 - 1, dy = v * 2 - 1, r = Math.hypot(dx, dy);
+    const n = fbm(u * 5.5, v * 5.5), n2 = fbm(u * 9.0 + 4.0, v * 9.0 - 2.0);
+    const billow = 0.55 + 0.45 * n, edge = Math.max(0, 1 - r);
+    const A = Math.pow(Math.min(1, edge * 1.15), 1.6) * (0.35 + 0.65 * billow) * (0.75 + 0.25 * n2);
+    const lit = 0.38 + 0.62 * Math.max(0, 0.2 - dy * 0.7 + (n - 0.5) * 0.35 + Math.sqrt(Math.max(0, 1 - r)) * 0.25);
+    const o = (y * S + x) * 4; img.data[o] = Math.min(255, lit * 255); img.data[o + 1] = 0; img.data[o + 2] = 0; img.data[o + 3] = Math.min(255, A * 255);
   }
-  g.putImageData(img, 0, 0); return new THREE.CanvasTexture(c);
+  g.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.NoColorSpace; t.needsUpdate = true; return t;
 }
 
 // Smoke / steam particles. Lit by the sky (top brighter), by the engine flame (orange, falls off with distance),
 // with per-particle rotation. kind: 0 = exhaust smoke (warm grey), 1 = steam (white).
+// Soft-particle depth fade + a near-camera / screen-size fade keep a close pad cam from sitting inside a cream wall.
 export class Smoke {
-  constructor(max) { this.build(max); }
+  constructor(max) { this.build(max); this.live = 0; }
   build(max) {
     if (this.points) { this.points.removeFromParent(); this.points.geometry.dispose(); }
-    this.max = max; this.n = 0; this.cursor = 0;
+    this.max = max; this.n = 0; this.cursor = 0; this.live = 0;
     this.p = new Float32Array(max * 3); this.v = new Float32Array(max * 3); this.age = new Float32Array(max).fill(1e9); this.life = new Float32Array(max);
     this.size = new Float32Array(max); this.heat = new Float32Array(max); this.grow = new Float32Array(max); this.kind = new Float32Array(max);
     const geo = new THREE.BufferGeometry();
@@ -106,20 +112,53 @@ export class Smoke {
     for (let i = 0; i < max; i++) this.aRot.array[i] = (i * 2.399) % 6.283;
     geo.setAttribute('size', this.aSize); geo.setAttribute('alpha', this.aAlpha); geo.setAttribute('heat', this.aHeat); geo.setAttribute('rot', this.aRot); geo.setAttribute('kind', this.aKind);
     this.mat = this.mat || new THREE.ShaderMaterial({
-      uniforms: { map: { value: smokeTex() }, scale: { value: 600 }, uFlame: { value: new THREE.Vector3() }, uFlameI: { value: 0 }, uSky: { value: new THREE.Color(0.75, 0.78, 0.82) }, uSun: { value: new THREE.Color(1, 0.95, 0.88) } },
-      transparent: true, depthWrite: false,
-      vertexShader: `attribute float size, alpha, heat, rot, kind; uniform float scale, uFlameI; uniform vec3 uFlame; varying float vA, vH, vR, vK, vL;
+      uniforms: {
+        map: { value: smokeTex() }, scale: { value: 600 }, uFlame: { value: new THREE.Vector3() }, uFlameI: { value: 0 },
+        uSky: { value: new THREE.Color(0.62, 0.64, 0.66) }, uSun: { value: new THREE.Color(1, 0.95, 0.88) },
+        tDepth: { value: null }, uHasDepth: { value: 0 }, uRes: { value: new THREE.Vector2(1, 1) }, uNear: { value: 0.4 }, uFar: { value: 60000 }, uSoft: { value: 2.4 },
+      },
+      transparent: true, depthWrite: false, depthTest: true,
+      vertexShader: `attribute float size, alpha, heat, rot, kind; uniform float scale, uFlameI; uniform vec3 uFlame; varying float vA, vH, vR, vK, vL, vZ, vSoft;
         void main(){ vA = alpha; vH = heat; vR = rot; vK = kind; vec4 wp = modelMatrix * vec4(position, 1.0); float d = distance(wp.xyz, uFlame);
-          vL = min(0.55, uFlameI / (1.0 + d * d / 200.0));
-          vec4 mv = viewMatrix * wp; gl_PointSize = min(1024.0, size * scale / -mv.z); gl_Position = projectionMatrix * mv; }`,
-      fragmentShader: `uniform sampler2D map; uniform vec3 uSky, uSun; varying float vA, vH, vR, vK, vL;
-        void main(){ vec2 q = gl_PointCoord - 0.5; float c = cos(vR), s = sin(vR); q = mat2(c, -s, s, c) * q; vec4 t = texture2D(map, q + 0.5);
-          float top = t.r; // baked billow shading (sprite rotates, light stays from above enough at these speeds)
-          vec3 base = mix(vec3(0.50, 0.47, 0.44), vec3(0.85, 0.86, 0.88), vK);
-          vec3 col = base * (uSky * 0.42 + uSun * 0.45 * top) * mix(0.38, 1.1, top) + vec3(1.0, 0.5, 0.2) * (vL * (0.4 + 0.6 * (1.0 - top)) + vH * 0.6);
-          gl_FragColor = vec4(col, t.a * vA); if (gl_FragColor.a < 0.008) discard; }`,
+          vL = min(0.35, uFlameI / (1.0 + d * d / 200.0));
+          vec4 mv = viewMatrix * wp; vZ = -mv.z;
+          float raw = size * scale / max(vZ, 0.15);
+          // cap screen size so a close cam never sees a full-frame polygon, and fade huge sprites
+          float caps = min(raw, 180.0); vSoft = size;
+          vA *= smoothstep(2.2, 12.0, vZ) * min(1.0, 140.0 / max(raw, 1.0));
+          gl_PointSize = caps; gl_Position = projectionMatrix * mv; }`,
+      fragmentShader: `uniform sampler2D map, tDepth; uniform vec3 uSky, uSun; uniform float uHasDepth, uNear, uFar, uSoft; uniform vec2 uRes;
+        varying float vA, vH, vR, vK, vL, vZ, vSoft;
+        float linDepth(float z){ float ndc = z * 2.0 - 1.0; return 2.0 * uNear * uFar / (uFar + uNear - ndc * (uFar - uNear)); }
+        void main(){ vec2 q = gl_PointCoord - 0.5; float c = cos(vR), s = sin(vR); q = mat2(c, -s, s, c) * q;
+          float rr = length(q) * 2.0; if (rr > 1.0) discard;
+          vec4 t = texture2D(map, q + 0.5);
+          float a = t.a * vA * (1.0 - smoothstep(0.72, 1.0, rr));
+          if (uHasDepth > 0.5) { float sceneZ = linDepth(texture2D(tDepth, gl_FragCoord.xy / uRes).r); a *= smoothstep(0.0, max(0.6, vSoft * 0.45) + uSoft, sceneZ - vZ); }
+          if (a < 0.008) discard;
+          float top = t.r;
+          vec3 base = mix(vec3(0.28, 0.27, 0.25), vec3(0.62, 0.63, 0.65), vK);
+          vec3 col = base * (uSky * 0.38 + uSun * 0.32 * top) * mix(0.55, 1.0, top) + vec3(1.0, 0.48, 0.18) * (vL * 0.35 * (1.0 - top) + vH * 0.28);
+          gl_FragColor = vec4(col, a); }`,
     });
-    this.points = new THREE.Points(geo, this.mat); this.points.frustumCulled = false; this.points.userData.noAO = true;
+    this.points = new THREE.Points(geo, this.mat); this.points.frustumCulled = false; this.points.userData.noAO = true; this.points.renderOrder = 4;
+  }
+  // Opaque-scene depth, sampled so puffs fade as they wrap the rocket, pad and ground instead of cutting a hard edge.
+  prepareDepth(renderer, scene, camera) {
+    if (!this.live) { this.mat.uniforms.uHasDepth.value = 0; return; }
+    const gl = renderer.getContext(), w = gl.drawingBufferWidth, h = gl.drawingBufferHeight;
+    if (!this.depthRT || this._dw !== w || this._dh !== h) {
+      this.depthRT?.dispose();
+      const dt = new THREE.DepthTexture(w, h); dt.format = THREE.DepthFormat; dt.type = THREE.UnsignedIntType;
+      this.depthRT = new THREE.WebGLRenderTarget(w, h, { depthTexture: dt, magFilter: THREE.NearestFilter, minFilter: THREE.NearestFilter });
+      this._dw = w; this._dh = h;
+    }
+    const prev = renderer.getRenderTarget(), vis = this.points.visible;
+    this.points.visible = false;
+    renderer.setRenderTarget(this.depthRT); renderer.clear(); renderer.render(scene, camera);
+    renderer.setRenderTarget(prev); this.points.visible = vis;
+    const u = this.mat.uniforms; u.tDepth.value = this.depthRT.depthTexture; u.uHasDepth.value = 1;
+    u.uRes.value.set(w, h); u.uNear.value = camera.near; u.uFar.value = camera.far;
   }
   emit(x, y, z, vx, vy, vz, size, life, heat = 0, grow = 1, kind = 0) {
     const i = this.cursor; this.cursor = (this.cursor + 1) % this.max;
@@ -129,19 +168,22 @@ export class Smoke {
   }
   light(pos, intensity, sky, sun) { const u = this.mat.uniforms; u.uFlame.value.copy(pos); u.uFlameI.value = intensity; if (sky) u.uSky.value.copy(sky); if (sun) u.uSun.value.copy(sun); }
   update(dt, wind, viewH) {
-    this.mat.uniforms.scale.value = viewH * 0.9;
+    this.mat.uniforms.scale.value = viewH * 0.85;
     const S = this.aSize.array, A = this.aAlpha.array, H = this.aHeat.array, R = this.aRot.array;
+    let live = 0;
     for (let i = 0; i < this.max; i++) {
       const a = this.age[i] += dt;
       if (a > this.life[i]) { A[i] = 0; continue; }
       const k = a / this.life[i], drag = Math.exp(-dt * 1.1);
       this.v[i * 3] = this.v[i * 3] * drag + wind.x * (1 - drag); this.v[i * 3 + 1] = this.v[i * 3 + 1] * drag + (0.8 + this.kind[i] * 1.2) * dt; this.v[i * 3 + 2] = this.v[i * 3 + 2] * drag + wind.z * (1 - drag);
       this.p[i * 3] += this.v[i * 3] * dt; this.p[i * 3 + 1] = Math.max(0.2, this.p[i * 3 + 1] + this.v[i * 3 + 1] * dt); this.p[i * 3 + 2] += this.v[i * 3 + 2] * dt;
-      S[i] = this.size[i] * (1 + Math.sqrt(k) * 1.8 * this.grow[i]);
-      A[i] = Math.min(1, a * 5) * Math.pow(1 - k, 1.4) * 0.6;
+      S[i] = this.size[i] * (1 + Math.sqrt(k) * 1.35 * this.grow[i]);
+      A[i] = Math.min(1, a * 5) * Math.pow(1 - k, 1.55) * 0.32;
       H[i] = this.heat[i] * Math.max(0, 1 - a * 2.5);
-      R[i] += dt * 0.15 * ((i & 1) ? 1 : -1);
+      R[i] += dt * 0.12 * ((i & 1) ? 1 : -1);
+      live++;
     }
+    this.live = live;
     this.points.geometry.attributes.position.needsUpdate = true; this.aSize.needsUpdate = this.aAlpha.needsUpdate = this.aHeat.needsUpdate = this.aRot.needsUpdate = this.aKind.needsUpdate = true;
   }
   clear() { this.age.fill(1e9); }

@@ -39,7 +39,7 @@ class Game {
     this.world = new World($('c'), this.settings.quality);
     this.audio = new Audio(); this.audio.setVolumes(this.settings);
     this.input = new Input($('c'));
-    this.smoke = new Smoke(PRESETS[this.settings.quality]?.particles || 900); this.world.scene.add(this.smoke.points);
+    this.smoke = new Smoke(PRESETS[this.settings.quality]?.particles || 900); this.world.scene.add(this.smoke.points); this.world.smokeFX = this.smoke;
     this.debris = new Debris(this.world.scene);
     this.sparks = new Sparks(PRESETS[this.settings.quality]?.particles > 600 ? 500 : 200); this.world.scene.add(this.sparks.points);
     this.applySettings();
@@ -77,7 +77,7 @@ class Game {
     this.input.sens = s.sens; this.input.invertY = s.invertY;
     this.audio.setVolumes(s);
     this.world.applyQuality(s.quality, innerWidth, innerHeight);
-    const n = PRESETS[s.quality].particles; if (this.smoke.max !== n) { this.smoke.build(n); this.world.scene.add(this.smoke.points); }
+    const n = PRESETS[s.quality].particles; if (this.smoke.max !== n) { this.smoke.build(n); this.world.scene.add(this.smoke.points); this.world.smokeFX = this.smoke; }
     LS.set('settings', s);
   }
   saveState() { LS.set('rocket', this.rocket); LS.set('fill', this.fill); LS.set('progress', this.progress); }

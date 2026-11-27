@@ -239,13 +239,13 @@ export class FlightMode {
         const k = (1 - h / 70) * p;
         // billows rolling out of both trench exits, steam boiling off the deluge at the mount
         for (const e of [0, 1]) for (let i = 0; i < 5 * n * k + 0.4; i++) {
-          const o = P.exits[e], d = P.exitDirs[e], s = 16 + Math.random() * 22, j = (Math.random() - 0.5) * 3;
-          sm.emit(o.x + j, 1 + Math.random() * 2, o.z + j, d.x * s + (Math.random() - 0.5) * 10, 3 + Math.random() * 6, d.z * s + (Math.random() - 0.5) * 10, 5 + Math.random() * 4, 9 + Math.random() * 6, 0.6, 2.2, 0);
+          const o = P.exits[e], d = P.exitDirs[e], s = 18 + Math.random() * 24, j = (Math.random() - 0.5) * 2.2;
+          sm.emit(o.x + j, 0.6 + Math.random() * 1.4, o.z + j, d.x * s + (Math.random() - 0.5) * 8, 4 + Math.random() * 8, d.z * s + (Math.random() - 0.5) * 8, 3.2 + Math.random() * 2.2, 8 + Math.random() * 5, 0.5, 1.55, 0);
         }
-        for (let i = 0; i < 3 * n * k + 0.3; i++) { const a = Math.random() * 6.283, r = 3 + Math.random() * 4; sm.emit(P.center.x + Math.cos(a) * r, 0.8, P.center.z + Math.sin(a) * r, Math.cos(a) * 5, 5 + Math.random() * 5, Math.sin(a) * 5, 3 + Math.random() * 2, 7 + Math.random() * 4, 0.25, 2.4, 1); }
+        for (let i = 0; i < 3 * n * k + 0.3; i++) { const a = Math.random() * 6.283, r = 2.5 + Math.random() * 3; sm.emit(P.center.x + Math.cos(a) * r, 0.6, P.center.z + Math.sin(a) * r, Math.cos(a) * 6, 6 + Math.random() * 6, Math.sin(a) * 6, 2.2 + Math.random() * 1.6, 6 + Math.random() * 3.5, 0.2, 1.7, 1); }
         if (this.g.sparks && Math.random() < k * 0.6) this.burst(3, 20);
       } else if (h < 70) {
-        for (let i = 0; i < 8 * n * (1 - h / 70) * p + 0.5; i++) { const a = Math.random() * 6.283, s = 14 + Math.random() * 18; sm.emit(noz.x + Math.cos(a) * 2, 0.8, noz.z + Math.sin(a) * 2, Math.cos(a) * s, 1 + Math.random() * 3, Math.sin(a) * s, 3 + Math.random() * 3, 5 + Math.random() * 4, 0.7, 1.6); }
+        for (let i = 0; i < 8 * n * (1 - h / 70) * p + 0.5; i++) { const a = Math.random() * 6.283, s = 16 + Math.random() * 18; sm.emit(noz.x + Math.cos(a) * 2, 0.6, noz.z + Math.sin(a) * 2, Math.cos(a) * s, 2 + Math.random() * 5, Math.sin(a) * s, 2.4 + Math.random() * 2, 5 + Math.random() * 3.5, 0.55, 1.4); }
       }
       if (h < 6000) for (let i = 0; i < 2 * n * p + 0.3; i++) { const j = () => (Math.random() - 0.5) * 1.5; sm.emit(noz.x - up.x * 3 + j(), noz.y - up.y * 3 + j(), noz.z - up.z * 3 + j(), f.vel.x * 0.2 - up.x * 25, f.vel.y * 0.2 - up.y * 25, f.vel.z * 0.2 - up.z * 25, 1.4 + Math.random(), 2.5 + Math.random() * 2, 0.5, 1.2); }
     }
