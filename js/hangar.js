@@ -5,6 +5,8 @@ import * as THREE from 'three';
 import { mergeGeometries } from '../vendor/three/addons/utils/BufferGeometryUtils.js';
 import { applyPBR } from './tex.js';
 
+export const HANGAR = { x: 22, z: 16, h: 28, door: 10, doorH: 26, pitR: 3.0, pitDepth: 22 };
+
 const _o = new THREE.Object3D(), UP = new THREE.Vector3(0, 1, 0);
 const xf = (p, r = [0, 0, 0], s = [1, 1, 1]) => { _o.position.set(...p); _o.rotation.set(...r); _o.scale.set(...s); _o.updateMatrix(); return _o.matrix.clone(); };
 class Kit {

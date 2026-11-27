@@ -9,7 +9,7 @@ import { Outdoor, bake } from './outdoor.js';
 import './haze.js';   // height-integrated blue haze for every fogged material
 import { Earth, GLOBE_FADE, TERRAIN_FADE } from './earth.js';
 import { Post } from './post.js';
-import { buildInterior } from './hangar.js';
+import { buildInterior, HANGAR } from './hangar.js';
 import { buildPadComplex, TRENCH } from './pad.js';
 import { buildAssemblyStand, DECK as STAND_DECK, HALF as STAND_HALF } from './stand.js';
 
@@ -18,7 +18,7 @@ export const SPOTS = {
   test: new THREE.Vector3(48, 0, -72),
   pad: new THREE.Vector3(0, 0, -115),
 };
-export const HANGAR = { x: 22, z: 16, h: 28, door: 10, doorH: 26, pitR: 3.0, pitDepth: 22 };
+export { HANGAR };
 export const IS_TOUCH = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 export const IS_IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
@@ -181,9 +181,8 @@ export class World {
   render() {
     const r = this.renderer, cam = this.camera, now = performance.now(), dt = Math.min(0.1, (now - this._rt) / 1000); this._rt = now;
     const alt = cam.position.y, gf = THREE.MathUtils.smoothstep(alt, 7000, 22000);
-    const nearHangar = this.indoor || Math.hypot(cam.position.x, cam.position.y, cam.position.z) < 90;
-    this._props ??= this.hangar.getObjectByName('props'); if (this._props) this._props.visible = nearHangar;
-    this._shell ??= this.hangar.getObjectByName('shell'); if (this._shell) this._shell.visible = nearHangar;
+    // loose set dressing is skipped far out; the interior shell (walls, roof) is part of the building and always drawn
+    this._props ??= this.hangar.getObjectByName('props'); if (this._props) this._props.visible = this.indoor || cam.position.length() < 300;
     // outdoors the planet pass draws sky + ground to the horizon; the local terrain and sea hand over to it 7-10 km out,
     // and dissolve completely on the way up (7-22 km)
     if (!this.indoor) this.earth.prepare(cam, dt);
@@ -313,7 +312,8 @@ export class World {
     const apronMat = new THREE.MeshStandardMaterial({ color: 0xd2d0cb, roughness: 0.85 });
     applyPBR(apronMat, 'concrete_pavement', [22, 27], { normalScale: 0.7 }).catch(() => {});
     // slab with the pad deck + flame trench cut out (shape in world x / -z, rotated flat)
-    const sh = new THREE.Shape(); sh.moveTo(-70, 205); sh.lineTo(110, 205); sh.lineTo(110, -15); sh.lineTo(-70, -15); sh.closePath();
+    const hx = HANGAR.x, hz = HANGAR.z;   // notch: the hangar slab is the floor inside its walls (meets the apron at the door)
+    const sh = new THREE.Shape(); sh.moveTo(-70, 205); sh.lineTo(110, 205); sh.lineTo(110, -15); sh.lineTo(hx, -15); sh.lineTo(hx, hz); sh.lineTo(-hx, hz); sh.lineTo(-hx, -15); sh.lineTo(-70, -15); sh.closePath();
     const P = SPOTS.pad, d = TRENCH.dir, n = new THREE.Vector2(-d.y, d.x), hole = new THREE.Path(), c = (u, v) => [P.x + d.x * u + n.x * v, -(P.z + d.y * u + n.y * v)];
     hole.moveTo(...c(-TRENCH.half, -TRENCH.w)); hole.lineTo(...c(TRENCH.half, -TRENCH.w)); hole.lineTo(...c(TRENCH.half, TRENCH.w)); hole.lineTo(...c(-TRENCH.half, TRENCH.w)); hole.closePath(); sh.holes.push(hole);
     const ag = new THREE.ShapeGeometry(sh, 2); ag.rotateX(-Math.PI / 2);
@@ -321,7 +321,7 @@ export class World {
     const apron = new THREE.Mesh(ag, apronMat); apron.position.y = -0.02; apron.receiveShadow = true; this.scene.add(apron);
     // expansion-joint grid painted over the slab (one draw)
     const pts = [];
-    const seg = (a, b) => { for (let t = 0; t < 1 - 1e-6; t += 0.05) { const p0 = a.clone().lerp(b, t), p1 = a.clone().lerp(b, t + 0.05), m = p0.clone().add(p1).multiplyScalar(0.5); if (Math.abs(m.x - P.x) > 25 || Math.abs(m.z - P.z) > 25) pts.push(p0, p1); } };   // not across the pad deck
+    const seg = (a, b) => { for (let t = 0; t < 1 - 1e-6; t += 0.05) { const p0 = a.clone().lerp(b, t), p1 = a.clone().lerp(b, t + 0.05), m = p0.clone().add(p1).multiplyScalar(0.5); if ((Math.abs(m.x - P.x) > 25 || Math.abs(m.z - P.z) > 25) && (Math.abs(m.x) > hx || Math.abs(m.z) > hz)) pts.push(p0, p1); } };   // not across the pad deck or under the hangar
     for (let x = -70; x <= 110; x += 12) seg(new THREE.Vector3(x, -0.005, -205), new THREE.Vector3(x, -0.005, 15));
     for (let z = -205; z <= 15; z += 12) seg(new THREE.Vector3(-70, -0.005, z), new THREE.Vector3(110, -0.005, z));
     this.scene.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0x55534f, transparent: true, opacity: 0.45 })));

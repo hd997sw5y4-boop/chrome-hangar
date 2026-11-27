@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { TRENCH } from './pad.js';
 import { GLOBE_FADE, TERRAIN_FADE, LEVELS } from './earth.js';
+import { HANGAR } from './hangar.js';
 
 export let SEA = -0.9;             // sea level (site ground is 0); set from the DEM when one loads
 export const SITE = { x0: -200, x1: 175, z0: -250, z1: 95, blend: 150 };
@@ -224,7 +225,7 @@ export function terrainMaterial(tex, nor = null, macro = null) {
     tSand: { value: tex.sand }, tDirt: { value: tex.dirt }, tGrass: { value: tex.grass }, tRock: { value: tex.rock },
     nSand: { value: nor?.sand }, nDirt: { value: nor?.dirt }, nGrass: { value: nor?.grass }, nRock: { value: nor?.rock },
     tMacHi: { value: macro?.hi }, uHiR: { value: macro?.hiR || new THREE.Vector3() }, ...LEVELS, uTF: TERRAIN_FADE,
-    uTrench: { value: new THREE.Vector4(TRENCH.cx, TRENCH.cz, Math.cos(TRENCH.ang), Math.sin(TRENCH.ang)) }, uTrenchS: { value: new THREE.Vector2(TRENCH.half, TRENCH.w) },
+    uTrench: { value: new THREE.Vector4(TRENCH.cx, TRENCH.cz, Math.cos(TRENCH.ang), Math.sin(TRENCH.ang)) }, uTrenchS: { value: new THREE.Vector2(TRENCH.half, TRENCH.w) }, uHangar: { value: new THREE.Vector2(HANGAR.x, HANGAR.z) },
     uGF: GLOBE_FADE, uSea: { value: SEA }, uCoast: { value: shoreX(-80) }, uSite: { value: new THREE.Vector4(SITE.x0, SITE.x1, SITE.z0, SITE.z1) },
   };
   m.onBeforeCompile = sh => {
@@ -233,7 +234,7 @@ export function terrainMaterial(tex, nor = null, macro = null) {
       .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz; vWN = normalize(mat3(modelMatrix) * objectNormal);');
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
 varying vec3 vWP; varying vec3 vWN;
-uniform sampler2D tSand, tDirt, tGrass, tRock; uniform float uSea, uCoast, uGF; uniform vec4 uSite, uTrench; uniform vec2 uTrenchS, uTF;
+uniform sampler2D tSand, tDirt, tGrass, tRock; uniform float uSea, uCoast, uGF; uniform vec4 uSite, uTrench; uniform vec2 uTrenchS, uTF, uHangar;
 #ifdef DETAIL_NORMALS
 uniform sampler2D nSand, nDirt, nGrass, nRock;
 #endif
@@ -255,6 +256,7 @@ float gFade = max(uGF, smoothstep(uTF.x, uTF.y, length(vWP.xz)));   // soft radi
 if (gFade > 0.995) discard;     // dissolve into the globe pass at high altitude
 if (gFade > 0.001 && vWP.y < uSea - 0.3) discard;   // no ghost of the sea floor through the fading sea
 { vec2 q = vWP.xz - uTrench.xy; if (abs(dot(q, uTrench.zw)) < uTrenchS.x && abs(dot(q, vec2(-uTrench.w, uTrench.z))) < uTrenchS.y) discard; }   // flame trench
+if (all(lessThan(abs(vWP.xz), uHangar))) discard;   // nothing under the hangar slab: its floor is the ground there
 {
   vec2 p = vWP.xz; float dist = length(vWP - cameraPosition); float far = smoothstep(80.0, 1400.0, dist);
   float n = fb(p / 90.0), n2 = fb(p / 900.0 + 3.1);
@@ -316,7 +318,7 @@ if (gFade > 0.001 && vWP.y < uSea - 0.3) discard;   // no ghost of the sea floor
 #endif`)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(0.97, 0.55, smoothstep(uSea + 0.6, uSea, vWP.y));');
   };
-  m.customProgramCacheKey = () => 'terrain-v6' + (nor ? 'n' : '') + (macro ? 'm' : '');
+  m.customProgramCacheKey = () => 'terrain-v7' + (nor ? 'n' : '') + (macro ? 'm' : '');
   return m;
 }
 

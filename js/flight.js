@@ -82,7 +82,7 @@ export class FlightMode {
     this.syncPose(); this.syncButtons(); this.setCam(this.cam, true); this.zoomT = this.zoom = 1;
     if (this.g.mission && !this.g.training?.active) this.g.prompt(IS_TOUCH ? 'Tap <b>Launch</b>. Throttle on the right, steer with the left stick.' : 'Press <b>Space</b> to launch. Shift / R throttle up, F down, WASD steer, C camera.');
   }
-  exit() { this.w.post.setDOF(false); this.w.post.setBlur(0); this.w.post.setHeat(new THREE.Vector4(0, 0, 0, 0)); this.w.setAltitude(0); this.w.camera.far = 60000; this.w.camera.updateProjectionMatrix(); this.clear(); $('camPicker').classList.add('hidden'); this.w.camera.up.set(0, 1, 0); this.guideLine.visible = false; this.hpUI.detach(); this.g.prompt(null); $('landGuide').classList.add('hidden'); this.g.audio.setEngine(0); this.padRel?.reset(null); }
+  exit() { this.w.post.setDOF(false); this.w.post.setBlur(0); this.w.post.setHeat(new THREE.Vector4(0, 0, 0, 0)); this.w.setAltitude(0); this.w.followSun(SPOTS.pad); this.w.camera.near = 0.1; this.w.camera.far = 60000; this.w.camera.updateProjectionMatrix(); this.clear(); $('camPicker').classList.add('hidden'); this.w.camera.up.set(0, 1, 0); this.guideLine.visible = false; this.hpUI.detach(); this.g.prompt(null); $('landGuide').classList.add('hidden'); this.g.audio.setEngine(0); this.padRel?.reset(null); }
   st0Top() { return stats(this.g.rocket, this.g.fill).top; }
   clear() { if (this.group) { this.group.removeFromParent(); disposeTree(this.group); this.group = null; } }
   back() {
