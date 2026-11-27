@@ -102,7 +102,7 @@ export class World {
   setAltitude(a) { if (Math.abs((this.alt || 0) - a) > 1) { this.alt = a; this.applySky(); } }
   applySky() {
     const S = this.sky; if (!S) return;
-    const k = THREE.MathUtils.smoothstep(this.alt || 0, 1500, 45000), sp = 1 - 0.99 * k;
+    const k = THREE.MathUtils.smoothstep(this.alt || 0, 1500, 40000), sp = 1 - k;
     const sc = this.scene; sc.backgroundIntensity = this.skyNorm * sp;
     this.skyEI = Math.min(2.5, Math.sqrt(this.skyNorm)) * S.env * (1 - 0.6 * k);
     if (!this.indoor) sc.environmentIntensity = Math.min(2.5, Math.sqrt(this.skyNorm)) * S.env * (1 - 0.6 * k);

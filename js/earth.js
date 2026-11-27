@@ -113,14 +113,21 @@ export class Earth {
     if (!this.ready) { if (alt > 600) this.load(w.demInfo); return false; }
     this.t += dt;
     const c = this.cam; c.position.copy(camera.position).multiplyScalar(0.001); c.quaternion.copy(camera.quaternion);
-    c.fov = camera.fov; c.aspect = camera.aspect; c.near = Math.max(0.005, alt * 0.0005 * 0.4); c.far = 1e5; c.updateProjectionMatrix();
+    c.fov = camera.fov; c.aspect = camera.aspect;
+    // near plane in km: a fraction of altitude, capped, so we never clip the 90 km atmosphere shell or the horizon
+    const hKm = Math.max(0.001, alt * 0.001); c.near = Math.max(0.005, Math.min(hKm * 0.08, 2)); c.far = 1e5; c.updateProjectionMatrix();
     const U = this.U; U.uCam.value.copy(c.position); U.uSun.value.copy(w.sunDir || new THREE.Vector3(0, 1, 0)); U.uSunI.value = Math.max(0.6, w.sun.intensity);
     U.uT.value = this.t; U.uCloudK.value = sstep(15000, 120000, alt); U.uAtmK.value = sstep(2000, 25000, alt);
     U.uFogC.value.copy(w.scene.fog.color); U.uFogD.value = w.scene.fog.density;
     this.stars.position.copy(c.position); this.starMat.opacity = sstep(18000, 70000, alt);
-    this.scene.background = w.skyTexForEarth; this.scene.backgroundIntensity = w.scene.backgroundIntensity;
-    this.scene.backgroundRotation.copy(w.scene.backgroundRotation);
+    // drop the ground HDRI once stars take over, so space is black rather than a smeared brown sky photo
+    const space = alt > 25000;
+    if (space) { this.scene.background = null; }
+    else { this.scene.background = w.skyTexForEarth; this.scene.backgroundIntensity = w.scene.backgroundIntensity; this.scene.backgroundRotation.copy(w.scene.backgroundRotation); }
+    const prevC = r.getClearColor(new THREE.Color()), prevA = r.getClearAlpha();
+    if (space) r.setClearColor(0x000000, 1);
     r.render(this.scene, c);
+    if (space) r.setClearColor(prevC, prevA);
     return true;
   }
 }

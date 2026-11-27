@@ -256,8 +256,9 @@ export class FlightMode {
     const rad = radius / (dist * Math.tan(cam.fov * Math.PI / 360));
     post.setHeat(new THREE.Vector4(sp.x * 0.5 + 0.5, sp.y * 0.5 + 0.5, THREE.MathUtils.clamp(rad * 0.5, 0.004, 0.25), sp.z < 1 ? p * (rho / 1.225) : 0), dir);
     const view = this.cam === 6 ? DIRECTOR[this.dir.i % DIRECTOR.length][0] : this.cam;
-    post.setDOF(view === 2 || view === 3 || view === 8 || view === 9, dist, view === 2 || view === 3 ? 0.00004 : 0.00015);
-    post.setBlur(view === 1 ? THREE.MathUtils.clamp((f.speed - 60) / 900, 0, 0.06) : 0);
+    const spaceK = THREE.MathUtils.smoothstep(f.alt, 6000, 18000);   // DOF / motion blur smear the globe into a blur at altitude
+    post.setDOF(spaceK < 0.2 && (view === 2 || view === 3 || view === 8 || view === 9), dist, view === 2 || view === 3 ? 0.00004 : 0.00015);
+    post.setBlur(view === 1 ? THREE.MathUtils.clamp((f.speed - 60) / 900, 0, 0.06) * (1 - spaceK) : 0);
   }
   hud() {
     const f = this.f, fmt = v => Math.round(v).toLocaleString();
