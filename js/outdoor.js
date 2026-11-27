@@ -426,6 +426,8 @@ export class Outdoor {
       place('portable_generator', [[-98, -132, 0.5], [55, -60, 2.1]], null),
       place('small_lpg_tank', [[-100, -136, 0], [-100.6, -136.5, 0], [-99.4, -136.6, 0]], null),
       place('metal_jerrycan', [[54, -61.5, 0.3], [-97, -133, 1]], null),
+      place('fire_hydrant', [[16, 18.5, 0.2], [-30, 18.5, 2.1], [14, -92, 1.0], [-120, -128, 0.5], [44, -172, 2.6]], n => n === 'fire_hydrant'),
+      place('old_tyre', [[-112, -118, 0, 1, undefined], [-111.4, -118.6, 0.7], [62, -183, 1.3], [-99, -136, 2.2]], null),
       place('Barrel_01', [[60, -185, 0], [60.7, -185.4, 0.4], [60.2, -186.1, 1], [-110, -120, 0], [-110.6, -120.5, 0]], null),
       place('wooden_crate_02', [[22, -20, 0.2], [23.2, -20.4, 1.4], [22.6, -20.2, 0.6, 1, 0.45]], null),
       place('security_light', [[-15, -16.45, Math.PI, 1.6, 9], [15, -16.45, Math.PI, 1.6, 9]], null),
@@ -495,11 +497,15 @@ export class Outdoor {
       { model: 'namaqualand_boulder_02', nodes: [null], n: lite ? 60 : 180, far: lite ? 700 : 2000, s: [0.5, 2.2], r: [60, 1700], slopeMax: 9, beach: true, shadow: true, sink: 0.1 },
       { model: 'shrub_02', nodes: ['shrub_02_b', 'shrub_02_d'], n: lite ? 220 : 520, far: lite ? 240 : 520, s: [0.5, 1.2], r: [20, 1300], slopeMax: 0.6, shadow: !lite },
       { model: 'wild_rooibos_bush', nodes: ['wild_rooibos_bush_d', 'wild_rooibos_bush_e'], n: lite ? 300 : 800, far: lite ? 180 : 380, s: [1.2, 2.6], r: [12, 1100], slopeMax: 0.6, shadow: !lite },
+      { model: 'cheiridopsis_succulent', nodes: ['succulent_a', 'succulent_d'], n: lite ? 160 : 520, far: lite ? 110 : 260, s: [1.4, 2.4], r: [10, 900], slopeMax: 0.6, shadow: false },
+      { model: 'shrub_03', nodes: [null], n: lite ? 180 : 600, far: lite ? 140 : 320, s: [2.0, 3.6], r: [10, 1100], slopeMax: 0.6, beach: true, shadow: false },
+      { model: 'searsia_lucida', nodes: [null], n: lite ? 0 : 160, far: 700, s: [0.8, 1.4], r: [60, 1400], slopeMax: 0.5, shadow: true },
       { model: 'grass_medium_01', nodes: ['tall_a', 'tall_b', 'tall_c'], n: lite ? 900 : 3600, far: lite ? 70 : 170, s: [2.2, 3.6], r: [4, 420], slopeMax: 0.5, shadow: false },
     ];
     const C = 400, cx = -10, cz = -95, chunks = new Map();
     const F = FENCE;
     for (const k of kinds) {
+      if (!k.n) continue;
       const variants = await Promise.all(k.nodes.map(nm => pieces(k.model, nm ? (n => n.includes(nm)) : null)));
       let placed = 0, tries = 0;
       while (placed < k.n && tries++ < k.n * 30) {

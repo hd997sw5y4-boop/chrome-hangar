@@ -11,9 +11,11 @@ Everything below is CC0 1.0 (public domain) unless marked otherwise. Credit is g
   Optimised for the web (meshopt geometry, WebP textures, simplified where needed).
   "Barrel_01" by Jorge Camacho — https://polyhaven.com/a/Barrel_01
   "Bench Vice 01" by Yann Kervran, Antanas Kep — https://polyhaven.com/a/bench_vice_01
+  "Cheiridopsis Succulent" by James Ray Cock (modeling), Jenelle van Heerden (photography) — https://polyhaven.com/a/cheiridopsis_succulent
   "Concrete Road Barrier" by Amal Kumar — https://polyhaven.com/a/concrete_road_barrier
   "Covered Car" by MP — https://polyhaven.com/a/covered_car
   "Exterior Aircon Unit" by Monsta3D — https://polyhaven.com/a/exterior_aircon_unit
+  "Fire Hydrant" by Gonçalo Felício — https://polyhaven.com/a/fire_hydrant
   "Flood Lights" by James Ray Cock — https://polyhaven.com/a/flood_lights
   "Grass Medium 01" by Rob Tuytel, Rico Cilliers — https://polyhaven.com/a/grass_medium_01
   "Ladder Sectioned 01" by MP — https://polyhaven.com/a/ladder_sectioned_01
@@ -21,12 +23,15 @@ Everything below is CC0 1.0 (public domain) unless marked otherwise. Credit is g
   "Metal Tool Chest" by Yann Kervran, John Hutcheson — https://polyhaven.com/a/metal_tool_chest
   "Modular Electricity Poles" by James Ray Cock — https://polyhaven.com/a/modular_electricity_poles
   "Namaqualand Boulder 02" by Greg Zaal, Rico Cilliers — https://polyhaven.com/a/namaqualand_boulder_02
+  "Old Tyre" by MP — https://polyhaven.com/a/old_tyre
   "Overhead Crane" by Timothy3D — https://polyhaven.com/a/overhead_crane
   "Portable Generator" by James Ray Cock — https://polyhaven.com/a/portable_generator
   "Propane Tank" by Slinc — https://polyhaven.com/a/propane_tank
   "Rock Moss Set 01" by Kless Gyzen — https://polyhaven.com/a/rock_moss_set_01
+  "Searsia Lucida" by Rico Cilliers — https://polyhaven.com/a/searsia_lucida
   "Security Light" by Maximilian Schuster — https://polyhaven.com/a/security_light
   "Shrub 02" by Rico Cilliers — https://polyhaven.com/a/shrub_02
+  "Shrub 03" by Rico Cilliers — https://polyhaven.com/a/shrub_03
   "Small Lpg Tank" by Ulan Cabanilla — https://polyhaven.com/a/small_lpg_tank
   "Steel Frame Shelves 01" by James Ray Cock — https://polyhaven.com/a/steel_frame_shelves_01
   "Street Lamp 01" by Josh Dean — https://polyhaven.com/a/street_lamp_01
