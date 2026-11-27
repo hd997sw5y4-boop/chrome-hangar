@@ -67,12 +67,12 @@ function floorMarkTex() {
     c.fillStyle = '#16171a';
     const step = 0.28, band = outer - inner;
     for (let x = -outer; x < outer; x += step) {
-      for (const z0 of (-outer, inner)) {
+      for (const z0 of [-outer, inner]) {
         c.beginPath(); c.moveTo(px(x), py(z0 + band)); c.lineTo(px(x + step * 0.5), py(z0 + band)); c.lineTo(px(x + step * 0.5 + band), py(z0)); c.lineTo(px(x + band), py(z0)); c.fill();
       }
     }
     for (let z = -inner; z < inner; z += step) {
-      for (const x0 of (-outer, inner)) {
+      for (const x0 of [-outer, inner]) {
         c.beginPath(); c.moveTo(px(x0), py(z)); c.lineTo(px(x0 + band), py(z + band)); c.lineTo(px(x0 + band), py(z + step * 0.5 + band)); c.lineTo(px(x0), py(z + step * 0.5)); c.fill();
       }
     }
