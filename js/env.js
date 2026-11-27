@@ -143,7 +143,7 @@ export class World {
     glow.rotation.x = Math.PI / 2; glow.position.y = 0.01; stand.add(glow);
     // walls: corrugated steel (bump from canvas), door opening on -Z
     const corr = canvasTex(256, 16, (c, w) => { for (let x = 0; x < w; x++) { const v = 128 + 120 * Math.sin(x / w * Math.PI * 16) | 0; c.fillStyle = `rgb(${v},${v},${v})`; c.fillRect(x, 0, 1, 16); } }, 1, false);
-    const wallMat = new THREE.MeshStandardMaterial({ color: 0xaeb2b7, metalness: 0.55, roughness: 0.45, bumpMap: corr, bumpScale: 3, side: THREE.DoubleSide });
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x9da2a8, metalness: 0.55, roughness: 0.5, envMapIntensity: 0.55, bumpMap: corr, bumpScale: 3, side: THREE.DoubleSide });
     const wall = (w, h, x, y, z, ry) => { const t = wallMat.clone(); t.bumpMap = corr.clone(); t.bumpMap.repeat.set(w / 6, 1); t.bumpMap.needsUpdate = true; const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), t); m.position.set(x, y, z); m.rotation.y = ry; m.receiveShadow = true; g.add(m); };
     wall(H.x * 2, H.h, 0, H.h / 2, H.z, Math.PI);
     wall(H.z * 2, H.h, -H.x, H.h / 2, 0, Math.PI / 2);

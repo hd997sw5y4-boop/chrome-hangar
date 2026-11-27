@@ -2,6 +2,8 @@
 
 Stand in a quiet hangar, bolt a metal rocket together, static-fire it on the test stand, then launch it.
 
+Play: https://chrome-hangar.vercel.app
+
 Static three.js site, no build step. three.js r187 is vendored in `vendor/`.
 
 - `index.html`, `css/style.css`: UI
