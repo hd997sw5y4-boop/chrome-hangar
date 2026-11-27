@@ -2,7 +2,7 @@ Terrain — real-world elevation and imagery, U.S. government public-domain work
   Elevation: USGS 3D Elevation Program (3DEP), The National Map — https://www.usgs.gov/3d-elevation-program
   Aerial imagery: USDA National Agriculture Imagery Program (NAIP) and USGS ImageryOnly basemap, via
   USGS The National Map — https://www.usgs.gov/programs/national-geospatial-program/national-map
-  Based on the Guadalupe–Nipomo Dunes coast, California, mirrored east–west and with the site graded flat.
+  Based on the Guadalupe–Nipomo Dunes coast, California (site at 34.97 N, 120.62 W), with the site graded flat.
   The range is fictional: not a real launch complex, and no real facility is depicted.
 
 The whole Earth (high-altitude flights) — NASA imagery, public domain (credit: NASA Earth Observatory)
