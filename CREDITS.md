@@ -69,6 +69,15 @@ Terrain — real-world elevation and imagery, U.S. government public-domain work
   Based on the Guadalupe–Nipomo Dunes coast, California, mirrored east–west and with the site graded flat.
   The range is fictional: not a real launch complex, and no real facility is depicted.
 
+The whole Earth (high-altitude flights) — NASA imagery, public domain (credit: NASA Earth Observatory)
+  Blue Marble: Next Generation (July 2004, with topography and bathymetry), Reto Stöckli, NASA Earth
+  Observatory / NASA Goddard Space Flight Center — https://science.nasa.gov/earth/earth-observatory/blue-marble-next-generation/
+  Blue Marble clouds, NASA Goddard Space Flight Center; image by Reto Stöckli, enhancements by Robert
+  Simmon — https://visibleearth.nasa.gov/images/57747/blue-marble-clouds
+  Black Marble 2016 night lights, NASA Earth Observatory (Joshua Stevens, Miguel Román, NASA GSFC,
+  Suomi NPP VIIRS) — https://science.nasa.gov/earth/earth-observatory/earth-at-night/maps/
+  NASA imagery is used for illustration; no NASA logo or endorsement is implied.
+
 Sound effects, CC0 1.0
   Kenney — "Interface Sounds" and "Impact Sounds" (kenney.nl): UI clicks, metal plate and clank hits.
   rubberduck — "100 CC0 metal and wood SFX" (opengameart.org/content/100-cc0-metal-and-wood-sfx).
