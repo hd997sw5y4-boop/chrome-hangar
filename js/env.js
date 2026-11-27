@@ -3,6 +3,10 @@ import * as THREE from 'three';
 import { HDRLoader } from '../vendor/three/addons/loaders/HDRLoader.js';
 import { initMaterials, partMesh } from './parts3d.js';
 import { PARTS } from './rocket.js';
+import { applyPBR, setTexTier } from './tex.js';
+import { setModelTier } from './models.js';
+import { Outdoor } from './outdoor.js';
+import { Earth, GLOBE_FADE } from './earth.js';
 
 export const SPOTS = {
   stand: new THREE.Vector3(0, 0, 0),
@@ -20,6 +24,15 @@ export const PRESETS = {
   high: { label: 'High', pr: 1.5, shadow: 2048, particles: 1600, hdri: '1k' },
   ultra: { label: 'Ultra', pr: 2, shadow: 4096, particles: 2600, hdri: '2k' },
 };
+// Time of day: CC0 Poly Haven pure-sky HDRIs. Each drives the background, PMREM reflections, sun direction/colour and shadows.
+// sun/colour data comes from tools/hdri_info.py (assets/hdri/sky_info.json); az = world azimuth (atan2(z, x)) we turn the sun to.
+export const SKIES = {
+  day:      { label: 'Clear day',     file: 'qwantani_noon_puresky',       az: Math.atan2(-420, -300), sun: 3.0, hemi: 0.3,  bg: 1.0,  env: 1.0,  fog: 0.000075, exp: 1.0,  minEl: 20 },
+  sunset:   { label: 'Golden sunset', file: 'qwantani_sunset_puresky',     az: Math.atan2(-0.45, 1), sun: 2.2, hemi: 0.22, bg: 1.0,  env: 1.0,  fog: 0.00009,  exp: 1.0,  minEl: 5 },
+  dusk:     { label: 'Dusk',          file: 'qwantani_dusk_2_puresky',     az: Math.atan2(-0.6, 1),  sun: 0.45, hemi: 0.25, bg: 1.0, env: 1.2,  fog: 0.0001,   exp: 1.15, minEl: 4, soft: true },
+  overcast: { label: 'Overcast',      file: 'kloofendal_overcast_puresky', az: Math.atan2(-420, -300), sun: 0.7, hemi: 0.6,  bg: 1.0,  env: 1.0,  fog: 0.00013,  exp: 1.0,  minEl: 25, soft: true },
+};
+let SKYINFO = null;
 export const defaultQuality = () => (IS_TOUCH ? 'phone' : 'high');
 
 function canvasTex(w, h, draw, repeat = 1, srgb = true) {
@@ -30,36 +43,78 @@ function canvasTex(w, h, draw, repeat = 1, srgb = true) {
 let s0 = 3; const rnd = () => (s0 = (s0 * 16807) % 2147483647) / 2147483647;
 
 export class World {
-  constructor(canvas) {
+  constructor(canvas, quality = 'high') {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: false });
     const r = this.renderer;
     r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 1.0;
     r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFShadowMap;
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(70, 1, 0.1, 60000);
-    this.scene.fog = new THREE.Fog(0xb9c6d3, 900, 26000);
+    this.scene.fog = new THREE.FogExp2(0xbfc9d2, 0.000075); // aerial perspective: ~40% at 10 km, ~85% at 20 km
     this.pmrem = new THREE.PMREMGenerator(r);
     this.envs = {};
     this.M = initMaterials();
+    setTexTier(quality, r); setModelTier(quality);
+    this.wind = { x: 2, z: 0.6 };
+    this.earth = new Earth(this); this._rt = performance.now();
     this.buildLights(); this.buildHangar(); this.buildOutside(); this.buildTestStand(); this.buildPad();
   }
 
-  async loadHDRIs(size = '1k') {
+  // hangar interior + the chosen sky; only one sky is resident at a time (iPhone memory), others load on demand
+  async loadHDRIs(size = '1k', skyKey = this.skyKey || 'day') {
     const L = new HDRLoader();
-    const load = n => L.loadAsync(`assets/hdri/${n}_${size}.hdr`);
-    const [hang, sky] = await Promise.all([load('hangar_interior'), load('kloppenheim_06_puresky')]);
-    for (const t of [hang, sky]) t.mapping = THREE.EquirectangularReflectionMapping;
-    const old = this.envs;
-    this.envs = { hangar: this.pmrem.fromEquirectangular(hang).texture, sky: this.pmrem.fromEquirectangular(sky).texture, skyTex: sky };
-    hang.dispose();
-    if (old.hangar) { old.hangar.dispose(); old.sky.dispose(); old.skyTex.dispose(); }
-    this.scene.background = sky; this.scene.backgroundIntensity = 0.9;
+    const hang = await L.loadAsync(`assets/hdri/hangar_interior_${size}.hdr`);
+    hang.mapping = THREE.EquirectangularReflectionMapping;
+    const old = this.envs.hangar; this.envs.hangar = this.pmrem.fromEquirectangular(hang).texture; hang.dispose(); old?.dispose();
+    this.hdriSize = size; this.skyKey = null;
+    await this.setSky(skyKey);
+  }
+  async setSky(key) {
+    if (!SKIES[key]) key = 'day';
+    if (key === this.skyKey && this.envs.sky) return;
+    const want = this._skyReq = key + this.hdriSize;
+    if (!SKYINFO) SKYINFO = await fetch('assets/hdri/sky_info.json').then(r => r.json()).catch(() => ({}));
+    const S = SKIES[key], tex = await new HDRLoader().loadAsync(`assets/hdri/${S.file}_${this.hdriSize || '1k'}.hdr`);
+    if (want !== this._skyReq) { tex.dispose(); return; }          // a newer pick won
+    tex.mapping = THREE.EquirectangularReflectionMapping;
+    const env = this.pmrem.fromEquirectangular(tex).texture, old = this.envs;
+    this.envs = { ...old, sky: env, skyTex: tex }; this.skyTexForEarth = tex; old.sky?.dispose(); old.skyTex?.dispose();
+    this.skyKey = key; this.sky = S;
+    // turn the HDRI so its sun sits at our chosen azimuth; lights follow the same direction
+    const I = SKYINFO[S.file] || { sunDir: [0.5, 0.7, 0.4], sunColor: [1, 0.95, 0.9], horizon: [0.7, 0.75, 0.85], zenith: [0.3, 0.45, 0.8] };
+    const d = new THREE.Vector3(...I.sunDir), azH = Math.atan2(d.z, d.x), rot = S.az - azH;
+    this.scene.backgroundRotation.set(0, -rot, 0); this.scene.environmentRotation.set(0, -rot, 0);
+    const el = Math.max(THREE.MathUtils.degToRad(S.minEl), Math.asin(THREE.MathUtils.clamp(d.y, -1, 1)));
+    this.sunDir = new THREE.Vector3(Math.cos(el) * Math.cos(S.az), Math.sin(el), Math.cos(el) * Math.sin(S.az));
+    this.sun.color.setRGB(...I.sunColor).lerp(new THREE.Color(1, 1, 1), 0.25);
+    // normalise sky brightness so every HDRI reads well on screen
+    const hl = I.horizon[0] * 0.2126 + I.horizon[1] * 0.7152 + I.horizon[2] * 0.0722;
+    this.skyNorm = THREE.MathUtils.clamp(0.95 / Math.max(0.05, hl), 0.35, 4) * S.bg;
+    this.skyHorizon = new THREE.Color(...I.horizon); this.skyZenith = new THREE.Color(...I.zenith);
+    this.scene.background = tex;
     this.setIndoor(this.indoor ?? true);
-    this.hdriSize = size;
+    this.applySky();
+  }
+  // sky + lights for the current HDRI and altitude (space darkens the sky, thins the fog)
+  setAltitude(a) { if (Math.abs((this.alt || 0) - a) > 1) { this.alt = a; this.applySky(); } }
+  applySky() {
+    const S = this.sky; if (!S) return;
+    const k = THREE.MathUtils.smoothstep(this.alt || 0, 1500, 40000), sp = 1 - 0.92 * k;
+    const sc = this.scene; sc.backgroundIntensity = this.skyNorm * sp;
+    if (!this.indoor) sc.environmentIntensity = Math.min(2.5, Math.sqrt(this.skyNorm)) * S.env * (1 - 0.6 * k);
+    sc.fog.density = S.fog * (1 - k);
+    sc.fog.color.copy(this.skyHorizon).multiplyScalar(this.skyNorm * 0.85 * sp);
+    this.sun.intensity = S.sun * (1 + 0.3 * k); this.hemi.intensity = S.hemi * sp;
+    this.renderer.toneMappingExposure = S.exp;
+    this.sun.shadow.radius = S.soft ? 6 : 1; this.sun.shadow.intensity = S.soft ? 0.55 : 1;
+    const o = this.outdoor?.oceanMat?.uniforms;
+    if (o) { o.uSun.value.copy(this.sunDir); o.uSunCol.value.copy(this.sun.color).multiplyScalar(S.soft ? 0.25 : 1);
+      o.uHorizon.value.copy(this.skyHorizon).multiplyScalar(this.skyNorm * 0.85 * sp); o.uZenith.value.copy(this.skyZenith).multiplyScalar(this.skyNorm * sp); }
+    this.followSun(this.sun.target.position);
   }
   setIndoor(v) {
     this.indoor = v;
-    if (this.envs.hangar) { this.scene.environment = v ? this.envs.hangar : this.envs.sky; this.scene.environmentIntensity = v ? 1.0 : 0.95; }
+    if (this.envs.hangar && this.envs.sky) { this.scene.environment = v ? this.envs.hangar : this.envs.sky; this.scene.environmentIntensity = v ? 1.0 : 0.95; if (!v) this.applySky?.(); }
     this.spot.castShadow = v && this.shadowSize > 0;
     this.sun.castShadow = !v && this.shadowSize > 0;
   }
@@ -77,7 +132,7 @@ export class World {
     this.setIndoor(this.indoor ?? true);
     this.scene.traverse(o => { if (o.material) [].concat(o.material).forEach(m => m.needsUpdate = true); });
     this.resize(w, h);
-    if (p.hdri !== (this.hdriSize || '1k') && this.envs.hangar) this.loadHDRIs(p.hdri).catch(() => {});
+    if (p.hdri !== (this.hdriSize || '1k') && this.envs.hangar) this.loadHDRIs(p.hdri, this.skyKey).catch(() => {});
   }
   resize(w, h) {
     this.w = w; this.h = h;
@@ -85,8 +140,17 @@ export class World {
     this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
   }
   render() {
-    this.renderer.render(this.scene, this.camera);
+    const r = this.renderer, cam = this.camera, now = performance.now(), dt = Math.min(0.1, (now - this._rt) / 1000); this._rt = now;
+    const alt = cam.position.y, gf = THREE.MathUtils.smoothstep(alt, 25000, 80000);
+    GLOBE_FADE.value = gf; if (this.outdoor) this.outdoor.group.visible = gf < 0.999;
+    if (alt > 600 && !this.indoor && this.earth.render(r, cam, dt)) {
+      // planet pass drew sky + globe; local scene goes on top with fresh depth
+      const bg = this.scene.background; this.scene.background = null;
+      r.autoClear = false; r.clearDepth(); r.render(this.scene, cam); r.autoClear = true; this.scene.background = bg;
+    } else r.render(this.scene, cam);
   }
+  async buildOutdoor(q) { this.outdoor = new Outdoor(this); await this.outdoor.build(q); }
+  update(dt) { this.outdoor?.update(dt, this.camera, this.wind); }
 
   buildLights() {
     const s = this.scene;
@@ -104,7 +168,8 @@ export class World {
   }
   // keep the sun's shadow box centred on what we're looking at
   followSun(p) {
-    this.sun.target.position.copy(p); this.sun.position.copy(p).add(new THREE.Vector3(-300, 260, -420));
+    if (p !== this.sun.target.position) this.sun.target.position.copy(p);
+    this.sun.position.copy(this.sun.target.position).addScaledVector(this.sunDir || new THREE.Vector3(-300, 260, -420).normalize(), 600);
   }
 
   buildHangar() {
@@ -122,6 +187,7 @@ export class World {
     const floorGeo = new THREE.ShapeGeometry(shape, 48);
     const floor = new THREE.Mesh(floorGeo, new THREE.MeshStandardMaterial({ map: floorTex, color: 0xb8b8b8, roughness: 0.3, metalness: 0.0, envMapIntensity: 0.8 }));
     floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; g.add(floor); this.floor = floor;
+    applyPBR(floor.material, 'hangar_concrete_floor', [1 / 5, 1 / 5], { normalScale: 0.5 }).then(m => { m.color.set(0xd8d8d8); m.roughness = 0.85; }).catch(() => {});
     // pit
     const pit = new THREE.Mesh(new THREE.CylinderGeometry(H.pitR, H.pitR, H.pitDepth, 48, 1, true), new THREE.MeshStandardMaterial({ color: 0x2a2d31, metalness: 0.7, roughness: 0.5, side: THREE.BackSide }));
     pit.position.y = -H.pitDepth / 2; g.add(pit);
@@ -144,7 +210,7 @@ export class World {
     // walls: corrugated steel (bump from canvas), door opening on -Z
     const corr = canvasTex(256, 16, (c, w) => { for (let x = 0; x < w; x++) { const v = 128 + 120 * Math.sin(x / w * Math.PI * 16) | 0; c.fillStyle = `rgb(${v},${v},${v})`; c.fillRect(x, 0, 1, 16); } }, 1, false);
     const wallMat = new THREE.MeshStandardMaterial({ color: 0x9da2a8, metalness: 0.55, roughness: 0.5, envMapIntensity: 0.55, bumpMap: corr, bumpScale: 3, side: THREE.DoubleSide });
-    const wall = (w, h, x, y, z, ry) => { const t = wallMat.clone(); t.bumpMap = corr.clone(); t.bumpMap.repeat.set(w / 6, 1); t.bumpMap.needsUpdate = true; const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), t); m.position.set(x, y, z); m.rotation.y = ry; m.receiveShadow = true; g.add(m); };
+    const wall = (w, h, x, y, z, ry) => { const t = wallMat.clone(); t.bumpMap = corr.clone(); t.bumpMap.repeat.set(w / 6, 1); t.bumpMap.needsUpdate = true; applyPBR(t, 'corrugated_iron_02', [w / 4, h / 4], { metal: true, normalScale: 1.2 }).then(mm => { if (mm.normalMap) mm.bumpMap = null; mm.color.set(0xc4c8cc); }).catch(() => {}); const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), t); m.position.set(x, y, z); m.rotation.y = ry; m.receiveShadow = true; g.add(m); };
     wall(H.x * 2, H.h, 0, H.h / 2, H.z, Math.PI);
     wall(H.z * 2, H.h, -H.x, H.h / 2, 0, Math.PI / 2);
     wall(H.z * 2, H.h, H.x, H.h / 2, 0, -Math.PI / 2);
@@ -152,6 +218,32 @@ export class World {
     wall(side, H.h, -H.door - side / 2, H.h / 2, -H.z, 0);
     wall(side, H.h, H.door + side / 2, H.h / 2, -H.z, 0);
     wall(H.door * 2, H.h - H.doorH, 0, H.doorH + (H.h - H.doorH) / 2, -H.z, 0);
+    // exterior shell: painted corrugated cladding, gable roof, big lettering (seen from the apron and the air)
+    {
+      const ext = new THREE.MeshStandardMaterial({ color: 0xe6e9ec, metalness: 0.35, roughness: 0.45 });
+      const o = 0.3, X = H.x + o, Z = H.z + o;
+      const ew = (w, h, x, y, z, ry, rep) => { const t = ext.clone(); applyPBR(t, 'corrugated_iron_02', rep || [w / 4, h / 4], { metal: false, normalScale: 1.3 }).then(mm => mm.color.set(0xeef1f3)).catch(() => {}); const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), t); m.position.set(x, y, z); m.rotation.y = ry; m.castShadow = true; m.receiveShadow = true; g.add(m); return m; };
+      ew(X * 2, H.h, 0, H.h / 2, Z, 0);
+      ew(Z * 2, H.h, -X, H.h / 2, 0, -Math.PI / 2);
+      ew(Z * 2, H.h, X, H.h / 2, 0, Math.PI / 2);
+      const sd = X - H.door - 0.3;
+      ew(sd, H.h, -H.door - 0.3 - sd / 2, H.h / 2, -Z, Math.PI);
+      ew(sd, H.h, H.door + 0.3 + sd / 2, H.h / 2, -Z, Math.PI);
+      ew(H.door * 2 + 0.6, H.h - H.doorH - 0.3, 0, H.doorH + 0.3 + (H.h - H.doorH - 0.3) / 2, -Z, Math.PI);
+      // gable roof along x, ridge 4 m above the eaves
+      const rise = 4, slope = Math.hypot(Z + 0.6, rise);
+      for (const sgn of [-1, 1]) {
+        const rm = ext.clone(); applyPBR(rm, 'corrugated_iron_02', [X * 2 / 4, slope / 4], { normalScale: 1.3, rotate: 0 }).then(mm => mm.color.set(0xb9bec4)).catch(() => {});
+        const r = new THREE.Mesh(new THREE.PlaneGeometry(X * 2 + 1.2, slope), rm);
+        r.position.set(0, H.h + rise / 2, sgn * (Z + 0.6) / 2); r.rotation.x = -Math.PI / 2 + sgn * Math.atan2(rise, Z + 0.6);
+        r.castShadow = true; r.receiveShadow = true; g.add(r);
+      }
+      const gable = new THREE.Shape(); gable.moveTo(-Z - 0.6, 0); gable.lineTo(Z + 0.6, 0); gable.lineTo(0, rise); gable.closePath();
+      for (const sx of [-1, 1]) { const gm = new THREE.Mesh(new THREE.ShapeGeometry(gable), ext); gm.position.set(sx * X, H.h, 0); gm.rotation.y = sx * Math.PI / 2; g.add(gm); }
+      const letters = (txt, w, h) => { const t = canvasTex(1024, 160, (c, cw, ch) => { c.clearRect(0, 0, cw, ch); c.fillStyle = '#1f2a36'; c.font = 'bold 118px Arial'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(txt, cw / 2, ch / 2 + 6); }); t.repeat.set(1, 1); return new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: t, transparent: true, roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -2 })); };
+      for (const sx of [-1, 1]) { const l = letters('CHROME HANGAR', 26, 4); l.position.set(sx * (X + 0.05), H.h - 6, 0); l.rotation.y = sx * Math.PI / 2; g.add(l); }
+      const b = letters('BAY 01', 10, 1.6); b.position.set(0, H.doorH + 1.3, -Z - 0.05); b.rotation.y = Math.PI; g.add(b);
+    }
     // door frame + slid-open door panels
     const frameMat = new THREE.MeshStandardMaterial({ color: 0x30343a, metalness: 0.8, roughness: 0.4 });
     for (const x of [-H.door, H.door]) { const f = new THREE.Mesh(new THREE.BoxGeometry(0.6, H.doorH, 0.8), frameMat); f.position.set(x, H.doorH / 2, -H.z); g.add(f); }
@@ -185,23 +277,22 @@ export class World {
   }
 
   buildOutside() {
-    const s = this.scene;
-    const grass = canvasTex(512, 512, (c, w, h) => { c.fillStyle = '#5d6b45'; c.fillRect(0, 0, w, h); for (let i = 0; i < 20000; i++) { const g = 80 + rnd() * 50 | 0; c.fillStyle = `rgba(${g - 20},${g},${g - 40},0.35)`; c.fillRect(rnd() * w, rnd() * h, 2, 2); } }, 1);
-    grass.repeat.set(1200, 1200);
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(60000, 60000, 60, 60), new THREE.MeshStandardMaterial({ map: grass, roughness: 0.95 }));
-    ground.rotation.x = -Math.PI / 2; ground.position.y = -0.6; ground.receiveShadow = true; s.add(ground);
-    const conc = canvasTex(512, 512, (c, w, h) => { c.fillStyle = '#a3a39e'; c.fillRect(0, 0, w, h); for (let i = 0; i < 6000; i++) { const v = 130 + rnd() * 60 | 0; c.fillStyle = `rgba(${v},${v},${v - 6},0.2)`; c.fillRect(rnd() * w, rnd() * h, 2, 2); } c.strokeStyle = 'rgba(50,50,50,0.5)'; c.lineWidth = 2; c.strokeRect(0, 0, w, h); }, 1);
-    conc.repeat.set(30, 40);
-    const apron = new THREE.Mesh(new THREE.PlaneGeometry(180, 220, 8, 8), new THREE.MeshStandardMaterial({ map: conc, roughness: 0.8 }));
-    apron.rotation.x = -Math.PI / 2; apron.position.set(20, -0.15, -95); apron.receiveShadow = true; s.add(apron);
-    // a few distant original buildings for scale
-    const bm = new THREE.MeshStandardMaterial({ color: 0x9aa3ad, metalness: 0.4, roughness: 0.6 });
-    for (const [x, z, w, h, d] of [[-80, -60, 30, 14, 24], [-90, -150, 20, 30, 20], [110, -40, 40, 10, 18], [120, -180, 16, 50, 16]]) { const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), bm); b.position.set(x, h / 2, z); b.castShadow = true; b.receiveShadow = true; s.add(b); }
+    // terrain, roads, structures and scatter live in outdoor.js; the apron is the big concrete slab
+    const apronMat = new THREE.MeshStandardMaterial({ color: 0xd2d0cb, roughness: 0.85 });
+    applyPBR(apronMat, 'concrete_pavement', [22, 27], { normalScale: 0.7 }).catch(() => {});
+    const apron = new THREE.Mesh(new THREE.PlaneGeometry(180, 220, 1, 1), apronMat);
+    apron.rotation.x = -Math.PI / 2; apron.position.set(20, -0.02, -95); apron.receiveShadow = true; this.scene.add(apron);
+    // expansion-joint grid painted over the slab (one draw)
+    const pts = [];
+    for (let x = -70; x <= 110; x += 12) pts.push(new THREE.Vector3(x, -0.005, -205), new THREE.Vector3(x, -0.005, 15));
+    for (let z = -205; z <= 15; z += 12) pts.push(new THREE.Vector3(-70, -0.005, z), new THREE.Vector3(110, -0.005, z));
+    this.scene.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0x55534f, transparent: true, opacity: 0.45 })));
   }
 
   buildTestStand() {
     const p = SPOTS.test, g = new THREE.Group(); g.position.copy(p); this.scene.add(g);
-    const concrete = new THREE.MeshStandardMaterial({ color: 0x8b8a86, roughness: 0.85 });
+    const concrete = new THREE.MeshStandardMaterial({ color: 0xb0aea8, roughness: 0.85 });
+    applyPBR(concrete, 'concrete_floor_worn_001', [2, 2], { normalScale: 0.8 }).catch(() => {});
     // two piers with a flame trench between
     for (const x of [-4.5, 4.5]) { const b = new THREE.Mesh(new THREE.BoxGeometry(5, 3, 12), concrete); b.position.set(x, 1.5, 0); b.castShadow = b.receiveShadow = true; g.add(b); }
     const deflect = new THREE.Mesh(new THREE.BoxGeometry(4, 0.4, 9), this.M.dark); deflect.position.set(0, 0.8, 2.5); deflect.rotation.x = -0.45; g.add(deflect);

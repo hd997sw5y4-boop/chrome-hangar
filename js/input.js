@@ -1,6 +1,7 @@
 // Unified input: keyboard + mouse (pointer lock), DualSense/standard gamepads, and touch.
 // Safety rules carried over from Window Workshop: standard mapping only, radial deadzone,
 // arm a pad on its first real press, and clear held input on blur / menus.
+const THREE_CLAMP = (v, a, b) => Math.max(a, Math.min(b, v));
 export class Input {
   constructor(canvas) {
     this.canvas = canvas;
@@ -9,7 +10,7 @@ export class Input {
     this.mouse = { x: 0, y: 0, clicked: false, right: false };
     this.taps = []; this.throttleAbs = null; this.padArmed = false; this.padPrev = []; this.padActive = false;
     this.sens = 1; this.invertY = false; this.locked = false; this.enabled = true;
-    this.touchMove = { x: 0, y: 0 };
+    this.touchMove = { x: 0, y: 0 }; this.zoom = 0;
     addEventListener('keydown', e => {
       if (e.target.tagName === 'INPUT' && e.target.type === 'text') return;
       if (['Tab', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
@@ -23,6 +24,7 @@ export class Input {
     this.clearHeld = clear;
     canvas.addEventListener('mousedown', e => {
       if (e.button === 0) this.mouse.clicked = true; if (e.button === 2) this.mouse.right = true;
+      if (!this.locked && (e.button === 0 || e.button === 2)) this.dragging = true;   // drag to orbit when the pointer is free
       this.lastDevice = 'kb';
     });
     canvas.addEventListener('contextmenu', e => e.preventDefault());
@@ -32,6 +34,8 @@ export class Input {
       else if (this.dragging) { this.look.x += e.movementX * 0.004 * this.sens; this.look.y += e.movementY * 0.004 * this.sens * (this.invertY ? -1 : 1); }
     });
     addEventListener('mouseup', () => { this.dragging = false; });
+    // wheel: + = zoom out, - = zoom in (trackpads send small deltas, mice send ~100 per notch)
+    canvas.addEventListener('wheel', e => { e.preventDefault(); const d = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY; this.zoom += THREE_CLAMP(d, -240, 240) / 100; }, { passive: false });
     document.addEventListener('pointerlockchange', () => { this.locked = document.pointerLockElement === canvas; if (!this.locked) clear(); });
     this.initTouch();
   }
@@ -49,6 +53,17 @@ export class Input {
     }, { passive: false });
     c.addEventListener('touchmove', e => {
       e.preventDefault();
+      if (touches.size >= 2) {   // pinch: zoom only, no look
+        const ids = [...touches.keys()].slice(0, 2), pts = ids.map(id => [...e.touches].find(t => t.identifier === id)).filter(Boolean);
+        if (pts.length === 2) {
+          const d = Math.hypot(pts[0].clientX - pts[1].clientX, pts[0].clientY - pts[1].clientY);
+          if (this.pinchD) this.zoom += Math.log(this.pinchD / d) * 2.2;
+          this.pinchD = d;
+          for (const t of pts) { const s = touches.get(t.identifier); s.x = t.clientX; s.y = t.clientY; s.moved += 99; }
+          return;
+        }
+      }
+      this.pinchD = 0;
       for (const t of e.changedTouches) {
         const s = touches.get(t.identifier); if (!s) continue;
         const dx = t.clientX - s.x, dy = t.clientY - s.y;
@@ -58,7 +73,7 @@ export class Input {
     }, { passive: false });
     const end = e => {
       for (const t of e.changedTouches) {
-        const s = touches.get(t.identifier); touches.delete(t.identifier);
+        const s = touches.get(t.identifier); touches.delete(t.identifier); this.pinchD = 0;
         if (s && s.moved < 14 && performance.now() - s.t0 < 450) this.taps.push({ x: t.clientX, y: t.clientY });
       }
     };
@@ -105,5 +120,5 @@ export class Input {
     }
     for (const v of [this.move, this.steer]) { const l = Math.hypot(v.x, v.y); if (l > 1) { v.x /= l; v.y /= l; } }
   }
-  endFrame() { this.pressed.clear(); this.look.x = this.look.y = 0; this.mouse.clicked = false; this.mouse.right = false; this.taps.length = 0; }
+  endFrame() { this.pressed.clear(); this.look.x = this.look.y = 0; this.zoom = 0; this.mouse.clicked = false; this.mouse.right = false; this.taps.length = 0; }
 }

@@ -1,7 +1,7 @@
 // Chrome Hangar: boot, game state, menus, missions, saves, settings, results.
 import * as THREE from 'three';
 import { loadParts, PARTS, PART_IDS, emptyRocket, starterRocket, cloneRocket, stats, partCount } from './rocket.js';
-import { World, PRESETS, defaultQuality, IS_TOUCH, IS_IOS } from './env.js';
+import { World, PRESETS, SKIES, defaultQuality, IS_TOUCH, IS_IOS } from './env.js';
 import { Audio } from './audio.js';
 import { Input } from './input.js';
 import { Smoke, Debris } from './fx.js';
@@ -9,10 +9,11 @@ import { BuildMode } from './build.js';
 import { TestMode } from './testfire.js';
 import { FlightMode } from './flight.js';
 import { partMesh, rocketMesh, disposeTree } from './parts3d.js';
+import { dressHangar } from './props.js';
 
 const $ = id => document.getElementById(id);
 const LS = { get: (k, d) => { try { const v = localStorage.getItem('ch_' + k); return v == null ? d : JSON.parse(v); } catch (_) { return d; } }, set: (k, v) => { try { localStorage.setItem('ch_' + k, JSON.stringify(v)); } catch (_) {} } };
-const DEFAULTS = () => ({ invertY: false, sens: 1, master: 0.8, music: 0.45, sfx: 0.8, quality: defaultQuality(), assist: true, guide: true });
+const DEFAULTS = () => ({ invertY: false, sens: 1, master: 0.8, music: 0.45, sfx: 0.8, quality: defaultQuality(), assist: true, guide: true, timeOfDay: 'day' });
 
 class Game {
   constructor() {
@@ -34,7 +35,7 @@ class Game {
     await loadParts();
     this.missions = (await (await fetch('data/missions.json')).json()).missions;
     step(25, 'Building the hangar…');
-    this.world = new World($('c'));
+    this.world = new World($('c'), this.settings.quality);
     this.audio = new Audio(); this.audio.setVolumes(this.settings);
     this.input = new Input($('c'));
     this.smoke = new Smoke(PRESETS[this.settings.quality]?.particles || 900); this.world.scene.add(this.smoke.points);
@@ -42,7 +43,10 @@ class Game {
     this.applySettings();
     addEventListener('resize', () => this.resize()); this.resize();
     step(45, 'Hanging the lights…');
-    await this.world.loadHDRIs('1k');
+    await this.world.loadHDRIs('1k', this.settings.timeOfDay);
+    step(60, 'Laying out the range…');
+    await Promise.all([this.world.buildOutdoor(this.settings.quality), dressHangar(this.world)]);
+    this.world.applySky();
     step(80, 'Polishing the steel…');
     this.build = new BuildMode(this); this.test = new TestMode(this); this.flight = new FlightMode(this);
     await this.makeThumbs();
@@ -217,6 +221,7 @@ class Game {
     const ck = (k, label) => `<div class="setRow"><span>${label}</span><button data-t="${k}" class="${s[k] ? 'on' : ''}">${s[k] ? 'On' : 'Off'}</button></div>`;
     const html = `${sl('master', 'Master volume', 0, 1, 0.05)}${sl('music', 'Music volume', 0, 1, 0.05)}${sl('sfx', 'Effects volume', 0, 1, 0.05)}
       ${sl('sens', 'Look sensitivity', 0.3, 2.5, 0.05)}${ck('invertY', 'Invert look up/down')}${ck('assist', 'Hold-upright assist')}${ck('guide', 'Landing guide')}
+      <div class="setRow"><span>Time of day</span><select id="selSky">${Object.entries(SKIES).map(([k, p]) => `<option value="${k}" ${k === s.timeOfDay ? 'selected' : ''}>${p.label}</option>`).join('')}</select></div>
       <div class="setRow"><span>Graphics</span><select id="selQ">${Object.entries(PRESETS).map(([k, p]) => `<option value="${k}" ${k === s.quality ? 'selected' : ''}>${p.label}</option>`).join('')}</select></div>
       <div class="row"><button id="resetDefaults">Reset to defaults</button><button id="resetProgress">Reset mission progress</button></div>`;
     this.openPanel('Settings', html);
@@ -224,18 +229,24 @@ class Game {
     pb.querySelectorAll('input[type=range]').forEach(i => i.oninput = () => { s[i.dataset.k] = +i.value; this.applySettingsLight(); });
     pb.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { s[b.dataset.t] = !s[b.dataset.t]; this.applySettingsLight(); this.audio.tap(); this.showSettings(); });
     $('selQ').onchange = e => { s.quality = e.target.value; this.applySettings(); };
+    $('selSky').onchange = e => this.setTimeOfDay(e.target.value);
     $('resetDefaults').onclick = () => { this.settings = DEFAULTS(); this.applySettings(); this.flight.syncButtons(); this.showSettings(); };
     $('resetProgress').onclick = () => { if (confirm('Reset all mission stars?')) { this.progress = { stars: {}, best: {} }; this.saveState(); this.build.makeTray(); this.toast('Progress reset'); } };
+  }
+  setTimeOfDay(k) {
+    this.settings.timeOfDay = k; this.applySettingsLight();
+    this.toast?.('Sky: ' + SKIES[k].label + '…');
+    this.world.setSky(k).catch(() => this.toast?.('Could not load that sky'));
   }
   applySettingsLight() { const s = this.settings; this.input.sens = s.sens; this.input.invertY = s.invertY; this.audio.setVolumes(s); this.flight.syncButtons(); LS.set('settings', s); }
   showHelp() {
     const rows = IS_TOUCH ? [
       ['Look', 'Drag anywhere on the screen'], ['Walk', 'Left stick'], ['Pick a part', 'Tap it in the tray'], ['Place', 'Tap a glowing ring (or near it)'], ['Remove', 'Pick Delete in the tray, then tap a part'],
-      ['Stand', '▲ ▼ raise / lower, ⟲ ⟳ turn'], ['Fly', 'Throttle slider on the right, steer with the left stick']]
+      ['Stand', '▲ ▼ raise / lower, ⟲ ⟳ turn'], ['Fly', 'Throttle slider on the right, steer with the left stick'], ['Flight views', 'Drag to orbit · pinch to zoom · View button cycles · Views ▾ opens the picker']]
       : [['Look / walk', 'Mouse (click to grab the mouse) · WASD'], ['Pick a part', 'Click it in the tray, or keys 1–9 · Delete tool: 0'], ['Place', 'Aim at a glowing ring and click'], ['Remove', 'Right-click a part, or the Delete tool'],
         ['Undo / redo', 'Z / Y (or Ctrl+Z / Ctrl+Y)'], ['Stand', 'R / F raise and lower, Q / E turn'], ['Test stand', 'Space fire / shut down · Shift / R and F throttle'],
-        ['Flight', 'Space launch · Shift or R throttle up, F down, Z full, X cut · WASD / arrows steer · C camera · H assist'], ['Menu', 'Esc']];
-    const pad = [['DualSense', 'Left stick walk / steer · Right stick look · ✕ place / launch · □ delete tool · ○ undo · △ redo · L1/R1 pick part · D-pad stand · R2 throttle · △ camera in flight · Options menu']];
+        ['Flight', 'Space launch · Shift or R throttle up, F down, Z full, X cut · WASD / arrows steer · drag mouse to orbit · wheel zoom · 1–8 pick view · C next view · V view menu · H assist'], ['Menu', 'Esc']];
+    const pad = [['DualSense', 'Left stick walk / steer · Right stick look · ✕ place / launch · □ delete tool · ○ undo · △ redo · L1/R1 pick part · D-pad stand · R2 throttle · in flight: right stick orbit, L2 zoom in, L1 zoom out, △ or D-pad ◀▶ change view, D-pad ▲ view menu · Options menu']];
     this.openPanel('How to play', `<p>Build a rocket on the stand, read the checkout panel, static-fire it on the test stand, then launch. If it fails, you get one plain "Try this" tip and your rocket is still on the stand.</p><table class="help">${rows.concat(pad).map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('')}</table>
       <p><b>The two markers:</b> the gem ◆ is the center of mass, the ring ○ is the center of drag. Keep the gem above the ring or the rocket flips. Fins pull the ring down.</p>`);
   }
@@ -297,6 +308,8 @@ class Game {
       else this.modeObj.idle?.(dt);
       this.smoke.update(dt, this.windNow || { x: 0, z: 0 }, this.world.h * this.world.renderer.getPixelRatio() / Math.tan(this.world.camera.fov * Math.PI / 360) / 2);
       this.debris.update(dt);
+      if (this.windNow) this.world.wind = this.windNow;
+      this.world.update(dt);
       this.world.render();
       inp.endFrame();
       this.frames = (this.frames || 0) + 1;

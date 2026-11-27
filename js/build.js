@@ -290,7 +290,8 @@ export class BuildMode {
     P.yaw -= inp.look.x; P.pitch = THREE.MathUtils.clamp(P.pitch - inp.look.y, -1.35, 1.35);
     const sp = (inp.down('ShiftLeft') ? 6.5 : 3.6) * dt;
     const fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw);
-    const nx = P.x + (fx * -inp.move.y + -fz * -inp.move.x) * sp, nz = P.z + (fz * -inp.move.y + fx * -inp.move.x) * sp;
+    // forward = (fx, fz), right = (-fz, fx); move.x > 0 strafes right, move.y < 0 walks forward
+    const nx = P.x + (fx * -inp.move.y + -fz * inp.move.x) * sp, nz = P.z + (fz * -inp.move.y + fx * inp.move.x) * sp;
     const moved = Math.hypot(nx - P.x, nz - P.z);
     P.x = THREE.MathUtils.clamp(nx, -HANGAR.x + 1, HANGAR.x - 1); P.z = THREE.MathUtils.clamp(nz, -HANGAR.z + 1, HANGAR.z - 1);
     const pr = Math.hypot(P.x, P.z), keep = HANGAR.pitR + 1.25; if (pr < keep) { P.x *= keep / pr; P.z *= keep / pr; }

@@ -1,0 +1,198 @@
+{
+ "models": [
+  "Barrel_01",
+  "bench_vice_01",
+  "concrete_road_barrier",
+  "covered_car",
+  "exterior_aircon_unit",
+  "flood_lights",
+  "grass_medium_01",
+  "ladder_sectioned_01",
+  "metal_jerrycan",
+  "metal_tool_chest",
+  "modular_chainlink_fence",
+  "modular_electricity_poles",
+  "namaqualand_boulder_02",
+  "overhead_crane",
+  "portable_generator",
+  "propane_tank",
+  "rock_moss_set_01",
+  "security_light",
+  "shrub_02",
+  "small_lpg_tank",
+  "steel_frame_shelves_01",
+  "street_lamp_01",
+  "tool_cart",
+  "utility_box_01",
+  "wild_rooibos_bush",
+  "wooden_crate_02"
+ ],
+ "tex": [
+  "aerial_grass_rock",
+  "asphalt_02",
+  "coast_sand_01",
+  "concrete_floor_worn_001",
+  "concrete_pavement",
+  "concrete_wall_008",
+  "corrugated_iron_02",
+  "dry_ground_01",
+  "hangar_concrete_floor",
+  "rocky_terrain_02",
+  "rusty_painted_metal",
+  "sparse_grass"
+ ],
+ "info": {
+  "Barrel_01": [
+   "Barrel_01",
+   "Jorge Camacho"
+  ],
+  "bench_vice_01": [
+   "Bench Vice 01",
+   "Yann Kervran, Antanas Kep"
+  ],
+  "concrete_road_barrier": [
+   "Concrete Road Barrier",
+   "Amal Kumar"
+  ],
+  "covered_car": [
+   "Covered Car",
+   "MP"
+  ],
+  "exterior_aircon_unit": [
+   "Exterior Aircon Unit",
+   "Monsta3D"
+  ],
+  "flood_lights": [
+   "Flood Lights",
+   "James Ray Cock"
+  ],
+  "grass_medium_01": [
+   "Grass Medium 01",
+   "Rob Tuytel, Rico Cilliers"
+  ],
+  "ladder_sectioned_01": [
+   "Ladder Sectioned 01",
+   "MP"
+  ],
+  "metal_jerrycan": [
+   "Metal Jerrycan",
+   "Sean Buckley"
+  ],
+  "metal_tool_chest": [
+   "Metal Tool Chest",
+   "Yann Kervran, John Hutcheson"
+  ],
+  "modular_chainlink_fence": [
+   "Modular Chainlink Fence",
+   "James Ray Cock, Amal Kumar"
+  ],
+  "modular_electricity_poles": [
+   "Modular Electricity Poles",
+   "James Ray Cock"
+  ],
+  "namaqualand_boulder_02": [
+   "Namaqualand Boulder 02",
+   "Greg Zaal, Rico Cilliers"
+  ],
+  "overhead_crane": [
+   "Overhead Crane",
+   "Timothy3D"
+  ],
+  "portable_generator": [
+   "Portable Generator",
+   "James Ray Cock"
+  ],
+  "propane_tank": [
+   "Propane Tank",
+   "Slinc"
+  ],
+  "rock_moss_set_01": [
+   "Rock Moss Set 01",
+   "Kless Gyzen"
+  ],
+  "security_light": [
+   "Security Light",
+   "Maximilian Schuster"
+  ],
+  "shrub_02": [
+   "Shrub 02",
+   "Rico Cilliers"
+  ],
+  "small_lpg_tank": [
+   "Small Lpg Tank",
+   "Ulan Cabanilla"
+  ],
+  "steel_frame_shelves_01": [
+   "Steel Frame Shelves 01",
+   "James Ray Cock"
+  ],
+  "street_lamp_01": [
+   "Street Lamp 01",
+   "Josh Dean"
+  ],
+  "tool_cart": [
+   "Tool Cart",
+   "Savva Zakharov"
+  ],
+  "utility_box_01": [
+   "Utility Box 01",
+   "James Ray Cock"
+  ],
+  "wild_rooibos_bush": [
+   "Wild Rooibos Bush",
+   "James Ray Cock, Jenelle van Heerden"
+  ],
+  "wooden_crate_02": [
+   "Wooden Crate 02",
+   "James Ray Cock, Jurita Burger"
+  ],
+  "aerial_grass_rock": [
+   "Aerial Grass Rock",
+   "Rob Tuytel"
+  ],
+  "asphalt_02": [
+   "Asphalt 02",
+   "Rob Tuytel"
+  ],
+  "coast_sand_01": [
+   "Coast Sand 01",
+   "Rob Tuytel"
+  ],
+  "concrete_floor_worn_001": [
+   "Concrete Floor Worn 001",
+   "Dimitrios Savva, Rico Cilliers"
+  ],
+  "concrete_pavement": [
+   "Concrete Pavement",
+   "Charlotte Baglioni"
+  ],
+  "concrete_wall_008": [
+   "Concrete Wall 008",
+   "Dario Barresi, Charlotte Baglioni"
+  ],
+  "corrugated_iron_02": [
+   "Corrugated Iron 02",
+   "Jenelle van Heerden, Sergej Majboroda"
+  ],
+  "dry_ground_01": [
+   "Dry Ground 01",
+   "Rob Tuytel"
+  ],
+  "hangar_concrete_floor": [
+   "Hangar Concrete Floor",
+   "Dimitrios Savva"
+  ],
+  "rocky_terrain_02": [
+   "Rocky Terrain 02",
+   "Amal Kumar"
+  ],
+  "rusty_painted_metal": [
+   "Rusty Painted Metal",
+   "Amal Kumar"
+  ],
+  "sparse_grass": [
+   "Sparse Grass",
+   "Amal Kumar"
+  ]
+ }
+}
