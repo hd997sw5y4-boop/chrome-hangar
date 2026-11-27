@@ -49,7 +49,7 @@ const ACT = [
   { body: 'kaB', rod: 'kaR', child: 'kn', anchor: V3(0, -0.09, 0.072) },
 ];
 const _q = new THREE.Quaternion(), _v = V3(), _w = V3(), _m = new THREE.Matrix4();
-function aimActuators(bones, S) {
+export function aimActuators(bones, S) {   // exported for robotbreak.js / cart.js poses
   for (const a of ACT) {
     const body = bones[a.body + S], rod = bones[a.rod + S], ch = bones[a.child + S];
     const Bp = _w.copy(a.anchor).applyQuaternion(ch.quaternion).add(ch.position);   // rod anchor in the parent frame

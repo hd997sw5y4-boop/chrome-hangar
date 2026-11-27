@@ -19,6 +19,8 @@ Static three.js site, no build step. three.js r187 is vendored in `vendor/`.
 - `js/health.js`, `js/healthui.js`: live part health (load vs max-Q / g, re-entry heat, engine heat, fin loss) and the flight's Rocket health panel (P or Settings hides it)
 - `js/rocket.js`: part data, layout, mass / CoM / CoP stats, snap rules (pure JS)
 - `js/parts3d.js`, `js/env.js` (renderer, HDRI skies), `js/fx.js`, `js/audio.js`, `js/input.js`
+- `js/cart.js`, `js/cartcourse.js`, `js/bodies.js`: drivable golf cart (model in `assets/models/golf_cart.glb`, credited in CREDITS.md; E in/out, WASD, Space handbrake, R flip, C horn/call the robot, V view, L lights; DualSense/Xbox: L-stick, R2/L2, △ in/out, ✕ handbrake, ○ flip, □ horn), apron jump ramps, cone slalom and knock-over props
+- `js/robotbreak.js`: robot rides shotgun, breaks into pieces on a hard hit, the other robot welds him back together (self-reassembly fallback)
 - `js/terrain.js`, `js/outdoor.js`: DEM terrain LOD, ocean, range structures, scatter
 - `js/earth.js`: planet pass (NASA Blue Marble / Black Marble) for high altitude
 - `tools/`: DEM + imagery converter, HDRI sun analysis, credits generator

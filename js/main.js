@@ -15,6 +15,7 @@ import { Training } from './train.js';
 import { Interactive } from './interactive.js';
 import { Hands } from './interact2.js';
 import { Robots } from './robots.js';
+import { Cart } from './cart.js';
 
 const $ = id => document.getElementById(id);
 const LS = { get: (k, d) => { try { const v = localStorage.getItem('ch_' + k); return v == null ? d : JSON.parse(v); } catch (_) { return d; } }, set: (k, v) => { try { localStorage.setItem('ch_' + k, JSON.stringify(v)); } catch (_) {} } };
@@ -62,6 +63,7 @@ class Game {
     await this.hands.load();
     bakeDressing(this.world); this.world.refreshLocalIn();   // merge static dressing, then re-shoot the hangar reflections
     this.robots = new Robots(this);
+    this.cart = new Cart(this); this.cart.load().catch(e => console.warn('cart', e?.message || e));
     await this.makeThumbs();
     this.build.makeTray();
     this.wireUI();
@@ -345,12 +347,14 @@ class Game {
       if (this.intro && !this.intro.done) this.intro.update(dt);
       else {
         const paused = this.menuOpen || this.panelOpen;
-        const held = this.interact?.frame(dt, paused);
-        this.hands?.frame(dt, paused);
+        const driving = this.cart?.frame(dt, paused);
+        const held = this.interact?.frame(dt, paused || driving) || driving;
+        this.hands?.frame(dt, paused || driving);
         if (this.modeObj) { if (!paused && !held) this.modeObj.update(dt, this.resultsOpen); else if (paused) this.modeObj.idle?.(dt); }
       }
       this.smoke.update(dt, this.windNow || { x: 0, z: 0 }, this.world.h * this.world.renderer.getPixelRatio() / Math.tan(this.world.camera.fov * Math.PI / 360) / 2);
       this.robots?.update(dt);
+      this.cart?.late(dt);
       this.world.assembly?.update(dt);
       this.debris.update(dt); this.sparks.update(dt, this.world.h * this.world.renderer.getPixelRatio() / Math.tan(this.world.camera.fov * Math.PI / 360) / 2);
       if (this.windNow) this.world.wind = this.windNow;

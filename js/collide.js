@@ -173,6 +173,7 @@ export function dynamicObstacles(game) {
     const p = L.g.position;
     list.push(C(p.x, p.z, (L.r || 0.8) + 0.05));
   }
+  if (game?.cart) list.push(...game.cart.obstacles());
   return list;
 }
 
