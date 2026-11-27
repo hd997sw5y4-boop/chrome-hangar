@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { prop, pieces } from './models.js';
 import { HANGAR } from './env.js';
+import { bake } from './outdoor.js';
 
 function signTex(lines, bg, fg, w = 512, h = 256) {
   const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d');
@@ -68,5 +69,6 @@ export async function dressHangar(world) {
   drawClock(); setInterval(drawClock, 1000);
   const clock = new THREE.Mesh(new THREE.CircleGeometry(0.6, 32), new THREE.MeshStandardMaterial({ map: clockTex, roughness: 0.4 })); clock.position.set(6, 5.2, H.z - 0.05); clock.rotation.y = Math.PI; g.add(clock);
   g.traverse(o => { if (o.isMesh) { o.receiveShadow = true; } });
+  if (world.quality === 'phone' || world.quality === 'low') { g.remove(clock); bake(g); g.add(clock); }
   return g;
 }

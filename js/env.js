@@ -5,7 +5,7 @@ import { initMaterials, partMesh, setRocketEnv } from './parts3d.js';
 import { PARTS } from './rocket.js';
 import { applyPBR, setTexTier } from './tex.js';
 import { setModelTier } from './models.js';
-import { Outdoor } from './outdoor.js';
+import { Outdoor, bake } from './outdoor.js';
 import { Earth, GLOBE_FADE, GLOBE_EDGE } from './earth.js';
 import { Post } from './post.js';
 import { buildInterior } from './hangar.js';
@@ -170,7 +170,11 @@ export class World {
   render() {
     const r = this.renderer, cam = this.camera, now = performance.now(), dt = Math.min(0.1, (now - this._rt) / 1000); this._rt = now;
     const alt = cam.position.y, gf = THREE.MathUtils.smoothstep(alt, 7000, 22000);
-    this._props ??= this.hangar.getObjectByName('props'); if (this._props) this._props.visible = this.indoor || Math.hypot(cam.position.x, cam.position.y, cam.position.z) < 90;   // interior clutter only when it can be seen
+    const nearHangar = this.indoor || Math.hypot(cam.position.x, cam.position.y, cam.position.z) < 90;
+    this._props ??= this.hangar.getObjectByName('props'); if (this._props) this._props.visible = nearHangar;
+    this._shell ??= this.hangar.getObjectByName('shell'); if (this._shell) this._shell.visible = nearHangar;
+    this._shafts ??= this.hangar.getObjectByName('shafts'); if (this._shafts) this._shafts.visible = nearHangar && this.quality !== 'phone' && this.quality !== 'low';
+    this._pools ??= this.hangar.getObjectByName('pools'); if (this._pools) this._pools.visible = nearHangar;
     GLOBE_FADE.value = gf; GLOBE_EDGE.value = this.earth.ready && !this.indoor ? THREE.MathUtils.smoothstep(alt, 2500, 9000) : 0;
     const blend = GLOBE_FADE.value + GLOBE_EDGE.value > 0;   // terrain + sea alpha-blend into the planet pass only while it shows
     for (const m of [this.outdoor?.terrainMat, this.outdoor?.oceanMat]) if (m && m.transparent !== blend) { m.transparent = blend; m.needsUpdate = true; } if (this.outdoor) this.outdoor.group.visible = gf < 0.999;
@@ -251,6 +255,7 @@ export class World {
     glow.rotation.x = Math.PI / 2; glow.position.y = 0.01; stand.add(glow);
     // interior architecture (walls, truss roof, lamps, shafts, cables, scaffold) lives in hangar.js
     this.interior = buildInterior(this, g, H, this.M, this.quality === 'phone' || this.quality === 'low');
+    this._liteHangar = this.quality === 'phone' || this.quality === 'low';
     // exterior shell: painted corrugated cladding, gable roof, big lettering (seen from the apron and the air)
     {
       const ext = new THREE.MeshStandardMaterial({ color: 0xe6e9ec, metalness: 0.35, roughness: 0.45 });
@@ -293,6 +298,7 @@ export class World {
     rack(-19, 10, 'tank_tall'); rack(-19, 6, 'tank_short'); rack(14, 10, 'tank_short');
     const bench = new THREE.Mesh(new THREE.BoxGeometry(5, 0.12, 1.4), this.M.brushed); bench.position.set(9, 1.0, 5); bench.castShadow = true; g.add(bench);
     for (const [x, z] of [[-2.3, -0.6], [2.3, -0.6], [-2.3, 0.6], [2.3, 0.6]]) { const l = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1, 0.1), frameMat); l.position.set(9 + x, 0.5, 5 + z); g.add(l); }
+    if (this._liteHangar) { const st = this.stand; g.remove(st); bake(g); g.add(st); }
   }
 
   buildOutside() {

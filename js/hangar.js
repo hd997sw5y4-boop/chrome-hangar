@@ -103,7 +103,7 @@ export function buildInterior(w, g, H, M, lite) {
   }
   const shafts = new THREE.Mesh(mergeGeometries(sh), shaftMat()); shafts.userData.noAO = true; shafts.renderOrder = 5; shafts.name = 'shafts'; shafts.visible = !lite; g.add(shafts);
   const poolMat = new THREE.MeshBasicMaterial({ map: grad([[0, 'rgba(255,236,205,0.30)'], [0.45, 'rgba(255,230,190,0.12)'], [1, 'rgba(255,230,190,0)']]), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -4 });
-  const pool = new THREE.Mesh(mergeGeometries(pools), poolMat); pool.userData.noAO = true; g.add(pool);
+  const pool = new THREE.Mesh(mergeGeometries(pools), poolMat); pool.userData.noAO = true; pool.name = 'pools'; g.add(pool);
 
   // ---- cables: overhead catenaries to the stand, floor runs, umbilical tray ----
   const cab = new Kit();

@@ -147,14 +147,33 @@ function tileGeometry(x0, z0, T, seg, cx, cz) {
   return g;
 }
 
-// Tiled terrain with distance-based levels built lazily (a couple per frame) and freed when far,
-// so iPhone only ever holds fine geometry for the few tiles around the camera.
+// Tiled terrain with distance-based levels built lazily (a couple per frame) and freed when far.
+// Phone/low use one mid-res disc plus a horizon ring (two draws) instead of a tile grid.
 export class TerrainLOD extends THREE.Group {
   constructor(mat, lite) {
     super(); this.name = 'terrain'; this.mat = mat; this.lite = lite;
     const cx = Math.round((SITE.x0 + SITE.x1) / 2), cz = Math.round((SITE.z0 + SITE.z1) / 2);
-    const T = this.T = 500, NT = lite ? 10 : 14, half = this.half = NT * T / 2;
-    this.levels = lite ? [[40, 650], [16, 1500], [6, 1e9]] : [[64, 800], [24, 2000], [8, 1e9]];
+    if (lite) {
+      // two draws on the phone: a mid-res disc around the site, plus the horizon ring
+      this.tiles = []; this.levels = [];
+      const make = (N, R, L, sinkInside) => {
+        const map = s => R * s * s * s + L * s, half = sinkInside ?? -1;
+        const pos = new Float32Array((N + 1) * (N + 1) * 3), nor = new Float32Array(pos.length), idx = [];
+        for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) {
+          const x = cx + map(i / N * 2 - 1), z = cz + map(j / N * 2 - 1), k = (j * (N + 1) + i) * 3;
+          const inside = half > 0 && Math.abs(x - cx) < half && Math.abs(z - cz) < half;
+          pos[k] = x; pos[k + 1] = height(x, z) + OFF - (inside ? 40 : 0); pos[k + 2] = z;
+          const nn = normalAt(x, z, inside ? 40 : 12); nor[k] = nn[0]; nor[k + 1] = nn[1]; nor[k + 2] = nn[2];
+        }
+        for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const a = j * (N + 1) + i, b = a + 1, c = a + N + 1, d = c + 1; idx.push(a, c, b, b, c, d); }
+        const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); g.setIndex(idx);
+        const m = new THREE.Mesh(g, mat); m.receiveShadow = true; return m;
+      };
+      this.add(make(140, 5000, 500)); this.add(make(100, 30000, 1200, 4900));
+      return;
+    }
+    const T = this.T = 500, NT = 14, half = this.half = NT * T / 2;
+    this.levels = [[64, 800], [24, 2000], [8, 1e9]];
     this.tiles = [];
     for (let tj = 0; tj < NT; tj++) for (let ti = 0; ti < NT; ti++) {
       const x0 = cx - half + ti * T, z0 = cz - half + tj * T, tile = { x0, z0, cx: x0 + T / 2, cz: z0 + T / 2, geos: [], lvl: -1 };
@@ -162,7 +181,7 @@ export class TerrainLOD extends THREE.Group {
       this.setLevel(tile, this.levels.length - 1); this.add(tile.mesh); this.tiles.push(tile);
     }
     // horizon ring: non-uniform grid, vertices inside the tiled square pushed down out of sight
-    const N = lite ? 120 : 170, R = 30000, L = 1200, map = s => R * s * s * s + L * s;
+    const N = 170, R = 30000, L = 1200, map = s => R * s * s * s + L * s;
     const pos = new Float32Array((N + 1) * (N + 1) * 3), nor = new Float32Array(pos.length), idx = [];
     for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) {
       const x = cx + map(i / N * 2 - 1), z = cz + map(j / N * 2 - 1), k = (j * (N + 1) + i) * 3, inside = Math.abs(x - cx) < half - 1 && Math.abs(z - cz) < half - 1;
@@ -187,6 +206,7 @@ export class TerrainLOD extends THREE.Group {
   }
   // budget = how many new geometries may be built this call (Infinity to settle at once)
   refine(p, budget = 2) {
+    if (!this.tiles.length) return;
     const todo = [];
     for (const t of this.tiles) { const l = this.wanted(t, p); if (l !== t.lvl) todo.push([l < t.lvl ? Math.hypot(p.x - t.cx, p.z - t.cz) : -1, t, l]); }
     todo.sort((a, b) => a[0] - b[0]);

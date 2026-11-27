@@ -30,7 +30,7 @@ function strut(a, b, r, mat, parent, seg = 8) {
   m.castShadow = true; parent?.add(m); return m;
 }
 // Merge every plain mesh under `g` by material into one mesh each (fewer draw calls on phones).
-function bake(g) {
+export function bake(g) {
   g.updateMatrixWorld(true);
   const inv = new THREE.Matrix4().copy(g.matrixWorld).invert(), by = new Map(), drop = [];
   g.traverse(o => {
@@ -464,15 +464,17 @@ export class Outdoor {
       const top = new THREE.Vector3(x, gy(x, z) + 5.5, z); if (prev) for (const off of [-0.55, 0, 0.55]) { const s = new THREE.Vector3(Math.sin(ry) * off, 0, Math.cos(ry) * off); this.wire(prev.clone().add(s), top.clone().add(s), 0.9, this.group); }
       prev = top;
     }
-    // groups of 8 poles, each culled by distance like the scatter chunks
+    // desktop: groups of 8, culled by distance. phone: one instanced set (few draws).
     const o = new THREE.Object3D();
-    for (let k = 0; k < list.length; k += 8) {
-      const part = list.slice(k, k + 8), grp = new THREE.Group(), mid = part[part.length >> 1];
+    const groups = this.lite ? [list] : Array.from({ length: Math.ceil(list.length / 8) }, (_, i) => list.slice(i * 8, i * 8 + 8));
+    for (const part of groups) {
+      if (!part.length) continue;
+      const mid = part[part.length >> 1], grp = new THREE.Group();
       grp.userData = { x: mid[0], z: mid[2], items: [] };
       for (const p of ps) {
         const im = new THREE.InstancedMesh(p.geometry, p.material, part.length);
         part.forEach(([x, y, z, ry], i) => { o.position.set(x, y, z); o.rotation.set(0, ry + Math.PI / 2, 0); o.updateMatrix(); im.setMatrixAt(i, o.matrix); });
-        im.castShadow = true; im.computeBoundingSphere(); im.userData.far = this.lite ? 900 : 1600; grp.add(im); grp.userData.items.push(im);
+        im.castShadow = true; im.computeBoundingSphere(); im.userData.far = this.lite ? 1e9 : 1600; grp.add(im); grp.userData.items.push(im);
       }
       this.group.add(grp); this.chunks.push(grp);
     }
@@ -517,17 +519,30 @@ export class Outdoor {
       }
     }
     const o = new THREE.Object3D();
-    for (const ch of chunks.values()) {
-      const grp = new THREE.Group(); grp.userData = { x: ch.x, z: ch.z, items: [] };
-      for (const { k, ps, list } of ch.sets.values()) {
-        for (const p of ps) {
-          const im = new THREE.InstancedMesh(p.geometry, p.material, list.length);
-          list.forEach(([x, y, z, ry, s], i) => { o.position.set(x, y, z); o.rotation.set(0, ry, 0); o.scale.setScalar(s); o.updateMatrix(); im.setMatrixAt(i, o.matrix); });
-          im.castShadow = !!k.shadow; im.receiveShadow = true; im.computeBoundingSphere(); im.userData.far = k.far;
-          grp.add(im); grp.userData.items.push(im);
-        }
+    const addSet = (grp, k, ps, list, far) => {
+      for (const p of ps) {
+        const im = new THREE.InstancedMesh(p.geometry, p.material, list.length);
+        list.forEach(([x, y, z, ry, s], i) => { o.position.set(x, y, z); o.rotation.set(0, ry, 0); o.scale.setScalar(s); o.updateMatrix(); im.setMatrixAt(i, o.matrix); });
+        im.castShadow = !!k.shadow; im.receiveShadow = true; im.computeBoundingSphere(); im.userData.far = far;
+        grp.add(im); grp.userData.items.push(im);
       }
+    };
+    if (lite) {
+      // one instanced mesh per variant (no 400 m chunk split) so the phone stays near 200 draws
+      const combined = new Map();
+      for (const ch of chunks.values()) for (const [sk, set] of ch.sets) {
+        if (!combined.has(sk)) combined.set(sk, { k: set.k, ps: set.ps, list: [] });
+        combined.get(sk).list.push(...set.list);
+      }
+      const grp = new THREE.Group(); grp.userData = { x: cx, z: cz, items: [] };
+      for (const { k, ps, list } of combined.values()) addSet(grp, k, ps, list, 1e9);
       this.group.add(grp); this.chunks.push(grp);
+    } else {
+      for (const ch of chunks.values()) {
+        const grp = new THREE.Group(); grp.userData = { x: ch.x, z: ch.z, items: [] };
+        for (const { k, ps, list } of ch.sets.values()) addSet(grp, k, ps, list, k.far);
+        this.group.add(grp); this.chunks.push(grp);
+      }
     }
     this.scatterCount = [...chunks.values()].reduce((a, c) => a + [...c.sets.values()].reduce((b, s) => b + s.list.length, 0), 0);
   }
@@ -539,7 +554,9 @@ export class Outdoor {
     if (this.oceanMat) this.oceanMat.uniforms.uT.value = this.time;
     if (this.surf) for (const s of this.surf) { s.material.map.offset.x = (Math.sin(this.time * 0.5 + s.userData.surf) * 0.18); }
     const px = cam.position.x, pz = cam.position.z, alt = Math.max(0, cam.position.y);
+    const showScatter = !this.w.indoor;
     for (const ch of this.chunks) {
+      if (!showScatter) { ch.visible = false; continue; }
       const dx = Math.max(0, Math.abs(px - ch.userData.x) - 200), dz = Math.max(0, Math.abs(pz - ch.userData.z) - 200), d = Math.hypot(dx, dz, alt);
       let any = false; for (const im of ch.userData.items) { im.visible = d < im.userData.far; any ||= im.visible; }
       ch.visible = any;
