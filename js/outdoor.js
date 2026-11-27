@@ -306,18 +306,6 @@ export class Outdoor {
   }
   buildMasts() {
     const M = this.m, g = new THREE.Group();
-    // lightning-protection masts with catenary wires around the pad
-    const tops = [], H = 70;
-    for (let i = 0; i < 3; i++) {
-      const a = i / 3 * Math.PI * 2, x = PAD.x + Math.cos(a) * 48, z = PAD.z + Math.sin(a) * 48;
-      cyl(0.35, 0.9, H, M.grey, x, H / 2, z, g, 12); cyl(0.08, 0.18, 9, M.white, x, H + 4.5, z, g, 8);
-      cyl(1.4, 1.4, 0.6, M.concrete, x, 0.3, z, g, 16);
-      for (const y of [H * 0.5, H - 0.5]) cyl(0.25, 0.25, 0.3, M.redLight, x, y, z, g, 8);
-      tops.push(new THREE.Vector3(x, H + 8.5, z));
-      // down-guys to anchors
-      for (let k = 0; k < 3; k++) { const b = a + k * 2.1 + 1.0, ax = x + Math.cos(b) * 30, az = z + Math.sin(b) * 30; this.wire(new THREE.Vector3(x, H - 4, z), new THREE.Vector3(ax, 0.3, az), 0.5, g); box(1, 0.6, 1, M.concrete, ax, 0.3, az, g); }
-    }
-    for (let i = 0; i < 3; i++) this.wire(tops[i], tops[(i + 1) % 3], 9, g);
     // flood-light masts around the pad and the test stand
     const lampHead = (x, z, H2, face) => {
       const m = new THREE.Group(); m.position.set(x, 0, z);

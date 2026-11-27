@@ -2,6 +2,7 @@
 // hills rising to mountains in the west, a sandy coastline and open ocean to the east.
 // Pure height function (no three.js) so placement code and tests can share it.
 import * as THREE from 'three';
+import { TRENCH } from './pad.js';
 import { GLOBE_FADE, GLOBE_EDGE } from './earth.js';
 
 export let SEA = -0.9;             // sea level (site ground is 0); set from the DEM when one loads
@@ -206,6 +207,7 @@ export function terrainMaterial(tex, nor = null, macro = null) {
     tSand: { value: tex.sand }, tDirt: { value: tex.dirt }, tGrass: { value: tex.grass }, tRock: { value: tex.rock },
     nSand: { value: nor?.sand }, nDirt: { value: nor?.dirt }, nGrass: { value: nor?.grass }, nRock: { value: nor?.rock },
     tMacHi: { value: macro?.hi }, tMacLo: { value: macro?.lo }, uHiR: { value: macro?.hiR || new THREE.Vector3() }, uLoR: { value: macro?.loR || new THREE.Vector3() },
+    uTrench: { value: new THREE.Vector4(TRENCH.cx, TRENCH.cz, Math.cos(TRENCH.ang), Math.sin(TRENCH.ang)) }, uTrenchS: { value: new THREE.Vector2(TRENCH.half, TRENCH.w) },
     uGF: GLOBE_FADE, uGE: GLOBE_EDGE, uSea: { value: SEA }, uCoast: { value: shoreX(-80) }, uSite: { value: new THREE.Vector4(SITE.x0, SITE.x1, SITE.z0, SITE.z1) },
   };
   m.onBeforeCompile = sh => {
@@ -214,7 +216,7 @@ export function terrainMaterial(tex, nor = null, macro = null) {
       .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz; vWN = normalize(mat3(modelMatrix) * objectNormal);');
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
 varying vec3 vWP; varying vec3 vWN;
-uniform sampler2D tSand, tDirt, tGrass, tRock; uniform float uSea, uCoast, uGF, uGE; uniform vec4 uSite;
+uniform sampler2D tSand, tDirt, tGrass, tRock; uniform float uSea, uCoast, uGF, uGE; uniform vec4 uSite, uTrench; uniform vec2 uTrenchS;
 #ifdef DETAIL_NORMALS
 uniform sampler2D nSand, nDirt, nGrass, nRock;
 #endif
@@ -232,6 +234,7 @@ vec3 two(sampler2D t, vec2 p, float far){ vec3 a = texture2D(t, p / 5.0).rgb, b 
       .replace('#include <map_fragment>', `
 float gFade = max(uGF, uGE * smoothstep(7000.0, 11000.0, max(abs(vWP.x), abs(vWP.z))));   // blend into the globe pass behind
 if (gFade > 0.995) discard;     // dissolve into the globe pass at high altitude
+{ vec2 q = vWP.xz - uTrench.xy; if (abs(dot(q, uTrench.zw)) < uTrenchS.x && abs(dot(q, vec2(-uTrench.w, uTrench.z))) < uTrenchS.y) discard; }   // flame trench
 {
   vec2 p = vWP.xz; float dist = length(vWP - cameraPosition); float far = smoothstep(80.0, 1400.0, dist);
   float n = fb(p / 90.0), n2 = fb(p / 900.0 + 3.1);
@@ -288,7 +291,7 @@ if (gFade > 0.995) discard;     // dissolve into the globe pass at high altitude
 #endif`)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(0.97, 0.55, smoothstep(uSea + 0.6, uSea, vWP.y));');
   };
-  m.customProgramCacheKey = () => 'terrain-v3' + (nor ? 'n' : '') + (macro ? 'm' : '');
+  m.customProgramCacheKey = () => 'terrain-v4' + (nor ? 'n' : '') + (macro ? 'm' : '');
   return m;
 }
 

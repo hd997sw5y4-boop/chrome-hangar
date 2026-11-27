@@ -9,6 +9,7 @@ import { Outdoor } from './outdoor.js';
 import { Earth, GLOBE_FADE, GLOBE_EDGE } from './earth.js';
 import { Post } from './post.js';
 import { buildInterior } from './hangar.js';
+import { buildPadComplex, TRENCH } from './pad.js';
 
 export const SPOTS = {
   stand: new THREE.Vector3(0, 0, 0),
@@ -298,12 +299,18 @@ export class World {
     // terrain, roads, structures and scatter live in outdoor.js; the apron is the big concrete slab
     const apronMat = new THREE.MeshStandardMaterial({ color: 0xd2d0cb, roughness: 0.85 });
     applyPBR(apronMat, 'concrete_pavement', [22, 27], { normalScale: 0.7 }).catch(() => {});
-    const apron = new THREE.Mesh(new THREE.PlaneGeometry(180, 220, 1, 1), apronMat);
-    apron.rotation.x = -Math.PI / 2; apron.position.set(20, -0.02, -95); apron.receiveShadow = true; this.scene.add(apron);
+    // slab with the pad deck + flame trench cut out (shape in world x / -z, rotated flat)
+    const sh = new THREE.Shape(); sh.moveTo(-70, 205); sh.lineTo(110, 205); sh.lineTo(110, -15); sh.lineTo(-70, -15); sh.closePath();
+    const P = SPOTS.pad, d = TRENCH.dir, n = new THREE.Vector2(-d.y, d.x), hole = new THREE.Path(), c = (u, v) => [P.x + d.x * u + n.x * v, -(P.z + d.y * u + n.y * v)];
+    hole.moveTo(...c(-TRENCH.half, -TRENCH.w)); hole.lineTo(...c(TRENCH.half, -TRENCH.w)); hole.lineTo(...c(TRENCH.half, TRENCH.w)); hole.lineTo(...c(-TRENCH.half, TRENCH.w)); hole.closePath(); sh.holes.push(hole);
+    const ag = new THREE.ShapeGeometry(sh, 2); ag.rotateX(-Math.PI / 2);
+    { const q = ag.attributes.position, uv = ag.attributes.uv; for (let i = 0; i < q.count; i++) uv.setXY(i, (q.getX(i) + 70) / 180, (q.getZ(i) + 205) / 220); }
+    const apron = new THREE.Mesh(ag, apronMat); apron.position.y = -0.02; apron.receiveShadow = true; this.scene.add(apron);
     // expansion-joint grid painted over the slab (one draw)
     const pts = [];
-    for (let x = -70; x <= 110; x += 12) pts.push(new THREE.Vector3(x, -0.005, -205), new THREE.Vector3(x, -0.005, 15));
-    for (let z = -205; z <= 15; z += 12) pts.push(new THREE.Vector3(-70, -0.005, z), new THREE.Vector3(110, -0.005, z));
+    const seg = (a, b) => { for (let t = 0; t < 1 - 1e-6; t += 0.05) { const p0 = a.clone().lerp(b, t), p1 = a.clone().lerp(b, t + 0.05), m = p0.clone().add(p1).multiplyScalar(0.5); if (Math.abs(m.x - P.x) > 25 || Math.abs(m.z - P.z) > 25) pts.push(p0, p1); } };   // not across the pad deck
+    for (let x = -70; x <= 110; x += 12) seg(new THREE.Vector3(x, -0.005, -205), new THREE.Vector3(x, -0.005, 15));
+    for (let z = -205; z <= 15; z += 12) seg(new THREE.Vector3(-70, -0.005, z), new THREE.Vector3(110, -0.005, z));
     this.scene.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0x55534f, transparent: true, opacity: 0.45 })));
   }
 
@@ -329,30 +336,7 @@ export class World {
 
   buildPad() {
     const p = SPOTS.pad, g = new THREE.Group(); g.position.copy(p); this.scene.add(g);
-    const padTex = canvasTex(512, 512, (c, w, h) => {
-      c.fillStyle = '#6f706f'; c.fillRect(0, 0, w, h);
-      for (let i = 0; i < 8000; i++) { const v = 90 + rnd() * 70 | 0; c.fillStyle = `rgba(${v},${v},${v},0.25)`; c.fillRect(rnd() * w, rnd() * h, 2, 2); }
-      c.strokeStyle = '#e8e8e8'; c.lineWidth = 10; c.beginPath(); c.arc(w / 2, h / 2, w * 0.3, 0, 7); c.stroke();
-      c.lineWidth = 8; c.beginPath(); c.moveTo(w / 2 - 40, h / 2); c.lineTo(w / 2 + 40, h / 2); c.moveTo(w / 2, h / 2 - 40); c.lineTo(w / 2, h / 2 + 40); c.stroke();
-      for (let i = 0; i < 40; i++) { c.fillStyle = `rgba(20,20,20,${0.05 + rnd() * 0.08})`; c.beginPath(); c.arc(w / 2 + (rnd() - 0.5) * 120, h / 2 + (rnd() - 0.5) * 120, 20 + rnd() * 60, 0, 7); c.fill(); }
-    }, 1);
-    const pad = new THREE.Mesh(new THREE.CircleGeometry(20, 64), new THREE.MeshStandardMaterial({ map: padTex, roughness: 0.85 }));
-    pad.rotation.x = -Math.PI / 2; pad.position.y = 0.01; pad.receiveShadow = true; g.add(pad);
-    // original lattice tower, offset from the pad
-    const frameMat = new THREE.MeshStandardMaterial({ color: 0x9b3b2c, metalness: 0.5, roughness: 0.55 });
-    const H = 30, tw = new THREE.Group(); tw.position.set(13, 0, 4);
-    const leg = new THREE.BoxGeometry(0.3, H, 0.3);
-    for (const [x, z] of [[-1.5, -1.5], [1.5, -1.5], [-1.5, 1.5], [1.5, 1.5]]) { const m = new THREE.Mesh(leg, frameMat); m.position.set(x, H / 2, z); m.castShadow = true; tw.add(m); }
-    const brace = new THREE.BoxGeometry(0.12, 4.2, 0.12);
-    const n = Math.floor(H / 3), braces = new THREE.InstancedMesh(brace, frameMat, n * 4), o = new THREE.Object3D();
-    let k = 0;
-    for (let i = 0; i < n; i++) for (let f = 0; f < 4; f++) {
-      const a = f * Math.PI / 2; o.position.set(Math.cos(a) * 1.5, i * 3 + 1.5, Math.sin(a) * 1.5);
-      o.rotation.set(0, -a + Math.PI / 2, (i % 2 ? 1 : -1) * 0.78); o.updateMatrix(); braces.setMatrixAt(k++, o.matrix);
-    }
-    braces.castShadow = true; tw.add(braces);
-    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.25, 12, 8), new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xff2a1a, emissiveIntensity: 4 })); beacon.position.y = H + 0.4; tw.add(beacon);
-    g.add(tw);
+    this.pad = buildPadComplex(this, p, this.quality === 'phone' || this.quality === 'low');
     // landing guide ring on the ground (target)
     this.padRing = new THREE.Mesh(new THREE.RingGeometry(9.6, 10, 64), new THREE.MeshBasicMaterial({ color: 0x7fe7ff, transparent: true, opacity: 0.5 }));
     this.padRing.rotation.x = -Math.PI / 2; this.padRing.position.y = 0.05; g.add(this.padRing);
