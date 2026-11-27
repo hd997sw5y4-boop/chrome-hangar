@@ -484,11 +484,11 @@ export class Outdoor {
       { model: 'rock_moss_set_01', nodes: ['rock01', 'rock03', 'rock05'], n: lite ? 200 : 560, far: lite ? 700 : 2000, s: [0.4, 1.5], r: [60, 1700], slopeMax: 9, beach: true, shadow: true, sink: 0.25 },
       { model: 'namaqualand_boulder_02', nodes: [null], n: lite ? 60 : 180, far: lite ? 700 : 2000, s: [0.5, 2.2], r: [60, 1700], slopeMax: 9, beach: true, shadow: true, sink: 0.1 },
       { model: 'shrub_02', nodes: ['shrub_02_b', 'shrub_02_d'], n: lite ? 220 : 520, far: lite ? 240 : 520, s: [0.5, 1.2], r: [20, 1300], slopeMax: 0.6, shadow: !lite },
-      { model: 'wild_rooibos_bush', nodes: ['wild_rooibos_bush_d', 'wild_rooibos_bush_e'], n: lite ? 300 : 800, far: lite ? 180 : 380, s: [1.2, 2.6], r: [12, 1100], slopeMax: 0.6, shadow: !lite },
+      { model: 'wild_rooibos_bush', nodes: ['wild_rooibos_bush_d', 'wild_rooibos_bush_e'], n: lite ? 300 : 1300, far: lite ? 180 : 480, s: [1.2, 2.6], r: [12, 1100], slopeMax: 0.6, shadow: !lite },
       { model: 'cheiridopsis_succulent', nodes: ['succulent_a', 'succulent_d'], n: lite ? 160 : 520, far: lite ? 110 : 260, s: [1.4, 2.4], r: [10, 900], slopeMax: 0.6, shadow: false },
       { model: 'shrub_03', nodes: [null], n: lite ? 180 : 600, far: lite ? 140 : 320, s: [2.0, 3.6], r: [10, 1100], slopeMax: 0.6, beach: true, shadow: false },
-      { model: 'searsia_lucida', nodes: [null], n: lite ? 0 : 160, far: 700, s: [0.8, 1.4], r: [60, 1400], slopeMax: 0.5, shadow: true },
-      { model: 'grass_medium_01', nodes: ['tall_a', 'tall_b', 'tall_c'], n: lite ? 900 : 3600, far: lite ? 70 : 170, s: [2.2, 3.6], r: [4, 420], slopeMax: 0.5, shadow: false },
+      { model: 'searsia_lucida', nodes: [null], n: lite ? 0 : 320, far: 900, s: [0.8, 1.4], r: [60, 1400], slopeMax: 0.5, shadow: true },
+      { model: 'grass_medium_01', nodes: ['tall_a', 'tall_b', 'tall_c'], n: lite ? 900 : 6500, far: lite ? 70 : 230, s: [2.2, 3.6], r: [4, 420], slopeMax: 0.5, shadow: false },
     ];
     const C = 400, cx = -10, cz = -95, chunks = new Map();
     const F = FENCE;

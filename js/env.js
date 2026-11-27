@@ -31,7 +31,7 @@ export const PRESETS = {
 // sun/colour data comes from tools/hdri_info.py (assets/hdri/sky_info.json); az = world azimuth (atan2(z, x)) we turn the sun to.
 export const SKIES = {
   day:      { label: 'Clear day',     file: 'qwantani_noon_puresky',       az: Math.atan2(-420, -300), sun: 3.0, hemi: 0.3,  bg: 1.0,  env: 1.0,  fog: 0.000075, exp: 1.0,  minEl: 20 },
-  sunset:   { label: 'Golden sunset', file: 'qwantani_sunset_puresky',     az: Math.atan2(-0.45, 1), sun: 2.2, hemi: 0.22, bg: 1.0,  env: 1.0,  fog: 0.00009,  exp: 1.0,  minEl: 5 },
+  sunset:   { label: 'Golden sunset', file: 'qwantani_sunset_puresky',     az: Math.atan2(-0.45, 1), sun: 2.2, hemi: 0.22, bg: 1.0,  env: 1.0,  fog: 0.00009,  exp: 0.85, minEl: 5 },
   dusk:     { label: 'Dusk',          file: 'qwantani_dusk_2_puresky',     az: Math.atan2(-0.6, 1),  sun: 0.45, hemi: 0.25, bg: 1.0, env: 1.2,  fog: 0.0001,   exp: 1.15, minEl: 4, soft: true },
   overcast: { label: 'Overcast',      file: 'kloofendal_overcast_puresky', az: Math.atan2(-420, -300), sun: 0.7, hemi: 0.6,  bg: 1.0,  env: 1.0,  fog: 0.00013,  exp: 1.0,  minEl: 25, soft: true },
 };
