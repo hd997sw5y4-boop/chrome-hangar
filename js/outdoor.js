@@ -369,9 +369,10 @@ export class Outdoor {
     const sign = canvasTex(1024, 128, (c, w, h) => { c.fillStyle = '#1d5d8f'; c.fillRect(0, 0, w, h); c.fillStyle = '#fff'; c.font = 'bold 72px Arial'; c.textBaseline = 'middle'; c.textAlign = 'center'; c.fillText('PUBLIC VIEWING STAND', w / 2, h / 2); });
     const sm = new THREE.Mesh(new THREE.PlaneGeometry(12, 1.5), new THREE.MeshStandardMaterial({ map: sign, roughness: 0.6 })); sm.position.set(0, 7.4, 1.0); sm.userData.noBake = true; g.add(sm);
     box(L + 6, 0.3, 10, M.concrete, 0, 0.0, -2.8, g);
-    // camera spot: middle of the top tier, eye height
+    // cinematic camera: in an aisle between the 3.25 m posts, just in front of the
+    // canopy and the front rail, so thin poles and wires sit behind the lens
     g.updateMatrixWorld(true);
-    this.standCam = new THREE.Vector3(2, 0.5 + 5 * 0.48 + 1.25, -5 * 0.95).applyMatrix4(g.matrixWorld);
+    this.standCam = new THREE.Vector3(1.625, 5.85, 4.4).applyMatrix4(g.matrixWorld);
     this.group.add(bake(g));
   }
   buildWindsocks() {

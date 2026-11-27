@@ -311,12 +311,14 @@ export class FlightMode {
       this.chaseYaw -= 0; const pitch = THREE.MathUtils.clamp(0.12 + this.orbit.pitch * 0.5 - THREE.MathUtils.clamp(vel.y / 300, -0.3, 0.35), -0.4, 1.2);
       const p = orbitPos(R0 * 1.15, this.chaseYaw + (this.orbit.yaw - 0.6), pitch); p.y = Math.max(1.5, p.y);
       c.fov = THREE.MathUtils.clamp(60 + Math.min(15, vel.length() / 30), 55, 75); place(p, tgt, 3.5);
-    } else if (view === 2 && this.w.outdoor?.standCam) {                    // ground tracking from the viewing stand
+    } else if (view === 2 && this.w.outdoor?.standCam) {                    // long-lens tracking from in front of the stands
       c.position.copy(this.w.outdoor.standCam); this.camPos.copy(c.position);
       const pad = new THREE.Vector3(SPOTS.pad.x, 0, SPOTS.pad.z), d = c.position.distanceTo(tgt);
-      const k = THREE.MathUtils.clamp(f.alt / 400, 0, 1), aim = pad.clone().setY(L * 0.6).lerp(tgt, 0.55 + 0.45 * k);
-      const span = Math.max(L * 4 + 55, (f.alt + L) * 1.25 * (1 - k) + L * 6 * k) * Math.min(4, this.zoom);
-      c.fov = THREE.MathUtils.clamp(2 * Math.atan(span / 2 / d) * 180 / Math.PI, 2.5, 50);
+      const k = THREE.MathUtils.clamp(f.alt / 500, 0, 1);
+      // keep a strip of pad and plume in the lower third at liftoff, then ride the rocket up
+      const aim = pad.clone().setY(Math.max(3, L * 0.45)).lerp(tgt, 0.42 + 0.58 * k);
+      const span = Math.max(L * 2.6 + 16, (f.alt * 0.7 + L * 1.8) * (1 - k * 0.2) + L * 5.2 * k) * Math.min(3.2, this.zoom);
+      c.fov = THREE.MathUtils.clamp(2 * Math.atan(span / 2 / d) * 180 / Math.PI, 2.0, 26);
       if (snap) { this.camLook.copy(aim); this.camInit = true; } else this.camLook.lerp(aim, 1 - Math.exp(-dt * 5));
       c.lookAt(this.camLook);
     } else if (view === 3 || view === 2) {                                  // pad cam (long lens from the apron)
