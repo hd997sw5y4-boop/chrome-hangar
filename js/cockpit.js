@@ -7,6 +7,7 @@ import { mergeGeometries } from '../vendor/three/addons/utils/BufferGeometryUtil
 import { layout } from './rocket.js';
 import { Instruments, CAUTIONS } from './cockpit-instruments.js';
 import { engineGauges } from './cockpit-engine.js';
+import * as FL from './freelook.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const EYE_DROP = 1.55;          // eye sits this far below the top of the stack
@@ -97,6 +98,7 @@ export class Cockpit {
   constructor(game, flight) {
     this.g = game; this.fm = flight; this.w = game.world;
     this.on = false; this.built = false; this.yaw = 0; this.pitch = 0; this.yawT = 0; this.pitchT = 0;
+    this.lookQ = FL.fromHeadYawPitch(0, REST_PITCH); this.lookQShow = FL.fromHeadYawPitch(0, REST_PITCH); this.coastLook = false;
     this.prevVel = new THREE.Vector3(); this.gs = 1; this.moonObj = null; this.moonScan = 0; this.prevMoon = null; this.flashT = 0;
     this.tmp = { q: new THREE.Quaternion(), q2: new THREE.Quaternion(), e: new THREE.Euler(0, 0, 0, 'YXZ'), a: V(0, 0, 0), b: V(0, 0, 0), c: V(0, 0, 0), u: V(0, 1, 0), h: V(0, 0, 1) };
     this.qX = new THREE.Quaternion().setFromAxisAngle(V(1, 0, 0), Math.PI / 2);   // capsule -Z -> rocket +Y, capsule +Y -> rocket +Z
@@ -112,8 +114,18 @@ export class Cockpit {
     if (inp.hit('KeyQ') || inp.hit('Pad11')) this.recenter(); // Q / R3
     this.look(inp.look.x, inp.look.y);
   }
-  look(dx, dy) { this.yawT = THREE.MathUtils.clamp(this.yawT - dx, -YAW_MAX, YAW_MAX); this.pitchT = THREE.MathUtils.clamp(this.pitchT - dy, PITCH_MIN, PITCH_MAX); }
-  recenter() { this.yawT = 0; this.pitchT = REST_PITCH; }
+  look(dx, dy) {
+    // coastLook is owned by frame() so a leave-orbit ease is not snapped when input runs first
+    if (FL.isCoast(this.fm?.moon, this.fm?.f) || this.coastLook) {
+      if (!this.coastLook) this.lookQ = FL.fromHeadYawPitch(this.yawT, this.pitchT);
+      this.lookQ = FL.applyHeadLook(this.lookQ, dx, dy);
+      const yp = FL.toHeadYawPitch(this.lookQ); this.yawT = yp.yaw; this.pitchT = yp.pitch;
+    } else {
+      this.yawT = THREE.MathUtils.clamp(this.yawT - dx, -YAW_MAX, YAW_MAX);
+      this.pitchT = THREE.MathUtils.clamp(this.pitchT - dy, PITCH_MIN, PITCH_MAX);
+    }
+  }
+  recenter() { this.yawT = 0; this.pitchT = REST_PITCH; this.lookQ = FL.fromHeadYawPitch(0, REST_PITCH); this.lookQShow = this.lookQ; }
   // enter() is called from FlightMode.setCam when the cockpit slot is selected
   enter() { this.setOn(true); }
   setOn(want) {
@@ -121,7 +133,7 @@ export class Cockpit {
     if (want && (!f || f.phase === 'crashed' || !this.fm.group)) return;
     if (want === this.on) return;
     this.on = want;
-    if (want) { this.build(); this.recenter(); this.yaw = 0; this.pitch = REST_PITCH; this.prevVel.set(f.vel.x, f.vel.y, f.vel.z); this.inst.update(0, this.data(1 / 60), true); }
+    if (want) { this.build(); this.recenter(); this.yaw = 0; this.pitch = REST_PITCH; this.coastLook = false; this.prevVel.set(f.vel.x, f.vel.y, f.vel.z); this.inst.update(0, this.data(1 / 60), true); }
     else this.hide();
     document.body.classList.toggle('ckpt', this.on);
   }
@@ -389,9 +401,24 @@ export class Cockpit {
     root.quaternion.copy(T.q).multiply(this.qX);
     root.position.copy(rs.o).addScaledVector(T.u, fm.st0.top - EYE_DROP);
     root.updateMatrixWorld(true);
-    // head-look, eased; a slight head lean toward the look direction
-    const a = 1 - Math.exp(-dt * 14); this.yaw += (this.yawT - this.yaw) * a; this.pitch += (this.pitchT - this.pitch) * a;
-    T.e.set(this.pitch, this.yaw, 0, 'YXZ'); T.q2.setFromEuler(T.e);
+    // head-look, eased; a slight head lean toward the look direction.
+    // Coasting in orbit: the look is a trackball quaternion (no ±90° clamp, no gimbal flip).
+    // Leaving orbit eases back toward the clamped Euler pose so the view does not snap.
+    const a = 1 - Math.exp(-dt * 14), coast = FL.isCoast(this.fm.moon, f);
+    if (coast) {
+      if (!this.coastLook) this.lookQ = FL.fromHeadYawPitch(this.yawT, this.pitchT);
+      this.lookQShow = FL.qslerp(this.lookQShow, this.lookQ, a);
+      const yp = FL.toHeadYawPitch(this.lookQShow); this.yaw = yp.yaw; this.pitch = yp.pitch;
+    } else {
+      const yawW = THREE.MathUtils.clamp(this.yawT, -YAW_MAX, YAW_MAX), pitchW = THREE.MathUtils.clamp(this.pitchT, PITCH_MIN, PITCH_MAX);
+      this.yawT = yawW; this.pitchT = pitchW;
+      this.yaw += (yawW - this.yaw) * a; this.pitch += (pitchW - this.pitch) * a;
+      const target = FL.fromHeadYawPitch(this.yaw, this.pitch);
+      this.lookQShow = this.coastLook ? FL.qslerp(this.lookQShow, target, a) : target;
+      this.lookQ = target;
+    }
+    this.coastLook = coast;
+    T.q2.set(this.lookQShow.x, this.lookQShow.y, this.lookQShow.z, this.lookQShow.w);
     const lean = T.b.set(-Math.sin(this.yaw) * 0.06, Math.max(0, this.pitch) * 0.03, -Math.abs(Math.sin(this.yaw)) * 0.04);
     c.position.copy(lean).applyMatrix4(root.matrixWorld);
     c.quaternion.copy(root.quaternion).multiply(T.q2);
