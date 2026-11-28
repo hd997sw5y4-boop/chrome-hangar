@@ -1,6 +1,6 @@
-// Flight results screen (Free Mode flights): max altitude, downrange, top speed, flight time, a 1-3 star rating and a personal best
+// Flight results screen (Free Mode flights): max altitude, downrange, top speed, flight time and a personal best
 // saved in localStorage. The panel is built once per flight from the sim's own stats (flightStep keeps apex / topSpeed / downrange /
-// flightT), so nothing here runs per frame except one key / pad poll while it is open.
+// flightT), so nothing here runs per frame except one key / pad poll while it is open. No goal stars.
 const KEY = 'ch_flight_best';
 const STATS = [   // [key on the best record, label, value from the flight, unit, decimals]
   ['alt', 'Max altitude', f => f.apex, 'm', 0],
@@ -56,8 +56,6 @@ export class FlightResults {
     $('frReplay').innerHTML = 'Replay' + (pad ? ' <kbd>□</kbd>' : kb ? ' <kbd>R</kbd>' : ''); $('frReplay').classList.toggle('hidden', !flew);
     g.input.exitLock(); document.activeElement?.blur?.();
     this.timers.forEach(clearTimeout); this.timers = [];
-    const spans = $('frStars').querySelectorAll('span');
-    stars.forEach((s, i) => s[0] && this.timers.push(setTimeout(() => { spans[i].classList.add('lit'); g.audio.star(i); }, 400 + i * 300)));
     if (how === 'crash') g.audio.bad();
     this.el.classList.remove('hidden'); this.open = true; this.t = 0; this.done = false; g.resultsOpen = true;
   }
