@@ -67,7 +67,9 @@ export class FlightResults {
   // keyboard: Enter / Space = fly again, Esc / B / Backspace = hangar. DualSense: ✕ (Pad0) = fly again, ○ (Pad1) = hangar. A short grace
   // period keeps a mashed key or trigger from the end of the flight from dismissing it.
   poll(inp, dt) {
-    this.t += dt; if (this.t < 0.6 || this.done) return;
+    const t0 = this.t; this.t += dt; if (this.t < 0.6 || this.done) return;
+    // focus Fly again once the grace period is over (not at show time, so a key still held from the flight cannot click it)
+    if (t0 < 0.6) { const b = this.$('frAgain'); b.focus({ preventScroll: true }); b.scrollIntoView?.({ block: 'nearest' }); }
     if (inp.hit('Enter') || inp.hit('NumpadEnter') || inp.hit('Space') || inp.hit('Pad0')) this.choose('again');
     else if (inp.hit('Escape') || inp.hit('KeyB') || inp.hit('Backspace') || inp.hit('Pad1')) this.choose('hangar');
   }
