@@ -593,6 +593,7 @@ export class Robots {
     bar.addEventListener('pointerdown', e => e.stopPropagation());
     bar.addEventListener('click', e => {
       const k = e.target.closest('button')?.dataset.job, r = this.barFor; if (!k || !r) return;
+      if (!r.enabled) { this.showBar(null); return; }   // he got busy since (riding the cart, broken, walking a cart job): leave him to it
       this.g.audio?.tap?.(); this.send(r, k === 'follow' && r.jobKey === 'follow' ? r.rounds : k === 'rounds' ? r.rounds : k);
     });
   }
