@@ -357,12 +357,14 @@ class Game {
     document.addEventListener('keydown', () => this.audio.unlock(), { capture: true });
     document.querySelectorAll('button').forEach(b => b.addEventListener('mouseenter', () => this.audio.hover()));
     this.input.bindStick($('stickL'), 'touchMove');
+    // GPU context loss (driver reset, background tab on mobile): let the browser restore it, then rebuild the render path
+    const cv = this.world.renderer.domElement;
+    cv.addEventListener('webglcontextlost', e => { e.preventDefault(); this.audio.hush(); this.toast('Graphics paused: the GPU was reset. Restoring…', 6000); });
+    cv.addEventListener('webglcontextrestored', () => { try { this.applySettings(); this.toast('Graphics restored'); } catch (err) { console.warn('restore', err?.message || err); } });
   }
 
   loop() {
-    const tick = () => {
-      requestAnimationFrame(tick);
-      if (document.hidden) return;
+    const frame = () => {
       const cap = this.settings.fps | 0;
       if (cap > 0) {
         const now = performance.now();
@@ -385,7 +387,10 @@ class Game {
         const driving = this.cart?.frame(dt, paused);
         const held = this.interact?.frame(dt, paused || driving) || driving;
         this.hands?.frame(dt, paused || driving);
-        if (this.modeObj) { if (!paused && !held) this.modeObj.update(dt, this.resultsOpen); else if (paused) this.modeObj.idle?.(dt); }
+        if (this.modeObj) {
+          if (!paused && !held) { this._padHush = false; this.modeObj.update(dt, this.resultsOpen); }
+          else if (paused) { this.modeObj.idle?.(dt); if (!this._padHush && (this.mode === 'flight' || this.mode === 'test')) { this._padHush = true; this.audio.hush(); } }   // menu over a flight: the engine bed would keep roaring
+        }
       }
       const fxDt = dt * (this.fxScale ?? 1);   // flight slow-mo beat slows the particles with the sim (1 otherwise)
       this.smoke.update(fxDt, this.windNow || { x: 0, z: 0 }, this.world.h * this.world.renderer.getPixelRatio() / Math.tan(this.world.camera.fov * Math.PI / 360) / 2);
@@ -398,6 +403,14 @@ class Game {
       this.world.render();
       inp.endFrame();
       this.frames = (this.frames || 0) + 1;
+    };
+    // one bad frame must not stop the loop or flood the console at 60 Hz: log each distinct error once and keep going
+    const seen = new Set();
+    const tick = () => {
+      requestAnimationFrame(tick);
+      if (document.hidden) { if (!this._hushed) { this._hushed = true; this.audio.hush(); } return; }   // nothing else would turn the engine bed down
+      this._hushed = false;
+      try { frame(); } catch (e) { const k = String(e?.stack || e).slice(0, 200); if (!seen.has(k)) { seen.add(k); console.error(e); } this.input.endFrame(); }
     };
     tick();
   }
