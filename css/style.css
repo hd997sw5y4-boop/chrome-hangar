@@ -147,7 +147,7 @@ body.touch #fBtns{max-width:calc(100% - 320px - var(--sl) - var(--sr))}
 #hpWarn div{font:700 10px/1.25 system-ui,sans-serif;letter-spacing:.05em;min-height:0;opacity:1;transition:opacity .9s ease;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 #hpWarn div{height:12.5px}#hpWarn div.gone{opacity:0}
 #hpWarn .ok{color:var(--go)}#hpWarn .warn{color:var(--warn)}#hpWarn .crit{color:#ff9a3c}#hpWarn .bad{color:#ff7a6e}
-@media (max-height:430px){#menu{gap:4px}.logo{font-size:24px}#menu .tag{margin-top:-4px;font-size:12px}.menuBtns{gap:4px;margin-top:4px}.menuBtns button,.menuBtns button.big{min-height:30px;padding:3px 14px;font-size:14px}#menu .foot{font-size:11px;margin-top:2px}}
+@media (max-height:430px){#menu{gap:4px}.logo{font-size:24px}#menu .tag{margin-top:-4px;font-size:12px}.menuBtns{gap:4px;margin-top:4px}.menuBtns button,.menuBtns button.big{min-height:28px;padding:2px 14px;font-size:14px}#menu .foot{font-size:11px;margin-top:2px}}
 @media (max-height:500px){
  #hpPanel{top:calc(52px + var(--st));left:calc(184px + var(--sl));width:112px;padding:4px 6px 5px}#hpCanvas{width:96px;height:147px}#hpWarn div{font-size:9px;height:11.5px}
  .logo{font-size:30px}.menuBtns{gap:5px}.menuBtns button{min-height:36px;padding:6px 14px}button.big{font-size:16px;padding:8px 18px}
@@ -159,6 +159,8 @@ body.touch #fBtns{max-width:calc(100% - 320px - var(--sl) - var(--sr))}
  .ctlRow{padding:4px 8px;gap:6px}#testCtl1{bottom:calc(56px + var(--sb))}.ctlRow button{min-height:34px;padding:5px 10px;font-size:13px}.thrCtl{min-width:120px}#tFill{width:130px}
  #fBtns{padding:4px;gap:4px}#fBtns button{min-height:34px;padding:5px 8px;font-size:12px}#landGuide b{font-size:24px}#countdown{font-size:60px}
  #prompt{top:calc(48px + var(--st));padding:6px 12px;font-size:13px;max-width:min(520px,86vw);gap:6px}#prompt .factCard{padding:6px 9px}#prompt .factCard b{font-size:13px;margin:1px 0 2px}#prompt .factCard p{font-size:12px}#topRight button{width:40px;height:40px}
+ #flightUI #moonPad{left:calc(50% + 80px);max-width:min(400px,calc(100vw - 340px))}   /* keep the Moon practice bar clear of the health panel */
+ body.ckpt #hpPanel{display:none}   /* the health panel sat on top of the attitude ball */
  .stick{width:110px;height:110px}#thrTouch{height:160px}#thrTouch .track{height:140px}#btnEngCut{bottom:calc(196px + var(--sb));min-height:58px;width:70px;font-size:11px}
 }
 
@@ -213,3 +215,5 @@ body.intro #hud,body.intro #menu,body.intro #buildUI,body.intro #testUI,body.int
 #replayBar small{flex-basis:100%;text-align:center;color:#ffd34d;font-size:13px;min-height:1em}
 #flightUI.replaying #fBtns,#flightUI.replaying #landGuide,#flightUI.replaying #thrTouch,#flightUI.replaying #btnEngCut{display:none!important}
 #fWindArrow{display:inline-block;margin-left:4px;color:var(--accent);font-weight:900;font-size:17px;vertical-align:-2px;line-height:1;transition:transform .25s ease}
+/* cockpit view: the button bar stays reachable but lets the instruments show through */
+body.ckpt #fBtns{opacity:.5;transition:opacity .2s}body.ckpt #fBtns:hover,body.ckpt #fBtns:focus-within{opacity:1}
