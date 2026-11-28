@@ -34,6 +34,12 @@ export class FlightResults {
       goal ? [goal.bonusDone, 'Bonus: ' + goal.bonusText] : [f.apex >= 150, 'Climb above 150 m'],
     ];
   }
+  // soft-landing bonus: a touchdown under 1.5 m/s fills the first star still missing (and always shows as its own line)
+  softBonus(f, how, stars) {
+    if (how !== 'landed' || !f.soft) return null;
+    const miss = stars.findIndex(s => !s[0]); if (miss >= 0) stars[miss] = [true, stars[miss][1] + ' (filled by the soft landing)'];
+    return `Soft-landing bonus: ${f.landSpeed.toFixed(1)} m/s touchdown`;
+  }
   show(f, how, info) {
     const g = this.g, $ = this.$, flew = f.apex > 1, goal = info.goal;
     // personal best: compare, then save
@@ -42,12 +48,12 @@ export class FlightResults {
     if (flew) for (const [k, , get] of STATS) { const v = get(f); if (v > (prev?.[k] || 0) + 1e-6) { next[k] = v; won[k] = !!prev?.[k]; changed = true; } }
     const anyNew = Object.values(won).some(Boolean), first = flew && !prev;
     if (changed) saveBest(next);
-    const stars = this.rate(f, how, goal), lit = stars.filter(s => s[0]).length;
+    const stars = this.rate(f, how, goal), soft = this.softBonus(f, how, stars), lit = stars.filter(s => s[0]).length;
     $('frTitle').textContent = info.title; $('frTitle').className = how === 'landed' || how === 'range' ? 'good' : '';
     $('frReason').textContent = info.reason || ''; $('frHint').innerHTML = info.hint ? '<b>Try this:</b> ' + info.hint : ''; $('frHint').classList.toggle('hidden', !info.hint);
     const bn = $('frBanner'); bn.classList.toggle('hidden', !(anyNew || first));
     bn.textContent = first ? 'First flight on record' : '★ New best!';
-    $('frStars').innerHTML = stars.map(() => '<span>★</span>').join('') + '<small>' + stars.map(s => (s[0] ? '✓ ' : '· ') + s[1]).join('<br>') + '</small>';
+    $('frStars').innerHTML = stars.map(() => '<span>★</span>').join('') + '<small>' + stars.map(s => (s[0] ? '✓ ' : '· ') + s[1]).join('<br>') + (soft ? '<br><b class="soft">★ ' + soft + '</b>' : '') + '</small>';
     $('frStats').innerHTML = STATS.map(([k, label, get, unit, d]) => {
       const b = next[k] ?? 0;
       return `<div class="${won[k] ? 'best' : ''}"><label>${label}</label><b>${fmt(get(f), d)} <i>${unit}</i></b>` +

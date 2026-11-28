@@ -206,3 +206,4 @@ body.intro #hud,body.intro #menu,body.intro #buildUI,body.intro #testUI,body.int
   #frStats{grid-template-columns:repeat(4,1fr);gap:6px;margin:6px 0}#frStats div{padding:4px 8px}#frStats b{font-size:17px}#frStats label{font-size:10px}
   #fResults .row{bottom:-10px;margin:6px -16px -10px;padding:6px 16px 8px}#fResults .row button{min-height:36px;padding:4px 10px}
 }
+#frStars small b.soft{color:#7dffa8;font-weight:700}

@@ -79,12 +79,21 @@ export function newFlight(rocket, opts = {}) {
     heavyT: 0, failure: null, events: [], samples: [], sampleT: 0, flippedHint: false, windHint: false,
     reached: null, gimbal: v3(), maxQ: 0,
     flightT: 0, downrange: 0,   // seconds since liftoff, and the furthest the rocket has been from the pad centre (m), for the results screen
+    // landing: legs 0 = folded .. 1 = down (auto: tucked for the climb, down again for the descent; legCmd 'out' / 'in' overrides),
+    // and a recovery chute packed in the nose cone (deployed by chuteCmd; 'packed' | 'open' | 'torn' | 'cut' | 'none')
+    legOut: 1, legCmd: 'auto', chute: hasNose(rocket) ? 'packed' : 'none', chuteCmd: false, chuteK: 0, chuteA: 0, soft: false,
   };
   // body origin (nozzle exit) rests so the lowest point touches the pad top
   f.origin = v3(f.padPos.x, f.padPos.y - L.bottom, f.padPos.z);
   f.pos = add(f.origin, f.up, st.com);
   return f;
 }
+
+const hasNose = r => r.stack.length > 0 && PARTS[r.stack[r.stack.length - 1].p]?.kind === 'nose';
+export const CHUTE = { vt: 3.8, maxOpen: 140, maxHold: 170, fill: 1.8 };   // sized for ~3.8 m/s at sea level; opening above 140 m/s rips it
+export const SOFT_LANDING = 1.5;   // m/s: a touchdown under this earns the soft-landing bonus
+const legsDown = f => f.legs && f.legOut > 0.85;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 function basis(up) {
   const ref = Math.abs(up.y) < 0.95 ? v3(0, 1, 0) : v3(1, 0, 0);
@@ -95,8 +104,8 @@ function basis(up) {
 export function contactPoints(f) {
   const O = f.origin, up = f.up, [e1, e2] = basis(up), pts = [];
   const L = layout(f.rocket);
-  const r = f.legs ? PARTS.legs.footRadius : (f.eng ? f.eng.radius : 0.9);
-  const y = f.legs ? -PARTS.legs.drop : 0;
+  const lg = legsDown(f), r = lg ? PARTS.legs.footRadius : (f.eng ? f.eng.radius : 0.9);
+  const y = lg ? -PARTS.legs.drop : 0;
   for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) pts.push(add(add(add(O, up, y), e1, a * r), e2, b * r));
   for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) pts.push(add(add(add(O, up, L.top), e1, a * 0.9), e2, b * 0.9));
   return pts;
@@ -107,7 +116,7 @@ export function failFlight(f, kind, extra) { fail(f, kind, extra); }
 function fail(f, kind, extra = {}) {
   if (f.failure) return;
   f.failure = { kind, t: f.t, alt: f.alt, speed: f.speed, ...extra };
-  f.phase = 'crashed'; f.e.on = false;
+  f.phase = 'crashed'; f.e.on = false; if (f.chute === 'open') f.chute = 'cut';
   f.events.push({ type: 'crash', kind });
 }
 
@@ -177,6 +186,31 @@ export function flightStep(f, dt = DT) {
   T = add(T, mul(f.w, -st.I * 0.05));
   f.q = q; f.maxQ = Math.max(f.maxQ, q);
 
+  // landing legs: the sim owns the fold so touchdown can depend on it (the mesh just follows f.legOut)
+  if (f.legs) {
+    // auto: down on the pad, tucked once climbing, back down when descending below 450 m (or low and slow) and held there
+    // until it climbs again, so a slow hover-down never meets the ground with the legs still folded
+    if (f.phase !== 'flying' || f.alt < 6 || (f.alt < 450 && f.vs < -0.5) || (f.alt < 40 && f.vs < 3)) f.legAuto = 1;
+    else if (f.vs > 3) f.legAuto = 0;
+    const auto = f.legAuto ?? 1;
+    const want = f.legCmd === 'out' ? 1 : f.legCmd === 'in' ? 0 : auto;
+    f.legOut = clamp(f.legOut + clamp(want - f.legOut, -dt / 1.6, dt / 1.6), 0, 1);
+  }
+  // recovery chute: pulls from the nose (so it also swings the rocket upright) and inflates over ~1.8 s
+  if (f.chuteCmd && f.chute === 'packed' && f.phase === 'flying') {
+    f.chuteCmd = false;
+    if (V > CHUTE.maxOpen) { f.chute = 'torn'; f.events.push({ type: 'chuteTorn', speed: V }); }
+    else { f.chute = 'open'; f.chuteK = 0; f.chuteA = 2 * m * G0 / (1.225 * CHUTE.vt * CHUTE.vt); f.events.push({ type: 'chute' }); }
+  }
+  if (f.chute === 'open') {
+    f.chuteK = Math.min(1, f.chuteK + dt / CHUTE.fill);
+    if (V > CHUTE.maxHold) { f.chute = 'torn'; f.events.push({ type: 'chuteTorn', speed: V }); }
+    else if (V > 0.05) {
+      const k = f.chuteK * f.chuteK, Fc = mul(norm(va), -q * f.chuteA * k);
+      F = add(F, Fc); T = add(T, cross(mul(up, st.top - st.com), Fc)); T = add(T, mul(f.w, -st.I * 1.5 * k));
+    }
+  }
+
   if (f.phase === 'pad') {
     if (thrust > m * G0 * 1.002) { f.phase = 'flying'; f.events.push({ type: 'liftoff' }); }
     else {
@@ -217,15 +251,17 @@ export function flightStep(f, dt = DT) {
     const vh = Math.hypot(f.vel.x, f.vel.z), sp = f.speed;
     f.landSpeed = sp;
     const near = Math.hypot(f.origin.x - f.padPos.x, f.origin.z - f.padPos.z);
-    if (f.legs && sp < 5 && vh < 3 && f.tilt < 15) {
-      f.phase = 'landed'; f.e.cmd = 0; f.e.on = false; f.landDist = near;
+    const lg = legsDown(f);
+    if (lg && sp < 5 && vh < 3 && f.tilt < 15) {
+      f.phase = 'landed'; f.e.cmd = 0; f.e.on = false; f.landDist = near; f.soft = sp < SOFT_LANDING; if (f.chute === 'open') f.chute = 'cut';
       f.vel = v3(); f.w = v3(); f.up = v3(0, 1, 0);
       f.pos = add(f.pos, v3(0, -minY, 0)); f.origin = add(f.pos, f.up, -st.com);
       f.events.push({ type: 'landed' });
     } else {
       let kind = 'hardLanding';
       if (!f.legs && sp < 5) kind = 'noLegs';
-      else if (f.legs && sp < 5 && f.tilt >= 15) kind = 'tippedLanding';
+      else if (f.legs && !lg && sp < 5) kind = 'legsUp';
+      else if (lg && sp < 5 && f.tilt >= 15) kind = 'tippedLanding';
       else if (f.flippedHint) kind = 'flipped';
       else if (f.windHint) kind = 'wind';
       else if (f.fuelFrac <= 0) kind = 'outOfFuel';

@@ -35,7 +35,7 @@ export class PadRelease {
     this.reset(null);
   }
   reset(rocketGroup, baseY = 0) {
-    this.rocket = rocketGroup; this.t = 0; this.released = false; this.fold = 0; this.foldT = 0; this.lastKey = '';
+    this.rocket = rocketGroup; this.t = 0; this.released = false; this.fold = 0; this.lastOut = null; this.legDir = 0; this.lastKey = '';
     const L = rocketGroup?.userData.layout, R = L?.radius || 0.9, base = baseY;
     this.jawY = base + (L?.engLen || 0) + 0.3; this.R = R;
     this.plateY = base + (L?.engLen || 0) + 1.3;
@@ -71,11 +71,12 @@ export class PadRelease {
     if (!this.rocket) return;
     if (!this.released && f.e.on) { this.released = true; this.audio.noise(0.25, 260, 0.8, 0.3, 0, 'lowpass', 0.4); this.audio.tone(60, 0.4, 'sine', 0.22, 0.3, 0, 0.6); this.audio.noise(1.1, 3200, 0.7, 0.07, 0.05, 'highpass', 0.3); }
     if (this.released && this.t < 1) { this.t = Math.min(1, this.t + dt / 0.9); this.pose(this.t); }
-    // legs: tuck for the climb, deploy when coming back down low
-    if (this.rocket.userData.layout?.items?.some(it => it.s.legs)) {
-      const want = f.phase === 'flying' && f.alt > 6 && !(f.vs < -2 && f.alt < 450) ? 1 : 0;
-      if (want !== this.foldT) { this.foldT = want; this.audio.noise(0.4, 900, 1, 0.04, 0, 'bandpass', 0.2); }
-      const nf = this.fold + THREE.MathUtils.clamp(this.foldT - this.fold, -dt / 1.6, dt / 1.6);
+    // legs: the sim decides (auto tuck for the climb / deploy for the descent, or the player's L / D-pad call); the mesh follows f.legOut
+    if (f.legs && this.rocket.userData.layout?.items?.some(it => it.s.legs)) {
+      const dir = Math.sign(f.legOut - (this.lastOut ?? f.legOut)); this.lastOut = f.legOut;
+      if (dir && dir !== this.legDir) this.audio.noise(0.4, 900, 1, 0.04, 0, 'bandpass', 0.2);   // hydraulic whirr as they start to move
+      this.legDir = dir;
+      const nf = 1 - f.legOut;
       if (nf !== this.fold) { this.fold = nf; setLegFold(this.rocket, nf * nf * (3 - 2 * nf)); }
     }
   }
