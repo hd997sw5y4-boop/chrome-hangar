@@ -17,7 +17,7 @@ export class FlightResults {
     this.g = game; this.open = false; this.t = 0; this.timers = [];
     const el = this.el = document.createElement('div');
     el.id = 'fResults'; el.className = 'modal hidden';
-    el.innerHTML = '<div class="card"><h2 id="frTitle"></h2><div id="frBanner" class="hidden"></div><div id="frStars"></div><p id="frReason"></p><p id="frBroke" class="hidden"></p><p id="frHint" class="hidden"></p>' +
+    el.innerHTML = '<div class="card"><h2 id="frTitle"></h2><div id="frBanner" class="hidden"></div><p id="frReason"></p><p id="frBroke" class="hidden"></p><p id="frHint" class="hidden"></p>' +
       '<div id="frStats"></div><div class="row"><button id="frHangar"></button><button id="frReplay"></button><button id="frAgain" class="go"></button></div></div>';
     document.body.appendChild(el);
     this.$ = id => el.querySelector('#' + id);
@@ -44,7 +44,6 @@ export class FlightResults {
     $('frReason').textContent = info.reason || ''; $('frBroke').textContent = info.broke || ''; $('frBroke').classList.toggle('hidden', !info.broke); $('frHint').innerHTML = info.hint ? '<b>Try this:</b> ' + info.hint : ''; $('frHint').classList.toggle('hidden', !info.hint);
     const bn = $('frBanner'); bn.classList.toggle('hidden', !(anyNew || first || soft));
     bn.textContent = first ? 'First flight on record' : anyNew ? '★ New best!' : (soft || '');
-    $('frStars').innerHTML = ''; $('frStars').classList.add('hidden');
     $('frStats').innerHTML = STATS.map(([k, label, get, unit, d]) => {
       const b = next[k] ?? 0;
       return `<div class="${won[k] ? 'best' : ''}"><label>${label}</label><b>${fmt(get(f), d)} <i>${unit}</i></b>` +
