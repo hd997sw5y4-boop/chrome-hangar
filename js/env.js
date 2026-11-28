@@ -205,6 +205,7 @@ export class World {
   // world + planet into whatever target is bound (screen, or the post chain's HDR buffer)
   renderScene() {
     const r = this.renderer, cam = this.camera, alt = cam.position.y, dt = this._dt || 0.016;
+    if (this.spaceView?.render(r, cam)) return;   // Moon flight away from the range: floating-origin space / lunar view (spaceview.js)
     if (this.smokeFX && this.smokeFX.live && alt < 400) this.smokeFX.prepareDepth(r, this.scene, cam);
     else if (this.smokeFX) this.smokeFX.mat.uniforms.uHasDepth.value = 0;
     if (!this.indoor && this.earth.render(r, cam, dt)) {
@@ -212,6 +213,7 @@ export class World {
       const bg = this.scene.background; this.scene.background = null;
       r.autoClear = false; r.clearDepth(); r.render(this.scene, cam); r.autoClear = true; this.scene.background = bg;
     } else r.render(this.scene, cam);
+    this.spaceView?.overlay(r, cam);   // predicted path over the range view
   }
   async buildOutdoor(q) { this.outdoor = new Outdoor(this); await this.outdoor.build(q); }
   update(dt) { this.outdoor?.update(dt, this.camera, this.wind); }

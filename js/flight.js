@@ -16,6 +16,7 @@ import { LandingKit } from './landing.js';
 import { SlowMo } from './slowmo.js';
 import { ShardPool, WreckSettle } from './wreck.js';
 import { FlightRecorder, ReplayPlayer } from './replay.js';
+import { MoonFlight } from './moon.js';
 
 const $ = id => document.getElementById(id);
 // Flight views (keys 1-8, C cycles). Index order is what the picker and the saved setting use.
@@ -51,6 +52,7 @@ export class FlightMode {
     this.guideLine = new THREE.Line(line, new THREE.LineDashedMaterial({ color: 0x7fe7ff, dashSize: 3, gapSize: 2, transparent: true, opacity: 0.8 }));
     this.guideLine.frustumCulled = false; this.guideLine.visible = false; this.w.scene.add(this.guideLine);
     this.health = new RocketHealth(); this.hpUI = new HealthPanel(game); this.fr = new FlightResults(game); this.kit = new LandingKit(game); this.slow = new SlowMo(); this.shards = new ShardPool(game.world.scene); this.wreckFx = new WreckSettle(); this.rec = new FlightRecorder(); this.rp = new ReplayPlayer(game); this.fr.onReplay = () => this.startReplay();
+    this.moon = new MoonFlight(this);   // Moon flight (moon.js): space leg, time warp, lunar landing
     this.syncButtons();
   }
   syncButtons() {
@@ -94,21 +96,24 @@ export class FlightMode {
     $('mThr').querySelector('em').style.bottom = (eng.minThrottle * 100) + '%';
     $('thrTouch').querySelector('em').style.bottom = (eng.minThrottle * 100) + '%';
     this.syncPose(); this.syncButtons(); this.setCam(this.cam, true); this.zoomT = this.zoom = 1;
+    this.moon.reset();
     if (this.g.mission && !this.g.training?.active) this.g.prompt(IS_TOUCH ? 'Tap <b>Launch</b>. Throttle on the right, steer with the left stick.' : 'Press <b>Space</b> to launch. Shift / R throttle up, F down, WASD steer, C camera.');
   }
-  exit() { this.w.post.setDOF(false); this.w.post.setBlur(0); this.w.post.setHeat(new THREE.Vector4(0, 0, 0, 0)); this.w.setAltitude(0); this.w.followSun(SPOTS.pad); this.w.camera.near = 0.1; this.w.camera.far = 60000; this.w.camera.updateProjectionMatrix(); this.clear(); $('camPicker').classList.add('hidden'); this.w.camera.up.set(0, 1, 0); this.guideLine.visible = false; this.hpUI.detach(); this.g.prompt(null); $('landGuide').classList.add('hidden'); this.g.audio.setEngine(0); this.padRel?.reset(null); this.fr.hide(); this.kit.hide(); this.slow.reset(); this.g.fxScale = 1; this.endReplay(); }
+  exit() { this.moon?.exit(); this.w.post.setDOF(false); this.w.post.setBlur(0); this.w.post.setHeat(new THREE.Vector4(0, 0, 0, 0)); this.w.setAltitude(0); this.w.followSun(SPOTS.pad); this.w.camera.near = 0.1; this.w.camera.far = 60000; this.w.camera.updateProjectionMatrix(); this.clear(); $('camPicker').classList.add('hidden'); this.w.camera.up.set(0, 1, 0); this.guideLine.visible = false; this.hpUI.detach(); this.g.prompt(null); $('landGuide').classList.add('hidden'); this.g.audio.setEngine(0); this.padRel?.reset(null); this.fr.hide(); this.kit.hide(); this.slow.reset(); this.g.fxScale = 1; this.endReplay(); }
   st0Top() { return stats(this.g.rocket, this.g.fill).top; }
   clear() { clearTimeout(this.cdTimer); this.shards?.clear(); this.wreckFx?.clear(); if (this.wreck) { this.wreck.removeFromParent(); disposeTree(this.wreck); this.wreck = null; } if (this.crashFlash) { this.crashFlash.light.removeFromParent(); this.crashFlash = null; } if (this.group) { this.group.removeFromParent(); disposeTree(this.group); this.group = null; } }
   back() {
     this.g.audio.tap();
     if (this.ended) { this.g.setMode('build'); return; }
-    // on the pad, this is just "back to hangar"; once it has left the ground, it is End Flight (results in Free Mode)
+    if (this.moon?.back()) return;   // landed on the Moon: End flight / Back shows "Landed on the Moon"
+    // on the Earth pad, this is just "back to hangar"; once it has left the ground, it is End Flight (results in Free Mode)
     if (this.f.phase === 'pad' || this.countdown != null) { this.g.setMode('build'); return; }
     this.endFlight('abort');
   }
   syncEndBtn() {
     const b = $('btnFlightBack'); if (!b || !this.f) return;
-    const flying = !this.ended && this.f.phase !== 'pad' && this.countdown == null;
+    const moonDown = this.moon?.on && this.moon.mode === 'flatM' && this.moon.moonLandings;
+    const flying = !this.ended && this.countdown == null && (this.f.phase !== 'pad' || moonDown);
     const pad = this.g.input.lastDevice === 'pad', kb = !pad && this.g.input.lastDevice !== 'touch';
     const html = flying ? 'End flight' + (pad ? ' <kbd>○</kbd>' : kb ? ' <kbd>B</kbd>' : '') : 'Back to hangar';
     if (this._endBtn === html) return; this._endBtn = html; b.innerHTML = html;
@@ -194,12 +199,15 @@ export class FlightMode {
     this.acc += sdt;
     // (dt is already capped by the game loop; steps per frame are capped here too so one slow frame can never snowball)
     let steps = 0;
-    while (this.acc >= DT) {
+    if (this.moon.step(sdt)) this.acc = 0;   // Moon flight: the space leg (orbit.js) owns the state this frame
+    else while (this.acc >= DT) {
       this.copyPose(this.prev, this.cur); flightStep(f, DT); this.health.step(f, DT); this.capture(this.cur); this.rec.step(f); this.acc -= DT;
+      if (this.moon.afterFlat()) { this.acc = 0; break; }
       if (++steps >= 8) { this.acc = 0; break; }
     }
     this.blendPose(this.acc / DT);
     while (this.lostSeen < this.health.lost.length) this.partLost(this.health.lost[this.lostSeen++]);
+    this.moon.frame(dt, f.events);   // space HUD / markers / path; keeps a Moon touchdown from ending the flight
     for (const ev of f.events.splice(0)) this.onEvent(ev);
     // mission 2 checkpoint
     const m = this.g.mission;
@@ -300,6 +308,7 @@ export class FlightMode {
         : how === 'range' ? { title: 'Left the test range', reason: `Past ${RANGE_TOP / 1000} km, above where the space station flies.` }
         : { title: 'Flight ended', reason: f.landSpeed ? `You ended it after a ${f.soft ? 'soft ' : ''}touchdown at ${sp(f.landSpeed, 1)} m/s.` : 'You called it early.' };
       if (how === 'crash') this.freeEnd.broke = this.brokeText();
+      this.moon.endInfo(how, this.freeEnd);
       this.freeEnd.how = how; if (how === 'abort' || how === 'range') this.endT = 2.6;
       return;
     }

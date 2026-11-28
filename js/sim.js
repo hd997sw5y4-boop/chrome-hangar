@@ -133,7 +133,7 @@ export function flightStep(f, dt = DT) {
   // keep the body origin fixed as the CoM shifts with fuel burn
   f.pos = add(f.pos, f.up, st.com - comOld);
   const h = Math.max(0, f.origin.y - st.bottom);
-  const rho = airDensity(f.origin.y);
+  const rho = f.vacuum ? 0 : airDensity(f.origin.y), gee = f.gee ?? G0;   // gee / vacuum: set by moon.js on the lunar surface leg
   const wasOn = f.e.on;
   const { thrust, mdot } = f.eng ? engineStep(f.e, f.eng, dt, st.fuel, rho) : { thrust: 0, mdot: 0 };
   if (f.e.on && !wasOn) f.events.push({ type: 'ignite' });
@@ -164,7 +164,7 @@ export function flightStep(f, dt = DT) {
   const tdir = norm(add(up, g));
   let F = mul(tdir, thrust);
   let T = cross(mul(up, f.engLen - st.com), F);
-  F = add(F, v3(0, -m * G0, 0));
+  F = add(F, v3(0, -m * gee, 0));
 
   // aerodynamics
   f.windNow = windAt(f.wind, f.windDir, f.t, h, f.windFloor);   // applied through the aero forces below (fixed step, so framerate independent)
@@ -216,9 +216,9 @@ export function flightStep(f, dt = DT) {
   }
 
   if (f.phase === 'pad') {
-    if (thrust > m * G0 * 1.002) { f.phase = 'flying'; f.events.push({ type: 'liftoff' }); }
+    if (thrust > m * gee * 1.002) { f.phase = 'flying'; f.events.push({ type: 'liftoff' }); }
     else {
-      if (f.e.on && f.e.cmd >= 0.99) { f.heavyT += dt; if (f.heavyT > 3) fail(f, 'tooHeavy', { twr: thrust / (m * G0) }); }
+      if (f.e.on && f.e.cmd >= 0.99) { f.heavyT += dt; if (f.heavyT > 3) fail(f, 'tooHeavy', { twr: thrust / (m * gee) }); }
       else f.heavyT = 0;
       if (!f.e.on && f.e.failed) fail(f, 'overheat');
       return;
