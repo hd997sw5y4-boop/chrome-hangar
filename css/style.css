@@ -107,7 +107,7 @@ body.touch #btnTray .kb{display:none}body.touch.build #btnTray{left:calc(160px +
 /* modals */
 .modal{position:fixed;inset:0;z-index:30;background:rgba(4,6,8,.55);display:flex;align-items:center;justify-content:center;padding:calc(10px + var(--st)) calc(10px + var(--sr)) calc(10px + var(--sb)) calc(10px + var(--sl))}
 .card{background:rgba(18,22,26,.96);border:1px solid var(--line);border-radius:20px;padding:18px 22px;width:min(640px,100%);max-height:100%;overflow-y:auto;position:relative;user-select:text}
-.card h2{margin:0 0 8px;font-weight:600}.card .close{position:absolute;right:12px;top:12px;min-height:34px;padding:4px 10px}
+.card h2{margin:0 0 8px;font-weight:600}.card .close{position:sticky;top:0;float:right;margin:-6px -10px 0 8px;z-index:2;min-height:34px;padding:4px 10px;background:rgba(30,36,42,.96)}   /* sticky: stays in reach while a long panel scrolls on a short screen */
 .card .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 #rStars{font-size:34px;letter-spacing:6px;color:#555}#rStars .lit{color:#ffd34d;text-shadow:0 0 14px rgba(255,211,77,.6)}
 #rStars small{display:block;font-size:12px;letter-spacing:0;color:var(--dim)}
