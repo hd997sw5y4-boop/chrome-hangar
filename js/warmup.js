@@ -75,7 +75,8 @@ export async function warmup(game, opts = {}) {
   uploadTextures(w);
   prewarmFx(game);
 
-  const compile = (r.compileAsync ? r.compileAsync.bind(r) : (s, c) => { r.compile(s, c); return Promise.resolve(); });
+  // programs are picked for the bound target (canvas vs the post chain's linear buffer): compile for the one the scene really uses
+  const compile = (s, c) => w.withSceneTarget(() => r.compileAsync ? r.compileAsync(s, c) : (r.compile(s, c), Promise.resolve()));
   const props = w._props || w.hangar?.getObjectByName('props');
   const poses = intro?.pts ? [0, 0.45, 1] : [0];
   // one compileAsync from the opening camera (compile() is sync, so we only do this once), then a full
