@@ -47,6 +47,14 @@ export class MoonFlight {
     $('mhWarp').onclick = () => { this.warp.reset(); this.uiT = 1; };
     this.on = false;
   }
+  // surface distance to the Moon in metres (for the cockpit gauge). null until this flight is in space or on the Moon.
+  range() {
+    if (!this.on) return null;
+    if (this.mode === 'flatM') return this.f.alt;
+    if (!this.s) return null;
+    const mrel = this.s.body === 'E' ? V.sub(this.s.r, O.moonPos(this.sky, this.s.t)) : this.s.r;
+    return V.len(mrel) - O.R_M;
+  }
   // ---------- lifecycle (flight.enter / exit) ----------
   reset() {
     const fm = this.fm;
