@@ -83,6 +83,20 @@ export async function warmup(game, opts = {}) {
   if (intro) intro.place(0);
   const was = props?.visible; if (props) props.visible = true;
   try { await Promise.race([compile(w.scene, w.camera), sleep(3000)]); } catch (_) {}
+  // cockpit geometry is built on first C; Moon space-view is its own scene. Warm both now so the
+  // first cockpit toggle or practice orbit does not compile mid-flight. Quality changes re-use
+  // World.warmup() (gated by _didWarm) and do not run this boot path again.
+  try { game.flight?.cockpit?.build?.(); } catch (_) {}
+  const ckpt = w.scene.getObjectByName('cockpit');
+  if (ckpt) {
+    const vis = ckpt.visible; ckpt.visible = true;
+    try { await Promise.race([compile(w.scene, w.camera), sleep(2000)]); } catch (_) {}
+    ckpt.visible = vis;
+    if (!game.flight?.cockpit?.on) game.flight?.cockpit?.hide?.();
+  }
+  const sv = w.spaceView;
+  if (sv?.far) try { await Promise.race([compile(sv.far, sv.cam || w.camera), sleep(2000)]); } catch (_) {}
+  if (sv?.near) try { await Promise.race([compile(sv.near, w.camera), sleep(2000)]); } catch (_) {}
   for (const u of poses) {
     if (intro) intro.place(u);
     if (props) props.visible = true;

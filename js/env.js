@@ -194,9 +194,23 @@ export class World {
     this.post?.resize(w, h);
   }
   // Compile the active programs so the first real frame does not hitch on shader compile.
+  // Cockpit and Moon space-view live in other scenes (or are hidden), so compile the main
+  // hangar/range scene, then those, without a second compile of programs already warm.
   warmup() {
     const r = this.renderer;
     try { r.compile(this.scene, this.camera); } catch (_) {}
+    const sv = this.spaceView;
+    if (sv) {
+      try { if (sv.far) r.compile(sv.far, sv.cam || this.camera); } catch (_) {}
+      try { if (sv.near) r.compile(sv.near, this.camera); } catch (_) {}
+      try { if (sv.ovScene) r.compile(sv.ovScene, sv.ovCam || this.camera); } catch (_) {}
+    }
+    const ckpt = this.scene.getObjectByName('cockpit');
+    if (ckpt && !ckpt.visible) {
+      ckpt.visible = true;
+      try { r.compile(this.scene, this.camera); } catch (_) {}
+      ckpt.visible = false;
+    }
   }
   markShadow() { this._shadowDirty = true; }
   _updateShadows() {

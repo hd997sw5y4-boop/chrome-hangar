@@ -81,7 +81,7 @@ export class MoonFlight {
     const r0 = O.R_E + 200e3, vc = Math.sqrt(O.MU_E / r0), m = V.norm(O.moonPos(this.sky, f.t)), Q = V.cross(this.sky.H, m), a = -150 * Math.PI / 180;
     const r = V.add(V.mul(m, r0 * Math.cos(a)), Q, r0 * Math.sin(a)), v = V.add(V.mul(m, -vc * Math.sin(a)), Q, vc * Math.cos(a));
     this.s = { body: 'E', r, v, t: f.t }; this.att = V.norm(v); this.point = 'pro'; this.practice = true;
-    f.phase = 'flying'; f.legOut = 0; f.legAuto = 0; f.e.cmd = 0; fm.thr = 0; fm.armed = true; fm.countdown = null;
+    f.phase = 'flying'; f.legOut = 0; f.legAuto = 0; f.e.cmd = 0; f.e.on = false; fm.thr = 0; fm.lastThr = fm.lastThr || 1; fm.touchThr = null; fm.cutLatch = false; fm.armed = true; fm.countdown = null;
     $('btnLaunch').classList.add('hidden'); this.pad.classList.add('hidden'); fm.g.prompt?.(null);
     this.mode = 'space'; this.mapFrame(); fm.camInit = false;
     fm.g.toast('Practice orbit: 200 km up, pointed prograde. Burn when the Moon is about 140° ahead.', 4200);
@@ -93,7 +93,7 @@ export class MoonFlight {
     const f = this.f, fm = this.fm;
     if (f.phase === 'crashed' || f.phase === 'landed' || fm.ended) { this.mapFrame(); return true; }
     this.input(sdt);
-    const s = this.s, R = O.radiusOf(s.body), alt = V.len(s.r) - R, burning = !!f.eng && (f.e.on || f.e.cmd >= f.eng.minThrottle - 1e-6) && f.fuelFrac > 0 && !f.e.failed;
+    const s = this.s, R = O.radiusOf(s.body), alt = V.len(s.r) - R, burning = !!f.eng && f.e.cmd >= f.eng.minThrottle - 1e-6 && f.fuelFrac > 0 && !f.e.failed;
     if (this.warp.clamp(warpCap({ thrust: burning, body: s.body, alt }))) this.uiT = 1;
     const total = sdt * this.warp.k;
     if (burning || (s.body === 'E' && alt < 150e3)) {

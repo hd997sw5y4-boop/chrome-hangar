@@ -108,7 +108,7 @@ export class Cockpit {
 
   // ---- input (keyboard / DualSense); look() and recenter() are the device-free entry points ----
   input(inp) {
-    if (inp.hit('KeyC') || inp.hit('Pad10')) this.toggle();   // C / L3
+    if (inp.hit('KeyC')) this.toggle();   // C toggles; DualSense L3 is engine cut (throttle.js)
     if (!this.on) return;
     if (inp.hit('KeyQ') || inp.hit('Pad11')) this.recenter(); // Q / R3
     this.look(inp.look.x, inp.look.y);
@@ -327,21 +327,24 @@ export class Cockpit {
     const items = layout(f.rocket).items.filter(it => it.d.fuelMass > 0), caps = items.map(it => it.d.fuelMass), tot = caps.reduce((a, b) => a + b, 0) || 1;
     let burned = (1 - f.fuelFrac) * tot, activeSet = false;
     const tanks = caps.map(c => { const used = Math.min(c, Math.max(0, burned)); burned -= c; const frac = 1 - used / c; let state = 'next'; if (frac <= 0.002) state = 'spent'; else if (!activeSet) { state = 'active'; activeSet = true; } return { frac, state }; });
-    const nE = eng?.engines || 1, live = 1 - (e.out || 0) / nE, eff = e.on ? e.thr * e.spool : 0;
+    const pub = this.g.engine || (typeof window !== 'undefined' ? window.CH?.engine : null);
+    const on = pub ? pub.on : !!e.on, cmd = pub ? pub.thrCmd : e.cmd, act = pub ? pub.thr : (e.thr * (e.on ? 1 : 0));
+    const failed = pub ? pub.failed : !!e.failed, fuelFrac = pub ? pub.fuelFrac : f.fuelFrac;
+    const nE = eng?.engines || 1, live = 1 - (e.out || 0) / nE, eff = on ? e.thr * e.spool : 0;
     const thrust = eng ? eng.thrust * eff * live / 1000 : 0, mdot = eng ? eng.thrust * eff * live / (eng.isp * G0) : 0;
     const fuel = f.st?.fuel ?? 0, wind = Math.hypot(f.windNow?.x || 0, f.windNow?.z || 0);
     const moon = this.moonDistance(dt);
     const cd = this.fm.countdown;
     const phaseLabel = cd != null ? 'T-' + Math.max(0, Math.ceil(cd)) : f.phase === 'pad' ? 'ON PAD' : f.phase === 'landed' ? 'LANDED' : f.phase === 'crashed' ? 'LOST' : f.vs >= 0 ? 'ASCENT' : 'DESCENT';
     const cautions = {
-      'LOW FUEL': f.fuelFrac < 0.15 && tot > 1, 'ENG HOT': e.heat > 60, 'HIGH G': this.gs > 4.5, 'MAX Q': f.q > 30000,
-      'ENG FAIL': !!e.failed, 'LEGS UP': f.legs && f.legOut < 0.5 && f.phase === 'flying' && f.vs < -2 && f.alt < 120,
+      'LOW FUEL': fuelFrac < 0.15 && tot > 1, 'ENG HOT': e.heat > 60, 'HIGH G': this.gs > 4.5, 'MAX Q': f.q > 30000,
+      'ENG FAIL': !!failed, 'LEGS UP': f.legs && f.legOut < 0.5 && f.phase === 'flying' && f.vs < -2 && f.alt < 120,
       'CHUTE': f.chute === 'torn', 'GUSTS': wind > 6,
     };
     return {
       alt: f.alt, vs: f.vs, speed: f.speed, pitch, roll: this.roll || 0, hdg, assist: f.assist,
-      thr: e.thr * (e.on ? 1 : 0), thrCmd: e.cmd, heat: e.heat, temp: e.temp, limitTemp: eng?.heat?.limitTemp || 3000, engOn: e.on, engFailed: e.failed,
-      thrust, g: this.gs, q: f.q, wind, tanks, fuelFrac: f.fuelFrac, burnLeft: mdot > 0 ? fuel / mdot : null, apex: f.apex,
+      thr: act, thrCmd: cmd, heat: e.heat, temp: e.temp, limitTemp: eng?.heat?.limitTemp || 3000, engOn: on, engFailed: failed,
+      thrust, g: this.gs, q: f.q, wind, tanks, fuelFrac, burnLeft: mdot > 0 ? fuel / mdot : null, apex: f.apex,
       phase: f.phase, phaseLabel, moon: moon?.d ?? null, moonRate: moon?.rate ?? null, cautions, master: CAUTIONS.some(n => cautions[n]),
     };
   }
