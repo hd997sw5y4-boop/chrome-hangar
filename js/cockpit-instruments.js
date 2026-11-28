@@ -119,8 +119,10 @@ function drawENG(x, d, W, H) {
   arcGauge(x, W * 0.28, 140, 74, d.thr * 100, 0, 100, 'THROTTLE %', fmt(d.thr * 100), C.green, d.thrCmd * 100);
   const hc = d.heat > 80 ? C.red : d.heat > 55 ? C.amber : C.cyan;
   arcGauge(x, W * 0.72, 140, 74, d.temp, 0, Math.max(1, d.limitTemp), 'CHAMBER \u00b0C', fmt(d.temp), hc);
-  const rows = [['THRUST', fmt(d.thrust, 1) + ' kN', C.text], ['ACCEL', fmt(d.g, 2) + ' G', d.g > 4.5 ? C.amber : C.text], ['DYN PRESS', fmt(d.q / 1000, 1) + ' kPa', d.q > 30000 ? C.amber : C.text], ['ENG HEAT', fmt(d.heat) + ' %', hc], ['WIND', fmt(d.wind, 1) + ' m/s', C.text]];
-  rows.forEach(([a, b, c], i) => { const y = 268 + i * 44; x.fillStyle = i % 2 ? '#0a1216' : '#0d171c'; x.fillRect(16, y - 20, W - 32, 40); txt(x, a, 28, y, 17, C.dim); txt(x, b, W - 28, y, 21, c, 'right', 700); });
+  const rows = [['THRUST', fmt(d.thrust, 1) + ' kN', C.text], ['ACCEL', fmt(d.g, 2) + ' G', d.g > 4.5 ? C.amber : C.text], ['DYN PRESS', fmt(d.q / 1000, 1) + ' kPa', d.q > 30000 ? C.amber : C.text], ['ENG HEAT', fmt(d.heat) + ' %', hc],
+    ['HULL', fmt(d.hullC ?? 15) + ' \u00b0C', d.hullLevel > 0.5 ? C.red : d.hullLevel > 0 || d.hullC > 600 ? C.amber : C.text],   // GB5-HEAT
+    ['RCS', (d.rcsOn ? (d.rcsFiring ? 'FIRE ' : 'ON ') : 'OFF ') + fmt(d.rcsPct ?? 100) + ' %', !d.rcsOn ? C.dim : d.rcsPct < 15 ? C.amber : C.green]];   // GB5-RCS
+  rows.forEach(([a, b, c], i) => { const y = 262 + i * 38; x.fillStyle = i % 2 ? '#0a1216' : '#0d171c'; x.fillRect(16, y - 17, W - 32, 34); txt(x, a, 28, y, 17, C.dim); txt(x, b, W - 28, y, 21, c, 'right', 700); });
   const by = H - 22, bw = W - 32; x.fillStyle = '#1d2a31'; x.fillRect(16, by - 8, bw, 12); x.fillStyle = hc; x.fillRect(16, by - 8, bw * clamp(d.heat / 100, 0, 1), 12);
 }
 

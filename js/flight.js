@@ -20,6 +20,7 @@ import { MoonFlight } from './moon.js';
 import { Cockpit } from './cockpit.js';
 import * as FL from './freelook.js';
 import { applyKeys, applyAbs, cut as cutThr, toggle as toggleEng, snapshot, engineState } from './throttle.js';
+import { Gb5Flight } from './rcs-ui.js';   // GB5-RCS
 
 const $ = id => document.getElementById(id);
 // Flight views (keys 1-8, V cycles). Index order is what the picker and the saved setting use.
@@ -39,6 +40,7 @@ export class FlightMode {
     this.steerS = { x: 0, y: 0 }; this.emitAcc = {}; this.hudCache = null; this.crashFlash = null;
     this.tmp = { a: new THREE.Vector3(), b: new THREE.Vector3(), c: new THREE.Vector3(), d: new THREE.Vector3(), q: new THREE.Quaternion(), q2: new THREE.Quaternion(), heat: new THREE.Vector4(), v2: new THREE.Vector2(), up: new THREE.Vector3(0, 1, 0) };
     this.cockpit = new Cockpit(game, this);   // cockpit is CAMS[CAM_COCKPIT] (V / 5 / C / Views)
+    this.gb5 = new Gb5Flight(game, this);   // GB5-RCS: RCS / hull heat HUD, controls and glow (rcs-ui.js)
     // view picker
     const pk = $('camPicker');
     pk.innerHTML = CAMS.map((n, i) => `<button data-cam="${i}"><b>${i + 1}</b>${n}</button>`).join('');
@@ -184,6 +186,7 @@ export class FlightMode {
     if (this.slow.active && (inp.pressed.size || inp.taps.length || inp.mouse.clicked)) this.slow.skip();
     const ts = this.slow.update(dt), sdt = dt * ts; this.g.fxScale = ts;
     if (!blocked) {
+      this.gb5.input(inp, dt);   // GB5-RCS: N / Create toggle; Tab+WASD, I/M, U/O, touchpad+stick/D-pad translate / roll
       if (inp.hit('Space') || inp.hit('Pad0')) this.launch();
       this.cockpit.input(inp);   // C jumps to the cockpit slot; Q / R3 recenter, look
       if (inp.hit('Pad3') || inp.hit('Pad15')) this.nextCam(1);
@@ -249,6 +252,7 @@ export class FlightMode {
     this.kit.update(sdt, f, this.rs, this.st0.top, this.group);
     this.visuals(sdt);
     this.hud();
+    this.gb5.frame(dt);   // GB5-RCS / GB5-HEAT
     this.camera(dt);
     this.syncEndBtn(); this.hpUI.update(dt, this.g.audio);
     if (this.g.training?.active) this.g.training.onFlightFrame();
