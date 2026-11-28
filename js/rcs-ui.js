@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { airDensity, failFlight } from './sim.js';
 import { heatStep, heatDamage } from './heat.js';
+import { newRcs } from './rcs.js';
 
 const $ = id => document.getElementById(id);
 const CSS = `
@@ -54,6 +55,7 @@ export class Gb5Flight {
   // called first thing inside FlightMode.update's !blocked branch (before steering is shaped)
   input(inp, dt) {
     const f = this.fm.f; if (!f) return;
+    f.rcs ??= newRcs(f.st);   // exists before the first sim step (also on a Moon practice start)
     if (f.rcs && f.rcsWant != null && f.rcs.on !== f.rcsWant) f.rcs.on = f.rcsWant;   // a toggle before the first sim step
     if (inp.hit('KeyN') || inp.hit('Pad8')) this.toggle();
     const on = f.rcs ? f.rcs.on : !!f.rcsWant;
@@ -103,7 +105,7 @@ export class Gb5Flight {
     txt('fRcs', rp.on ? (rp.pct <= 0 ? 'EMPTY' : 'ON') : 'OFF', rp.on ? (rp.pct <= 0 ? 'dry' : 'on') : 'off');
     txt('fRcsPct', Math.round(rp.pct) + '%');
     txt('fHull', String(Math.round(this.g.hull.c)), this.g.hull.level > 0.5 ? 'dry' : this.g.hull.level > 0 ? 'off' : '');
-    const vt = f.vterm, inAir = f.phase === 'flying' && isFinite(vt) && vt < 1e5;
+    const vt = f.vterm, inAir = f.phase === 'flying' && isFinite(vt) && vt < 1e5 && !f.vacuum && !(fm.moon?.on && fm.moon.mode === 'space');
     txt('fVt', inAir ? String(Math.round(vt)) : '—');
     if (hl && hl.level > 0 && !this.hotToast) { this.hotToast = true; this.g.toast?.('Hull overheating: slow down or climb out of the thick air', 3000); }
     if (!(hl?.level > 0)) this.hotToast = false;
