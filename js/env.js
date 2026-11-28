@@ -65,6 +65,21 @@ export class World {
     this.earth = new Earth(this); this.post = new Post(this); this._rt = performance.now();
     this.buildLights(); this.buildHangar(); this.buildOutside(); this.buildTestStand(); this.buildPad();
   }
+  // after a context restore: geometry, image textures and programs re-upload by themselves; render-target contents
+  // (PMREM reflections, local probes, the post chain, shadow maps) were lost and are rebuilt here
+  async restoreGPU() {
+    this.pmrem = new THREE.PMREMGenerator(this.renderer);
+    this.localIn?.rt.dispose(); this.localOut?.rt.dispose(); this.localIn = this.localOut = null;
+    await this.loadHDRIs(this.hdriSize || '1k', this.skyKey || 'day');
+    this._shadowHold = 3; this.markShadow();
+  }
+  // compile against the target the scene really draws into (the post chain's linear HDR buffer, no tone map), so the
+  // programs made here are the ones rendering uses. Compiling against the canvas made a second, never-used set.
+  withSceneTarget(fn) {
+    const r = this.renderer, prev = r.getRenderTarget(), rt = this.post.enabled ? this.post.scenePass?.rt : null;
+    r.setRenderTarget(rt ?? null);
+    try { return fn(); } finally { r.setRenderTarget(prev); }
+  }
 
   // hangar interior + the chosen sky; only one sky is resident at a time (iPhone memory), others load on demand
   async loadHDRIs(size = '1k', skyKey = this.skyKey || 'day') {
@@ -198,19 +213,21 @@ export class World {
   // hangar/range scene, then those, without a second compile of programs already warm.
   warmup() {
     const r = this.renderer;
-    try { r.compile(this.scene, this.camera); } catch (_) {}
-    const sv = this.spaceView;
-    if (sv) {
-      try { if (sv.far) r.compile(sv.far, sv.cam || this.camera); } catch (_) {}
-      try { if (sv.near) r.compile(sv.near, this.camera); } catch (_) {}
-      try { if (sv.ovScene) r.compile(sv.ovScene, sv.ovCam || this.camera); } catch (_) {}
-    }
-    const ckpt = this.scene.getObjectByName('cockpit');
-    if (ckpt && !ckpt.visible) {
-      ckpt.visible = true;
+    this.withSceneTarget(() => {
       try { r.compile(this.scene, this.camera); } catch (_) {}
-      ckpt.visible = false;
-    }
+      const sv = this.spaceView;
+      if (sv) {
+        try { if (sv.far) r.compile(sv.far, sv.cam || this.camera); } catch (_) {}
+        try { if (sv.near) r.compile(sv.near, this.camera); } catch (_) {}
+        try { if (sv.ovScene) r.compile(sv.ovScene, sv.ovCam || this.camera); } catch (_) {}
+      }
+      const ckpt = this.scene.getObjectByName('cockpit');
+      if (ckpt && !ckpt.visible) {
+        ckpt.visible = true;
+        try { r.compile(this.scene, this.camera); } catch (_) {}
+        ckpt.visible = false;
+      }
+    });
   }
   markShadow() { this._shadowDirty = true; }
   _updateShadows() {

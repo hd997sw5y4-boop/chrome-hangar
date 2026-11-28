@@ -368,7 +368,7 @@ class Game {
     // GPU context loss (driver reset, background tab on mobile): let the browser restore it, then rebuild the render path
     const cv = this.world.renderer.domElement;
     cv.addEventListener('webglcontextlost', e => { e.preventDefault(); this.audio.hush(); this.toast('Graphics paused: the GPU was reset. Restoring…', 6000); });
-    cv.addEventListener('webglcontextrestored', () => { try { this.applySettings(); this.toast('Graphics restored'); } catch (err) { console.warn('restore', err?.message || err); } });
+    cv.addEventListener('webglcontextrestored', async () => { try { await this.world.restoreGPU(); this.applySettings(); this.toast('Graphics restored'); } catch (err) { console.warn('restore', err?.message || err); } });   // restoreGPU: PMREM reflections / probes lived only on the GPU
   }
 
   // Menu / panel navigation without a mouse: arrows (menu), D-pad up/down (menu and panels) move the focus, X / Enter-style
