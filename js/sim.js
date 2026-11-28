@@ -56,7 +56,7 @@ export function engineStep(e, d, dt, fuelLeft, rho = 1.225) {
 }
 
 // ---------- wind ----------
-// floor: calm below this height, easing in over the next 200 m (Free Mode's easy goals fly in still air near the ground)
+// floor: calm below this height, easing in over the next 200 m (a gentle breeze above it)
 export function windAt(base, dirAng, t, h, floor = 0) {
   if (!base) return v3();
   const k = floor > 0 ? Math.min(1, Math.max(0, (h - floor) / 200)) : 1;
@@ -124,7 +124,8 @@ function fail(f, kind, extra = {}) {
 }
 
 export function flightStep(f, dt = DT) {
-  if (f.phase === 'crashed' || f.phase === 'landed') { f.t += dt; return; }
+  if (f.phase === 'crashed') { f.t += dt; return; }
+  const grounded = f.phase === 'landed';
   f.t += dt;
   const st = stats(f.rocket, f.fill, f.fuelFrac);
   const comOld = f.st.com;
@@ -224,6 +225,17 @@ export function flightStep(f, dt = DT) {
     }
   }
 
+  // a landed rocket stays planted until the engine beats its weight, so Free Mode can touch down and lift off again
+  if (grounded) {
+    if (thrust > m * G0 * 1.002) { f.phase = 'flying'; f.events.push({ type: 'liftoff' }); }
+    else {
+      f.vel = v3(); f.w = v3();
+      f.alt = Math.max(0, f.origin.y + Math.min(0, st.bottom) * f.up.y);
+      f.vs = 0; f.speed = 0;
+      return;
+    }
+  }
+
   f.flightT += dt;
   // integrate (semi-implicit Euler)
   f.vel = add(f.vel, F, dt / m);
@@ -250,7 +262,7 @@ export function flightStep(f, dt = DT) {
   // ground contact
   let minY = Infinity;
   for (const p of contactPoints(f)) minY = Math.min(minY, p.y);
-  if (minY <= 0 && f.t > 0.2) {
+  if (minY <= 0 && f.t > 0.2 && f.vs <= 0.15) {   // ignore contact while climbing away (takeoff after a landing)
     const vh = Math.hypot(f.vel.x, f.vel.z), sp = f.speed;
     f.landSpeed = sp;
     const near = Math.hypot(f.origin.x - f.padPos.x, f.origin.z - f.padPos.z);

@@ -174,7 +174,9 @@ export class World {
     this.scene.traverse(o => { if (o.material) [].concat(o.material).forEach(m => m.needsUpdate = true); });
     this.resize(w, h);
     this.post.setup(q, w, h, aa);
-    this.warmup();
+    // first call is during boot; Game Builder 2's loader warmup covers that. Re-warm after a later quality change.
+    if (this._didWarm) this.warmup();
+    else this._didWarm = true;
     if (p.hdri !== (this.hdriSize || '1k') && this.envs.hangar) this.loadHDRIs(p.hdri, this.skyKey).catch(() => {});
   }
   resize(w, h) {

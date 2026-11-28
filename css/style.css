@@ -11,9 +11,11 @@ button.go{background:rgba(95,227,154,.2);border-color:rgba(95,227,154,.6)}button
 button.on{background:rgba(127,231,255,.22);border-color:var(--accent)}
 .logo{font-size:44px;letter-spacing:.18em;font-weight:300}.logo b{font-weight:700;background:linear-gradient(180deg,#fff,#9aa7b3 55%,#e8edf2);-webkit-background-clip:text;background-clip:text;color:transparent}
 #loading,#menu,#rotate{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:20}
-#loading{background:radial-gradient(ellipse at center,#1b2229,#0b0d10)}
-#loading .bar{width:min(320px,70vw);height:4px;background:#222a31;border-radius:3px;overflow:hidden}#loading .bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .3s}
-#loadText{color:var(--dim);font-size:13px}
+#loading{background:#0b0d10;opacity:1;transition:opacity .4s ease}
+#loading .bar{width:min(280px,64vw);height:2px;background:#1c2228;border-radius:2px;overflow:hidden}#loading .bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .35s ease;box-shadow:0 0 10px rgba(127,231,255,.35)}
+#loadText{color:var(--dim);font-size:12px;letter-spacing:.08em}
+#loading.fadeout{opacity:0;pointer-events:none}
+#loading .logo{font-size:28px;letter-spacing:.28em;font-weight:300;opacity:.85}#loading .logo b{font-weight:500}
 #rotate{background:#0b0d10;z-index:40;font-size:18px;text-align:center}#rotate div{font-size:60px}
 #menu{background:linear-gradient(90deg,rgba(8,10,12,.85),rgba(8,10,12,.35) 55%,rgba(8,10,12,0));align-items:flex-start;padding-left:calc(7vw + var(--sl))}
 #menu .tag{color:var(--dim);margin-top:-8px}.menuBtns{display:flex;flex-direction:column;gap:8px;min-width:240px;margin-top:10px}.menuBtns button{text-align:left}
@@ -187,13 +189,6 @@ body.intro #hud,body.intro #menu,body.intro #buildUI,body.intro #testUI,body.int
 #frStats small{display:block;font-size:11px;color:var(--dim)}#frStats em{display:block;font-style:normal;font-size:11px;font-weight:700;color:#ffd34d}
 #frStats div.best{border-color:rgba(255,211,77,.7);background:rgba(255,211,77,.1);box-shadow:0 0 14px rgba(255,211,77,.25)}
 #fResults .row button{flex:1;min-width:140px}#fResults kbd{font:inherit;font-size:11px;color:var(--dim);border:1px solid var(--line);border-radius:5px;padding:0 5px;margin-left:6px}
-/* flight goals: pre-launch card and in-flight tracker pill */
-#goalCard{position:absolute;left:50%;top:calc(58px + var(--st));transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:3px;background:var(--glass);border:1px solid rgba(127,231,255,.45);border-radius:16px;padding:10px 18px;text-align:center;max-width:min(420px,78vw);box-shadow:0 0 24px rgba(127,231,255,.15)}
-#goalCard label{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);font-weight:700}#goalCard b{font-size:17px;font-weight:600}#goalCard small{color:var(--dim);font-size:12px}
-#goalCard button{margin-top:6px;min-height:32px;padding:4px 12px;font-size:13px}#goalCard kbd{font:inherit;font-size:11px;color:var(--dim);border:1px solid var(--line);border-radius:5px;padding:0 5px;margin-left:6px}
-#goalHud{position:absolute;left:50%;top:calc(10px + var(--st));transform:translateX(-50%);background:var(--glass);border:1px solid var(--line);border-radius:999px;padding:5px 16px;font-size:13px;white-space:nowrap;pointer-events:none;font-variant-numeric:tabular-nums}
-#goalHud.done{border-color:var(--go);color:var(--go)}
-@media (max-height:520px){#goalCard{padding:6px 12px}#goalCard b{font-size:15px}#goalCard small{display:none}}
 /* results panel on short screens (800x450, phone landscape): the buttons stay pinned at the bottom of the card while the rest scrolls,
    and a compact layout fits most of it without scrolling at all */
 #fResults .card{max-height:100%;overflow-y:auto;overscroll-behavior:contain}
@@ -213,5 +208,5 @@ body.intro #hud,body.intro #menu,body.intro #buildUI,body.intro #testUI,body.int
 #replayBar i{display:block;width:160px;height:4px;border-radius:2px;background:rgba(255,255,255,.12);overflow:hidden}#replayBar em{display:block;height:100%;width:0;background:var(--accent)}
 #replayBar button{min-height:32px;padding:4px 12px;font-size:13px}#replayBar kbd{font:inherit;font-size:11px;color:var(--dim);border:1px solid var(--line);border-radius:5px;padding:0 5px;margin-left:6px}
 #replayBar small{flex-basis:100%;text-align:center;color:#ffd34d;font-size:13px;min-height:1em}
-#flightUI.replaying #fBtns,#flightUI.replaying #landGuide,#flightUI.replaying #goalHud,#flightUI.replaying #thrTouch{display:none!important}
+#flightUI.replaying #fBtns,#flightUI.replaying #landGuide,#flightUI.replaying #thrTouch{display:none!important}
 #fWindArrow{display:inline-block;margin-left:4px;color:var(--accent);font-weight:900;font-size:17px;vertical-align:-2px;line-height:1;transition:transform .25s ease}

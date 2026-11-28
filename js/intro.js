@@ -13,7 +13,7 @@ const mix = (a, b, t) => a + (b - a) * t;
 
 export class Intro {
   constructor(game) {
-    this.g = game; this.w = game.world; this.t = 0; this.done = false;
+    this.g = game; this.w = game.world; this.t = 0; this.done = false; this.live = false;
     this.fromSky = game.settings.timeOfDay;
     this.onSkip = e => { if (e && e.type === 'keydown' && (e.key === 'F12' || e.metaKey || e.ctrlKey || e.altKey)) return; this.skip(); };
   }
@@ -64,8 +64,10 @@ export class Intro {
     this.w.followSun(l);
   }
 
+  // the clock stays at 0 until release() (after the loader fades), so the fly-in never starts behind the overlay
+  release() { if (this.done) return; this.live = true; this.t = 0; this.place(0); }
   update(dt) {
-    if (this.done) return;
+    if (this.done || !this.live) return;
     this.t = Math.min(DUR, this.t + dt);
     const u = this.t / DUR;
     this.place(u);
@@ -89,6 +91,8 @@ export class Intro {
     // leave the hero shot and the rocket on the pad under the menu
     this.g.showMenu(true);
     setTimeout(() => $('intro').classList.add('hidden'), 700);
+    // a 2k sky swap mid-fly-in would rebuild PMREM and hitch; wait until we have arrived
+    if (this.g.settings.quality === 'ultra') this.w.loadHDRIs('2k').catch(() => {});
   }
 
   // drop the display rocket and put the sky back when the player leaves the menu

@@ -12,6 +12,7 @@ import { FlightMode } from './flight.js';
 import { partMesh, rocketMesh, disposeTree } from './parts3d.js';
 import { dressHangar, bakeDressing, trimShadowCasters } from './props.js';
 import { Intro, shouldPlayIntro } from './intro.js';
+import { warmup, fadeLoading } from './warmup.js';
 import { Training } from './train.js';
 import { Interactive } from './interactive.js';
 import { Hands } from './interact2.js';
@@ -66,24 +67,29 @@ class Game {
     trimShadowCasters(this.world, [this.build.rocketGroup]);   // small props / glass stop casting first, so the bake below merges them into the non-casting batches (robots and cart are added later and keep theirs)
     bakeDressing(this.world); this.world.refreshLocalIn();   // merge static dressing, then re-shoot the hangar reflections
     this.robots = new Robots(this);
-    this.cart = new Cart(this); this.cart.load().catch(e => console.warn('cart', e?.message || e));
-    await this.makeThumbs();
+    this.cart = new Cart(this);
+    // wait for the cart GLB too: if it arrives mid-fly-in its materials compile in the first shot
+    const cartReady = Promise.race([this.cart.load().catch(e => console.warn('cart', e?.message || e)), new Promise(r => setTimeout(r, 8000))]);
+    await Promise.all([this.makeThumbs(), cartReady]);
     this.build.makeTray();
     this.wireUI();
-    step(100);
+    step(100, 'Warming the view…');
     if (shouldPlayIntro()) {
       this.intro = new Intro(this);
-      await this.intro.start();
-      $('loading').classList.add('hidden');
+      await this.intro.start();          // scene is at t = 0, clock not running yet
+      await warmup(this);
+      this.loop();                       // hold the first frame under the overlay while it fades
+      await fadeLoading(400);
+      this.intro.release();              // fly-in starts at t = 0, after the fade
     } else {
-      $('loading').classList.add('hidden');
+      await warmup(this, { brief: true });
       this.setMode('build');
       this.showMenu(true);
+      this.loop();
+      await fadeLoading(window.__NOINTRO ? 0 : 400);
     }
-    this.world.warmup();
     window.__chGfx = () => this.world.gfxInfo();
-    this.loop();
-    if (this.settings.quality === 'ultra') this.world.loadHDRIs('2k').catch(() => {});
+    if (this.settings.quality === 'ultra' && !(this.intro && !this.intro.done)) this.world.loadHDRIs('2k').catch(() => {});
   }
   resize() {
     const w = innerWidth, h = innerHeight;
