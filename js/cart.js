@@ -45,6 +45,7 @@ const SEAT = V3(-0.345, -0.055, 0.18), HIP_Y = 0.985;   // passenger root (robot
 const DRIVER_EYE = V3(0.345, 1.55, 0.12);
 const APRON = { x0: -70, x1: 110, z0: -205, z1: 15 };
 
+const _ca = V3(), _cb = V3(), _cc = V3();   // camera scratch
 const _a = V3(), _b = V3(), _c = V3(), _d = V3(), _e = V3(), _f = V3(), _g = V3(), _n = V3(), _r = V3(), _t = V3(), _t2 = V3(), _up = V3(), _fw = V3(), _q = new THREE.Quaternion(), _qi = new THREE.Quaternion();
 
 // ---------- engine / tyre sound beds ----------
@@ -653,12 +654,12 @@ export class Cart {
     if (inp.zoom) O.dist = clamp(O.dist + inp.zoom * 0.6, 3.6, 13);
     let pos, look;
     if (this.view === 'seat') {
-      pos = this.toWorld(DRIVER_EYE.x, DRIVER_EYE.y, DRIVER_EYE.z, V3());
-      const a = yaw + O.yaw, pitch = O.pitch - 0.3; look = V3(pos.x + Math.sin(a) * Math.cos(pitch) * 10, pos.y - Math.sin(pitch) * 10, pos.z + Math.cos(a) * Math.cos(pitch) * 10);
+      pos = this.toWorld(DRIVER_EYE.x, DRIVER_EYE.y, DRIVER_EYE.z, _ca);
+      const a = yaw + O.yaw, pitch = O.pitch - 0.3; look = _cb.set(pos.x + Math.sin(a) * Math.cos(pitch) * 10, pos.y - Math.sin(pitch) * 10, pos.z + Math.cos(a) * Math.cos(pitch) * 10);
       this.camPos.copy(pos);
     } else {
-      const target = V3(this.p.x, this.p.y + 0.85, this.p.z), a = yaw + O.yaw, d = O.dist + sp * 0.12;
-      const want = V3(target.x - Math.sin(a) * Math.cos(O.pitch) * d, target.y + Math.sin(O.pitch) * d + 0.5, target.z - Math.cos(a) * Math.cos(O.pitch) * d);
+      const target = _ca.set(this.p.x, this.p.y + 0.85, this.p.z), a = yaw + O.yaw, d = O.dist + sp * 0.12;
+      const want = _cb.set(target.x - Math.sin(a) * Math.cos(O.pitch) * d, target.y + Math.sin(O.pitch) * d + 0.5, target.z - Math.cos(a) * Math.cos(O.pitch) * d);
       // keep the camera inside the hangar walls / closed doors and above the ground
       const walls = hangarWalls().concat(doorObstacles(this.g)); let k = 1;
       for (let i = 1; i <= 14; i++) {
@@ -672,7 +673,7 @@ export class Cart {
     }
     this.shake *= Math.exp(-6 * dt);
     cam.position.copy(this.camPos);
-    if (this.shake > 0.002) cam.position.add(V3((Math.random() - 0.5), (Math.random() - 0.5), (Math.random() - 0.5)).multiplyScalar(this.shake));
+    if (this.shake > 0.002) cam.position.add(_cc.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(this.shake));
     cam.lookAt(look);
     const fov = 68 + clamp(sp, 0, 14) * 0.45; if (Math.abs(cam.fov - fov) > 0.05) { cam.fov += (fov - cam.fov) * (1 - Math.exp(-3 * dt)); cam.updateProjectionMatrix(); }
     (this.camShow ||= V3()).copy(cam.position); this.camQ.copy(cam.quaternion);

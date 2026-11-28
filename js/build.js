@@ -226,7 +226,7 @@ export class BuildMode {
     this.rebuild(); this.view.reset(); this.showTray(true, false); this.applyCam();
     this.g.scene = this.w.scene;
   }
-  exit() { this.view.reset(); document.body.classList.remove('trayShut', 'trayPeek'); this.g.input.exitLock(); this.clearGhost(); this.markers.clear(); $('aimReason').classList.add('hidden'); this.g.prompt(null); }
+  exit() { this.view.reset(); document.body.classList.remove('trayShut', 'trayPeek'); this.g.input.exitLock(); this.clearGhost(); this.markers.clear(); $('aimReason').classList.add('hidden'); this._why = this._whyAt = null; this.g.prompt(null); }
   idle() {
     this.applyCam(); this.view.update(0, null); this.w.stand.position.y = 0; this.w.stand.rotation.y = this.standYaw;
   }
@@ -384,8 +384,10 @@ export class BuildMode {
     if (this.sel === 'delete') { this.setDelHover(a.del); this.clearGhost(); } else { this.setDelHover(null); this.updateGhost(a); }
     this.place3D(a);
     const rs = $('aimReason');
-    if (a.reason && !IS_TOUCH) { rs.textContent = a.reason; rs.classList.remove('hidden'); if (this.aimXY) { rs.style.left = this.aimXY.x + 'px'; rs.style.top = (this.aimXY.y + 22) + 'px'; } else { rs.style.left = ''; rs.style.top = ''; } }
-    else rs.classList.add('hidden');
+    // only touch the DOM when the hint actually changes (no style recalc every frame)
+    const why = a.reason && !IS_TOUCH ? a.reason : '', at = why && this.aimXY ? `${this.aimXY.x}|${this.aimXY.y}` : '';
+    if (why !== this._why) { this._why = why; if (why) rs.textContent = why; rs.classList.toggle('hidden', !why); }
+    if (why && at !== this._whyAt) { this._whyAt = at; rs.style.left = this.aimXY ? this.aimXY.x + 'px' : ''; rs.style.top = this.aimXY ? (this.aimXY.y + 22) + 'px' : ''; }
     // clicks / taps
     const tap = inp.taps[0];
     if (tap) {
