@@ -94,6 +94,8 @@ export class Interactive {
   async load() {
     const jobs = [this.doors.build(), this.lights.build(), this.crane.load(), this.console.load(), this.fuel.load(), this.dress()];
     await Promise.all(jobs.map(j => Promise.resolve(j).catch(e => console.warn('interactive', e?.message || e))));
+    this.w._relight = () => this.lights.apply();
+    this.w._relight();
     this.ready = true;
   }
 
@@ -336,10 +338,11 @@ class Lights {
   }
   apply() {
     const r = this.grab(), b = this.k.bay, a = this.k.area, w = this.ix.w;
-    r.spot.intensity = r.spotI * b; r.bays.forEach((l, i) => l.intensity = r.baysI[i] * b);
-    if (r.bayDir) r.bayDir.intensity = r.bayDirI * b;
+    const g = (w._vidBri || 1) * (w.indoor ? (w._vidRoom || 1) : 1);
+    r.spot.intensity = r.spotI * b * g; r.bays.forEach((l, i) => l.intensity = r.baysI[i] * b * g);
+    if (r.bayDir) r.bayDir.intensity = r.bayDirI * b * g;
     for (const { m, c } of r.lens) m.color.copy(c).multiplyScalar(0.03 + 0.97 * b);
-    if (r.fill) r.fill.intensity = r.fillI * a;
-    if (w.indoor) w.scene.environmentIntensity = 0.6 * (0.3 + 0.45 * b + 0.25 * a);
+    if (r.fill) r.fill.intensity = r.fillI * a * g;
+    if (w.indoor) w.scene.environmentIntensity = 0.6 * (0.3 + 0.45 * b + 0.25 * a) * (w._vidRoom || 1);
   }
 }
