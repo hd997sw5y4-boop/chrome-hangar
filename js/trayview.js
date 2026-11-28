@@ -3,7 +3,7 @@
 // to the exact walk-around view when the tray closes. While framed, look input (mouse drag / right stick, with the
 // player's sensitivity and invert) orbits, A/D or the left stick orbit too, W/S and the wheel zoom.
 import * as THREE from 'three';
-import { candidates } from './rocket.js';
+import { candidates, layout } from './rocket.js';
 import { HANGAR } from './env.js';
 
 const EASE = 0.6;   // seconds for the full move in or out
@@ -30,7 +30,7 @@ export class TrayView {
   // what to frame: where the picked part can attach, else the rocket, else the empty stand deck
   goal() {
     const b = this.b, box = this._box.makeEmpty();
-    if (b.sel && b.sel !== 'delete') for (const c of candidates(b.g.rocket, b.sel)) if (c.ok) box.expandByPoint(b.candWorld(c).world);
+    if (b.sel && b.sel !== 'delete') { const L = layout(b.g.rocket); for (const c of candidates(b.g.rocket, b.sel)) if (c.ok) box.expandByPoint(b.candWorld(c, L).world); }
     if (!box.isEmpty()) box.expandByScalar(0.7);
     else if (b.rocketGroup?.children.length) box.setFromObject(b.rocketGroup);
     if (box.isEmpty()) { b.w.stand.getWorldPosition(this._v); this._v.y += 1; box.setFromCenterAndSize(this._v, this._v.set(2.6, 2.6, 2.6)); }

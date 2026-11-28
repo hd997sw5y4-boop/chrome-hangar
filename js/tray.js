@@ -85,9 +85,11 @@ export class Tray {
       const now = performance.now(), k = Math.min(3, (now - last) / 16.7); last = now;
       let busy = false;
       if (this.target != null) {
-        const d = this.target - this.el.scrollLeft;
-        if (Math.abs(d) < 0.5) { this.el.scrollLeft = this.target; this.target = null; }
-        else { this.el.scrollLeft += d * (1 - Math.pow(1 - 0.2, k)); busy = true; }
+        // the browser rounds scrollLeft, so a sub-pixel step would never land: snap the last couple of pixels,
+        // and re-clamp in case the row got shorter mid-glide (otherwise the loop would chase an unreachable target)
+        const t = Math.min(this.target, this.max), cur = this.el.scrollLeft, d = t - cur;
+        if (Math.abs(d) < 1.5) { this.el.scrollLeft = t; this.target = null; }
+        else { this.el.scrollLeft = cur + Math.sign(d) * Math.max(1, Math.abs(d) * (1 - Math.pow(1 - 0.2, k))); busy = true; }
       } else if (Math.abs(this.v) > 0.15) {
         const m = this.max, nx = this.el.scrollLeft + this.v * k;
         if (nx < 0 || nx > m) { this.el.scrollLeft = Math.max(0, Math.min(m, nx)); this.setOv(this.ov - this.v * k * 0.3); this.v *= Math.pow(0.6, k); }

@@ -71,6 +71,7 @@ export class BuildMode {
     addEventListener('resize', () => this.measureTray());
     // a part being carried out of the tray follows the pointer; let go over the hangar to place it
     addEventListener('pointermove', e => { if (this.dragging) { this.dragging.moved += Math.abs(e.movementX || 0) + Math.abs(e.movementY || 0); if (e.target === this.w.renderer.domElement || this.dragging.moved > 30) this.aimXY = { x: e.clientX, y: e.clientY }; } });
+    addEventListener('pointercancel', () => { if (this.dragging) { this.dragging = null; if (IS_TOUCH) this.aimXY = null; } });   // a cancelled touch drag drops the part
     addEventListener('pointerup', e => {
       if (!this.dragging) return; const d = this.dragging; this.dragging = null;
       if (d.moved > 30 && document.elementFromPoint(e.clientX, e.clientY) === this.w.renderer.domElement) { this.aimXY = { x: e.clientX, y: e.clientY }; this.aim(); this.place(); }
@@ -148,6 +149,7 @@ export class BuildMode {
       const pk = g.userData.picks.filter(p => p.t.type === placedAt.type && p.t.index === placedAt.index).pop();
       if (pk) this.settle = { obj: pk.obj, y: pk.obj.position.y, t: 0 };
     }
+    this.delKey = null; this.delGhost = null;   // the old delete highlight went with the old meshes (undo/redo/load)
     this.clearGhost(); this.refreshCheckout();
   }
   clearGhost() { if (this.ghost) { this.ghost.removeFromParent(); disposeTree(this.ghost); this.ghost = null; this.ghostKey = null; } }
@@ -239,8 +241,8 @@ export class BuildMode {
     return this.ray.ray;
   }
   // candidate anchor positions in world space
-  candWorld(c) {
-    const r = this.g.rocket, L = layout(r), g = this.rocketGroup;
+  candWorld(c, L = layout(this.g.rocket)) {
+    const g = this.rocketGroup;
     let y = 0, side = false;
     if (c.type === 'stack') y = c.index >= L.items.length ? L.top : (c.index === 0 && L.items.length ? L.items[0].y0 - 0.4 : L.items[c.index].y0);
     else if (c.type === 'engine') y = L.engLen ? L.engLen * 0.5 : -0.4;
@@ -262,8 +264,9 @@ export class BuildMode {
     const cs = candidates(this.g.rocket, this.sel);
     if (cs.length && !cs[0].ok) { out.reason = cs[0].reason; return out; }
     let best = null, bd = Infinity;
+    const L = layout(this.g.rocket);
     for (const c of cs) {
-      const w = this.candWorld(c).world; c.w = w;
+      const w = this.candWorld(c, L).world; c.w = w;
       const d = ray.distanceToPoint(w), dist = w.distanceTo(this.w.camera.position);
       const lim = Math.max(2.4, dist * 0.16);
       if (d < lim && d < bd) { bd = d; best = c; }
@@ -274,17 +277,20 @@ export class BuildMode {
   }
   place3D(a = this.lastAim) {
     // markers for every valid spot, the hovered one bright; ghost preview of the part
-    this.markers.clear();
-    if (!a || !this.sel || this.sel === 'delete') return;
-    const off = this.rocketGroup.position.y;
-    for (const c of a.all || []) {
-      const { local } = this.candWorld(c);
-      const hot = c === a.cand;
-      const m = new THREE.Mesh(c.type === 'fins' || c.type === 'legs' ? this.dotGeo : this.ringGeo, hot ? this.markHot : this.markMat);
-      m.position.set(local.x, local.y + off, local.z); if (m.geometry === this.ringGeo) m.rotation.x = Math.PI / 2;
-      m.scale.setScalar(hot ? 1.15 : 1); m.raycast = () => {};
-      this.markers.add(m);
+    // (a small pool of marker meshes is reused every frame instead of rebuilding them)
+    const pool = this.markers.children; let n = 0;
+    if (a && this.sel && this.sel !== 'delete') {
+      const off = this.rocketGroup.position.y, L = layout(this.g.rocket);
+      for (const c of a.all || []) {
+        const { local } = this.candWorld(c, L), hot = c === a.cand, dot = c.type === 'fins' || c.type === 'legs';
+        let m = pool[n++];
+        if (!m) { m = new THREE.Mesh(this.ringGeo, this.markMat); m.raycast = () => {}; this.markers.add(m); }
+        m.visible = true; m.geometry = dot ? this.dotGeo : this.ringGeo; m.material = hot ? this.markHot : this.markMat;
+        m.position.set(local.x, local.y + off, local.z); m.rotation.set(dot ? 0 : Math.PI / 2, 0, 0);
+        m.scale.setScalar(hot ? 1.15 : 1);
+      }
     }
+    for (let i = n; i < pool.length; i++) pool[i].visible = false;
   }
   updateGhost(a) {
     const c = a.cand;
