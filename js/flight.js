@@ -1,4 +1,4 @@
-// Launch: countdown, liftoff, ascent and landing with real-ish physics; chase / pad / onboard cameras;
+// Launch: countdown, liftoff, ascent and landing with real-ish physics; chase / pad / cockpit cameras;
 // hold-upright assist and landing guide; break-apart failures with a "Try this" tip; post-flight stats.
 import { SKIES } from './env.js';
 import * as THREE from 'three';
@@ -22,7 +22,8 @@ import { applyKeys, applyAbs, cut as cutThr, toggle as toggleEng, snapshot, engi
 
 const $ = id => document.getElementById(id);
 // Flight views (keys 1-8, V cycles). Index order is what the picker and the saved setting use.
-export const CAMS = ['Free orbit', 'Chase', 'Viewing stand', 'Pad cam', 'Onboard', 'Engine close-up', 'Director', 'Top-down map'];
+export const CAMS = ['Free orbit', 'Chase', 'Viewing stand', 'Pad cam', 'Cockpit', 'Engine close-up', 'Director', 'Top-down map'];
+export const CAM_COCKPIT = 4;   // replaces the old exterior onboard camera
 const DIRECTOR = [[2, 6], [8, 5], [3, 5], [5, 4], [1, 6], [9, 6]]; // [view, seconds]; 8 = drone flyby, 9 = slow drone orbit
 const RANGE_TOP = 400000;   // 400 km: the planet pass shows the whole Earth well before this
 
@@ -35,7 +36,7 @@ export class FlightMode {
     this.prev = pose(); this.cur = pose(); this.rs = pose();
     this.steerS = { x: 0, y: 0 }; this.emitAcc = {}; this.hudCache = null; this.crashFlash = null;
     this.tmp = { a: new THREE.Vector3(), b: new THREE.Vector3(), c: new THREE.Vector3(), d: new THREE.Vector3(), q: new THREE.Quaternion(), q2: new THREE.Quaternion(), heat: new THREE.Vector4(), v2: new THREE.Vector2(), up: new THREE.Vector3(0, 1, 0) };
-    this.cockpit = new Cockpit(game, this);   // cockpit view (C / L3), see cockpit.js
+    this.cockpit = new Cockpit(game, this);   // cockpit is CAMS[CAM_COCKPIT] (V / 5 / C / Views)
     // view picker
     const pk = $('camPicker');
     pk.innerHTML = CAMS.map((n, i) => `<button data-cam="${i}"><b>${i + 1}</b>${n}</button>`).join('');
@@ -70,7 +71,8 @@ export class FlightMode {
   nextSky() { const k = Object.keys(SKIES), i = (k.indexOf(this.g.settings.timeOfDay) + 1) % k.length; this.g.setTimeOfDay(k[i]); this.g.audio.tap(); }
   nextCam(step = 1) { this.setCam((this.cam + step + CAMS.length) % CAMS.length); }
   setCam(i, quiet = false) {
-    this.cockpit?.off(); this.cam = i; this.camInit = false; this.dir = { i: 0, t: 0 };
+    this.cam = i; this.camInit = false; this.dir = { i: 0, t: 0 };
+    if (i === CAM_COCKPIT) this.cockpit?.enter(); else this.cockpit?.off();
     $('btnCam').textContent = 'View: ' + CAMS[i];
     $('camPicker').querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.cam === i));
     if (!quiet) { this.g.audio.tap(); const el = $('camName'); el.textContent = `${i + 1} · ${CAMS[i]}`; el.classList.remove('show'); void el.offsetWidth; el.classList.add('show'); }
@@ -102,7 +104,7 @@ export class FlightMode {
     $('thrTouch').querySelector('em').style.bottom = (eng.minThrottle * 100) + '%';
     this.syncPose(); this.syncButtons(); this.setCam(this.cam, true); this.zoomT = this.zoom = 1;
     this.moon.reset();
-    if (this.g.mission && !this.g.training?.active) this.g.prompt(IS_TOUCH ? 'Tap <b>Launch</b>. Throttle on the right, <b>ENGINE ON/OFF</b> to cut or relight, steer with the left stick.' : 'Press <b>Space</b> to launch. Shift / R throttle up, Ctrl / F down, Z full, X cut, WASD steer, C cockpit, V cycle camera.');
+    if (this.g.mission && !this.g.training?.active) this.g.prompt(IS_TOUCH ? 'Tap <b>Launch</b>. Throttle on the right, <b>ENGINE ON/OFF</b> to cut or relight, steer with the left stick. Views includes Cockpit.' : 'Press <b>Space</b> to launch. Shift / R throttle up, Ctrl / F down, Z full, X cut, WASD steer, 5 or C for cockpit, V cycles views.');
   }
   exit() { this.g.input.flightKeys = false; this.cockpit.off(); this.moon?.exit(); this.w.post.setDOF(false); this.w.post.setBlur(0); this.w.post.setHeat(new THREE.Vector4(0, 0, 0, 0)); this.w.setAltitude(0); this.w.followSun(SPOTS.pad); this.w.camera.near = 0.1; this.w.camera.far = 60000; this.w.camera.updateProjectionMatrix(); this.clear(); $('camPicker').classList.add('hidden'); this.w.camera.up.set(0, 1, 0); this.guideLine.visible = false; this.hpUI.detach(); this.g.prompt(null); $('landGuide').classList.add('hidden'); this.g.audio.setEngine(0); this.padRel?.reset(null); this.fr.hide(); this.kit.hide(); this.slow.reset(); this.g.fxScale = 1; this.endReplay(); }
   st0Top() { return stats(this.g.rocket, this.g.fill).top; }
@@ -181,7 +183,7 @@ export class FlightMode {
     const ts = this.slow.update(dt), sdt = dt * ts; this.g.fxScale = ts;
     if (!blocked) {
       if (inp.hit('Space') || inp.hit('Pad0')) this.launch();
-      this.cockpit.input(inp);   // C cockpit (pad: Views menu), Q / R3 recenter, look
+      this.cockpit.input(inp);   // C jumps to the cockpit slot; Q / R3 recenter, look
       if (inp.hit('Pad3') || inp.hit('Pad15')) this.nextCam(1);
       if (inp.hit('Pad14')) this.nextCam(-1);
       this.kit.input(inp);   // L / D-pad down = legs, K / R1 = chute (flying only)
@@ -521,16 +523,12 @@ export class FlightMode {
       c.position.set(SPOTS.pad.x + 70, 1.8, SPOTS.pad.z + 55); this.camPos.copy(c.position);
       const d = c.position.distanceTo(tgt); c.fov = THREE.MathUtils.clamp(2 * Math.atan((L * 2.5 * Math.min(4, this.zoom)) / d) * 180 / Math.PI, 2, 60);
       c.lookAt(tgt);
-    } else if (view === 4 || view === 5) {                                  // rocket-mounted: onboard down / engine close-up
+    } else if (view === CAM_COCKPIT) {                                      // cockpit interior (placed in cockpit.frame)
+    } else if (view === 5) {                                                // rocket-mounted: engine close-up
       const side = new THREE.Vector3().crossVectors(up, Math.abs(up.z) < 0.9 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(1, 0, 0)).normalize();
-      if (view === 4) {
-        c.position.copy(base).addScaledVector(up, this.st0.top - 0.6).addScaledVector(side, 1.05);
-        c.fov = 75; c.up.copy(up); c.lookAt(c.position.clone().addScaledVector(up, -10).addScaledVector(side, 1.5));
-      } else {
-        const r = 2.6 + 2.5 * Math.min(3, this.zoom);
-        c.position.copy(base).addScaledVector(up, 1.4).addScaledVector(side, r).addScaledVector(new THREE.Vector3().crossVectors(side, up), r * 0.35);
-        c.fov = 50; c.up.copy(up); c.lookAt(base.clone().addScaledVector(up, -0.6));
-      }
+      const r = 2.6 + 2.5 * Math.min(3, this.zoom);
+      c.position.copy(base).addScaledVector(up, 1.4).addScaledVector(side, r).addScaledVector(new THREE.Vector3().crossVectors(side, up), r * 0.35);
+      c.fov = 50; c.up.copy(up); c.lookAt(base.clone().addScaledVector(up, -0.6));
       this.camPos.copy(c.position); this.camInit = true;
     } else if (view === 7) {                                                // top-down map
       const H = Math.max(60, (40 + L * 4 + f.alt * 0.25) * this.zoom * 2);
@@ -547,13 +545,13 @@ export class FlightMode {
       c.fov = 50; place(p, tgt, 4);
     }
     this.slow.frame(c, tgt, L);
-    const near = Math.max(view === 4 || view === 5 ? 0.1 : 0.4, Math.min(5, f.alt / 400)), far = Math.max(60000, f.alt * 2.5);
+    const near = Math.max(view === CAM_COCKPIT ? 0.04 : view === 5 ? 0.1 : 0.4, Math.min(5, f.alt / 400)), far = Math.max(60000, f.alt * 2.5);
     c.near = near; c.far = far; c.updateProjectionMatrix();
     if (this.shake > 0.001) {   // layered shake: low rumble sway + high-frequency buzz, scaled by distance (zoomed lenses shake less in world units)
       const s = this.shake * Math.min(1, c.fov / 50), T = performance.now() / 1000, nz = (a, b) => Math.sin(T * a) * 0.6 + Math.sin(T * b + 1.7) * 0.4;
       c.position.x += nz(23, 37) * s * 0.35; c.position.y += nz(29, 41) * s * 0.35; c.rotateX(nz(11, 19) * s * 0.012); c.rotateY(nz(13, 17) * s * 0.012); c.rotateZ(nz(7, 31) * s * 0.008);
     }
-    this.cockpit.frame(dt);   // cockpit view takes the camera into the capsule (no-op when off)
+    this.cockpit.frame(dt);   // cockpit slot takes the camera into the capsule (no-op when off)
     this.w.followSun(this.tmp.c.set(rs.p.x, Math.min(rs.p.y, 2000), rs.p.z)); this.w.setAltitude(f.alt);
   }
 }
