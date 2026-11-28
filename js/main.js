@@ -226,7 +226,8 @@ class Game {
   // ---------- menus ----------
   showMenu(v) {
     $('menu').classList.toggle('hidden', !v); document.body.classList.toggle('menuopen', v);
-    if (v) { this.input.exitLock(); this.input.clearHeld(); }
+    if (v) { this.input.exitLock(); this.input.clearHeld(); if (!this.panelOpen) $('menu').querySelector('button')?.focus({ preventScroll: true }); }
+    else if ($('menu').contains(document.activeElement)) document.activeElement.blur();
     this.menuOpen = v;
   }
   startMission(i) {
@@ -251,8 +252,15 @@ class Game {
     this.startFreeMode();
   }
   startTraining() { this.startMission(0); }
-  openPanel(title, html) { $('panelTitle').textContent = title; $('panelBody').innerHTML = html; $('panel').classList.remove('hidden'); this.input.exitLock(); this.panelOpen = true; }
-  closePanel() { $('panel').classList.add('hidden'); this.panelOpen = false; }
+  openPanel(title, html) {
+    if (!this.panelOpen) this._panelFrom = document.activeElement;
+    $('panelTitle').textContent = title; $('panelBody').innerHTML = html; $('panel').classList.remove('hidden'); this.input.exitLock(); this.panelOpen = true;
+    $('panelClose').focus({ preventScroll: true });   // keyboard users land in the panel (Esc / the X close it)
+  }
+  closePanel() {
+    const was = this.panelOpen; $('panel').classList.add('hidden'); this.panelOpen = false;
+    if (was) { const f = this._panelFrom; this._panelFrom = null; if (f && f.isConnected && this.menuOpen && f.focus) f.focus({ preventScroll: true }); else if ($('panel').contains(document.activeElement)) document.activeElement.blur(); }
+  }
   starStr(id) { const s = this.progress.stars[id] || []; return [0, 1, 2].map(i => s[i] ? '★' : '<span class="off">★</span>').join(''); }
   showMissions() {
     const html = '<div class="mList">' + this.missions.map((m, i) => `<div class="mItem"><div><b>${i}. ${m.name}</b> <span class="st">${this.starStr(m.id)}</span><p>${m.desc}</p><p>${m.stars.map((s, k) => `${k + 1}★ ${s}`).join(' · ')}</p></div><button data-m="${i}" ${this.missionUnlocked(i) ? '' : 'disabled'}>${this.missionUnlocked(i) ? 'Play' : 'Locked'}</button></div>`).join('') + '</div>' +
@@ -357,12 +365,31 @@ class Game {
     document.addEventListener('keydown', () => this.audio.unlock(), { capture: true });
     document.querySelectorAll('button').forEach(b => b.addEventListener('mouseenter', () => this.audio.hover()));
     this.input.bindStick($('stickL'), 'touchMove');
+    // GPU context loss (driver reset, background tab on mobile): let the browser restore it, then rebuild the render path
+    const cv = this.world.renderer.domElement;
+    cv.addEventListener('webglcontextlost', e => { e.preventDefault(); this.audio.hush(); this.toast('Graphics paused: the GPU was reset. Restoring…', 6000); });
+    cv.addEventListener('webglcontextrestored', () => { try { this.applySettings(); this.toast('Graphics restored'); } catch (err) { console.warn('restore', err?.message || err); } });
+  }
+
+  // Menu / panel navigation without a mouse: arrows (menu), D-pad up/down (menu and panels) move the focus, X / Enter-style
+  // activation is the browser's (Enter, Space) or Pad0 here, D-pad left/right nudges a focused slider, Circle closes a panel.
+  uiNav(inp) {
+    if (this.resultsOpen || !(this.menuOpen || this.panelOpen)) return;
+    const root = this.panelOpen ? $('panelBody') : $('menu'), act = document.activeElement;
+    const items = [...root.querySelectorAll('button, select, input')].filter(e => !e.disabled && e.offsetParent !== null);
+    if (this.panelOpen) items.unshift($('panelClose'));
+    let d = (inp.hit('Pad13') ? 1 : 0) - (inp.hit('Pad12') ? 1 : 0);
+    if (!this.panelOpen) d += (inp.hit('ArrowDown') ? 1 : 0) - (inp.hit('ArrowUp') ? 1 : 0);
+    inp.pressed.delete('Pad12'); inp.pressed.delete('Pad13');
+    if (d && items.length) { const i = items.indexOf(act); items[(i < 0 ? (d > 0 ? 0 : items.length - 1) : (i + d + items.length) % items.length)].focus({ preventScroll: false }); this.audio.hover(); }
+    if (inp.hit('Pad0') && act && act.tagName === 'BUTTON' && (root.contains(act) || act === $('panelClose'))) { inp.pressed.delete('Pad0'); act.click(); }   // eat the press so it cannot also place / launch
+    const lr = (inp.hit('Pad15') ? 1 : 0) - (inp.hit('Pad14') ? 1 : 0);
+    if (lr && act?.type === 'range') { const st = +act.step || 1; act.value = Math.min(+act.max, Math.max(+act.min, +act.value + lr * st * 2)); act.dispatchEvent(new Event('input', { bubbles: true })); }
+    if (inp.hit('Pad1') && this.panelOpen) { inp.pressed.delete('Pad1'); this.closePanel(); }
   }
 
   loop() {
-    const tick = () => {
-      requestAnimationFrame(tick);
-      if (document.hidden) return;
+    const frame = () => {
       const cap = this.settings.fps | 0;
       if (cap > 0) {
         const now = performance.now();
@@ -381,11 +408,15 @@ class Game {
       }
       if (this.intro && !this.intro.done) this.intro.update(dt);
       else {
+        this.uiNav(inp);
         const paused = this.menuOpen || this.panelOpen;
         const driving = this.cart?.frame(dt, paused);
         const held = this.interact?.frame(dt, paused || driving) || driving;
         this.hands?.frame(dt, paused || driving);
-        if (this.modeObj) { if (!paused && !held) this.modeObj.update(dt, this.resultsOpen); else if (paused) this.modeObj.idle?.(dt); }
+        if (this.modeObj) {
+          if (!paused && !held) { this._padHush = false; this.modeObj.update(dt, this.resultsOpen); }
+          else if (paused) { this.modeObj.idle?.(dt); if (!this._padHush && (this.mode === 'flight' || this.mode === 'test')) { this._padHush = true; this.audio.hush(); } }   // menu over a flight: the engine bed would keep roaring
+        }
       }
       const fxDt = dt * (this.fxScale ?? 1);   // flight slow-mo beat slows the particles with the sim (1 otherwise)
       this.smoke.update(fxDt, this.windNow || { x: 0, z: 0 }, this.world.h * this.world.renderer.getPixelRatio() / Math.tan(this.world.camera.fov * Math.PI / 360) / 2);
@@ -398,6 +429,14 @@ class Game {
       this.world.render();
       inp.endFrame();
       this.frames = (this.frames || 0) + 1;
+    };
+    // one bad frame must not stop the loop or flood the console at 60 Hz: log each distinct error once and keep going
+    const seen = new Set();
+    const tick = () => {
+      requestAnimationFrame(tick);
+      if (document.hidden) { if (!this._hushed) { this._hushed = true; this.audio.hush(); } return; }   // nothing else would turn the engine bed down
+      this._hushed = false;
+      try { frame(); } catch (e) { const k = String(e?.stack || e).slice(0, 200); if (!seen.has(k)) { seen.add(k); console.error(e); } this.input.endFrame(); }
     };
     tick();
   }

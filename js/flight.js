@@ -99,7 +99,7 @@ export class FlightMode {
     // build the smoke depth pre-pass target and its shader now (first smoke would otherwise allocate it on the ignition frame)
     this.g.smoke.emit(SPOTS.pad.x, 0.3, SPOTS.pad.z, 0, 0, 0, 0.01, 0.12, 0, 0, 0);
     this.flash = 0; this.armT = 0; this.w.captureLocal('out', new THREE.Vector3(SPOTS.pad.x, 8, SPOTS.pad.z), [this.group]);
-    this.thr = Math.min(1, eng.heat.safeThrottle); this.lastThr = this.thr; this.touchThr = null; this.cutLatch = false; this.padThrHeld = false; this.hotWarned = false; this.countdown = null; this.acc = 0; this.ended = false; this.endT = 0; this.freeEnd = null; this.landedToast = false; this.fr.hide(); this.kit.reset(this.f); try { localStorage.removeItem('ch_goal_idx'); } catch (_) {} this.syncEndBtn(); this.slow.reset(); this.g.fxScale = 1; this.rec.reset(); this.endReplay(); this.reached = null; this.shake = 0; this.camInit = false; this.armed = false;
+    this.thr = Math.min(1, eng.heat.safeThrottle); this.lastThr = this.thr; this.touchThr = null; this.cutLatch = false; this.padThrHeld = false; this.hotWarned = false; this.countdown = null; this.acc = 0; this.ended = false; this.endT = 0; this.freeEnd = null; this.landedToast = false; this.fr.hide(); this.kit.reset(this.f); this.syncEndBtn(); this.slow.reset(); this.g.fxScale = 1; this.rec.reset(); this.endReplay(); this.reached = null; this.shake = 0; this.camInit = false; this.armed = false;
     $('btnLaunch').classList.remove('hidden'); $('countdown').classList.add('hidden');
     this.st0 = stats(this.g.rocket, this.g.fill);
     $('mThr').querySelector('em').style.bottom = (eng.minThrottle * 100) + '%';

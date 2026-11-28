@@ -6,15 +6,23 @@ export class Audio {
   unlock() {
     if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
     const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
-    const c = this.ctx = new AC();
-    this.master = c.createGain(); this.master.connect(c.destination);
+    let c; try { c = this.ctx = new AC(); } catch (_) { this.ctx = null; return; }
+    // a gentle limiter on the way out: a big explosion over the engine bed and music used to clip
+    this.master = c.createGain();
+    try {
+      const lim = c.createDynamicsCompressor(); lim.threshold.value = -10; lim.knee.value = 12; lim.ratio.value = 6; lim.attack.value = 0.004; lim.release.value = 0.2;
+      this.master.connect(lim); lim.connect(c.destination);
+    } catch (_) { this.master.connect(c.destination); }
     this.sfx = c.createGain(); this.sfx.connect(this.master);
     this.music = c.createGain(); this.music.connect(this.master);
-    this.verb = c.createConvolver(); this.verb.buffer = this.impulse(2.8); const vg = c.createGain(); vg.gain.value = 0.35; this.verb.connect(vg); vg.connect(this.master);
+    // reverb returns through the effects bus, so the Effects volume (and 0 = mute) also covers the tails
+    this.verb = c.createConvolver(); this.verb.buffer = this.impulse(2.8); const vg = c.createGain(); vg.gain.value = 0.35; this.verb.connect(vg); vg.connect(this.sfx);
     this.noiseBuf = this.makeNoise();
     this.setVolumes(this.vol);
-    this.startEngineBed(); this.startMusic();
+    try { this.startEngineBed(); this.startMusic(); } catch (e) { console.warn('audio start', e?.message || e); }
   }
+  // tab hidden / menu over a flight: the loop stops, so nothing would ever turn the engine bed down again
+  hush() { try { this.setEngine(0); } catch (_) {} }
   setVolumes(v) {
     Object.assign(this.vol, v);
     if (!this.ctx) return;

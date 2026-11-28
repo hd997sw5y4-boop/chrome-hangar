@@ -7,6 +7,7 @@ canvas#c{position:fixed;inset:0;width:100%;height:100%;display:block}
 button{font:inherit;color:var(--ink);background:rgba(255,255,255,.08);border:1px solid var(--line);border-radius:12px;padding:9px 14px;cursor:pointer;transition:background .15s,box-shadow .15s,transform .08s;min-height:40px}
 button:hover{background:rgba(127,231,255,.16);box-shadow:0 0 0 1px rgba(127,231,255,.5),0 0 18px rgba(127,231,255,.25)}
 button:active{transform:scale(.97)}button:disabled{opacity:.4;cursor:default;box-shadow:none}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 button.go{background:rgba(95,227,154,.2);border-color:rgba(95,227,154,.6)}button.big{font-size:18px;padding:12px 26px;font-weight:600}
 button.on{background:rgba(127,231,255,.22);border-color:var(--accent)}
 .logo{font-size:44px;letter-spacing:.18em;font-weight:300}.logo b{font-weight:700;background:linear-gradient(180deg,#fff,#9aa7b3 55%,#e8edf2);-webkit-background-clip:text;background-clip:text;color:transparent}
@@ -17,9 +18,9 @@ button.on{background:rgba(127,231,255,.22);border-color:var(--accent)}
 #loading.fadeout{opacity:0;pointer-events:none}
 #loading .logo{font-size:28px;letter-spacing:.28em;font-weight:300;opacity:.85}#loading .logo b{font-weight:500}
 #rotate{background:#0b0d10;z-index:40;font-size:18px;text-align:center}#rotate div{font-size:60px}
-#menu{background:linear-gradient(90deg,rgba(8,10,12,.85),rgba(8,10,12,.35) 55%,rgba(8,10,12,0));align-items:flex-start;padding-left:calc(7vw + var(--sl))}
-#menu .tag{color:var(--dim);margin-top:-8px}.menuBtns{display:flex;flex-direction:column;gap:8px;min-width:240px;margin-top:10px}.menuBtns button{text-align:left}
-#menu .foot{position:absolute;bottom:calc(14px + var(--sb));color:var(--dim);font-size:12px}
+#menu{background:linear-gradient(90deg,rgba(8,10,12,.85),rgba(8,10,12,.35) 55%,rgba(8,10,12,0));align-items:flex-start;justify-content:safe center;overflow-y:auto;padding:calc(10px + var(--st)) 0 calc(10px + var(--sb)) calc(7vw + var(--sl))}
+#menu .tag{color:var(--dim);margin-top:-8px}.menuBtns{display:flex;flex-direction:column;gap:8px;min-width:240px;margin-top:10px}.menuBtns button{text-align:left;padding-left:14px}
+#menu .foot{color:var(--dim);font-size:12px;margin-top:6px}
 #crosshair{position:fixed;left:50%;top:50%;width:8px;height:8px;margin:-4px;border-radius:50%;border:2px solid rgba(255,255,255,.8);pointer-events:none;z-index:3;display:none}
 body.build:not(.touch) #crosshair{display:block}
 #aimReason{position:fixed;left:50%;top:calc(50% + 22px);transform:translateX(-50%);background:rgba(60,12,10,.8);color:#ffd2cc;padding:5px 12px;border-radius:10px;font-size:13px;pointer-events:none;z-index:3}
@@ -106,7 +107,7 @@ body.touch #btnTray .kb{display:none}body.touch.build #btnTray{left:calc(160px +
 /* modals */
 .modal{position:fixed;inset:0;z-index:30;background:rgba(4,6,8,.55);display:flex;align-items:center;justify-content:center;padding:calc(10px + var(--st)) calc(10px + var(--sr)) calc(10px + var(--sb)) calc(10px + var(--sl))}
 .card{background:rgba(18,22,26,.96);border:1px solid var(--line);border-radius:20px;padding:18px 22px;width:min(640px,100%);max-height:100%;overflow-y:auto;position:relative;user-select:text}
-.card h2{margin:0 0 8px;font-weight:600}.card .close{position:absolute;right:12px;top:12px;min-height:34px;padding:4px 10px}
+.card h2{margin:0 0 8px;font-weight:600}.card .close{position:sticky;top:0;float:right;margin:-6px -10px 0 8px;z-index:2;min-height:34px;padding:4px 10px;background:rgba(30,36,42,.96)}   /* sticky: stays in reach while a long panel scrolls on a short screen */
 .card .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 #rStars{font-size:34px;letter-spacing:6px;color:#555}#rStars .lit{color:#ffd34d;text-shadow:0 0 14px rgba(255,211,77,.6)}
 #rStars small{display:block;font-size:12px;letter-spacing:0;color:var(--dim)}
@@ -146,6 +147,7 @@ body.touch #fBtns{max-width:calc(100% - 320px - var(--sl) - var(--sr))}
 #hpWarn div{font:700 10px/1.25 system-ui,sans-serif;letter-spacing:.05em;min-height:0;opacity:1;transition:opacity .9s ease;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 #hpWarn div{height:12.5px}#hpWarn div.gone{opacity:0}
 #hpWarn .ok{color:var(--go)}#hpWarn .warn{color:var(--warn)}#hpWarn .crit{color:#ff9a3c}#hpWarn .bad{color:#ff7a6e}
+@media (max-height:430px){#menu{gap:4px}.logo{font-size:24px}#menu .tag{margin-top:-4px;font-size:12px}.menuBtns{gap:4px;margin-top:4px}.menuBtns button,.menuBtns button.big{min-height:28px;padding:2px 14px;font-size:14px}#menu .foot{font-size:11px;margin-top:2px}}
 @media (max-height:500px){
  #hpPanel{top:calc(52px + var(--st));left:calc(184px + var(--sl));width:112px;padding:4px 6px 5px}#hpCanvas{width:96px;height:147px}#hpWarn div{font-size:9px;height:11.5px}
  .logo{font-size:30px}.menuBtns{gap:5px}.menuBtns button{min-height:36px;padding:6px 14px}button.big{font-size:16px;padding:8px 18px}
@@ -157,6 +159,8 @@ body.touch #fBtns{max-width:calc(100% - 320px - var(--sl) - var(--sr))}
  .ctlRow{padding:4px 8px;gap:6px}#testCtl1{bottom:calc(56px + var(--sb))}.ctlRow button{min-height:34px;padding:5px 10px;font-size:13px}.thrCtl{min-width:120px}#tFill{width:130px}
  #fBtns{padding:4px;gap:4px}#fBtns button{min-height:34px;padding:5px 8px;font-size:12px}#landGuide b{font-size:24px}#countdown{font-size:60px}
  #prompt{top:calc(48px + var(--st));padding:6px 12px;font-size:13px;max-width:min(520px,86vw);gap:6px}#prompt .factCard{padding:6px 9px}#prompt .factCard b{font-size:13px;margin:1px 0 2px}#prompt .factCard p{font-size:12px}#topRight button{width:40px;height:40px}
+ #flightUI #moonPad{left:calc(50% + 80px);max-width:min(400px,calc(100vw - 340px))}   /* keep the Moon practice bar clear of the health panel */
+ body.ckpt #hpPanel{display:none}   /* the health panel sat on top of the attitude ball */
  .stick{width:110px;height:110px}#thrTouch{height:160px}#thrTouch .track{height:140px}#btnEngCut{bottom:calc(196px + var(--sb));min-height:58px;width:70px;font-size:11px}
 }
 
@@ -186,8 +190,6 @@ body.intro #hud,body.intro #menu,body.intro #buildUI,body.intro #testUI,body.int
 /* flight results screen (Free Mode) */
 #fResults .card{width:min(560px,100%)}
 #frBanner{display:inline-block;margin:0 0 6px;padding:3px 12px;border-radius:999px;font-size:13px;font-weight:700;letter-spacing:.06em;color:#1b1500;background:#ffd34d;box-shadow:0 0 18px rgba(255,211,77,.45)}
-#frStars{font-size:34px;letter-spacing:6px;color:#555}#frStars span{transition:color .25s,text-shadow .25s}#frStars .lit{color:#ffd34d;text-shadow:0 0 14px rgba(255,211,77,.6)}
-#frStars small{display:block;font-size:12px;letter-spacing:0;color:var(--dim)}
 #frHint{background:rgba(127,231,255,.1);border-left:3px solid var(--accent);padding:8px 12px;border-radius:8px}
 #frStats{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:10px 0}#frStats div{background:rgba(255,255,255,.05);border-radius:10px;padding:6px 10px;border:1px solid transparent}
 #frStats label{display:block;font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em}#frStats b{font-size:20px;font-variant-numeric:tabular-nums}#frStats b i{font-style:normal;color:var(--dim);font-size:12px;font-weight:400}
@@ -201,12 +203,10 @@ body.intro #hud,body.intro #menu,body.intro #buildUI,body.intro #testUI,body.int
 #fResults .row button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 @media (max-height:520px){
   #fResults .card{padding:10px 16px}#fResults h2{font-size:19px;margin:0 0 4px}#frBanner{font-size:12px;padding:2px 10px;margin:0 0 2px}
-  #frStars{font-size:24px;letter-spacing:4px;display:flex;align-items:center;gap:4px;flex-wrap:wrap}#frStars small{display:inline-block;margin-left:10px;line-height:1.25}
   #frReason,#frHint{font-size:13px;margin:4px 0}#frHint{padding:5px 10px}
   #frStats{grid-template-columns:repeat(4,1fr);gap:6px;margin:6px 0}#frStats div{padding:4px 8px}#frStats b{font-size:17px}#frStats label{font-size:10px}
   #fResults .row{bottom:-10px;margin:6px -16px -10px;padding:6px 16px 8px}#fResults .row button{min-height:36px;padding:4px 10px}
 }
-#frStars small b.soft{color:#7dffa8;font-weight:700}
 #frBroke{margin:-2px 0 6px;color:#ff9a7a;font-size:13px;font-weight:600}
 #replayBar{position:absolute;left:50%;bottom:calc(14px + var(--sb));transform:translateX(-50%);display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center;background:var(--glass);border:1px solid var(--line);border-radius:16px;padding:8px 14px;z-index:31;max-width:calc(100% - 20px)}
 #replayBar b{color:var(--accent);font-size:12px;letter-spacing:.12em;text-transform:uppercase}#replayBar span{font-variant-numeric:tabular-nums;font-size:13px;min-width:90px}
@@ -215,3 +215,5 @@ body.intro #hud,body.intro #menu,body.intro #buildUI,body.intro #testUI,body.int
 #replayBar small{flex-basis:100%;text-align:center;color:#ffd34d;font-size:13px;min-height:1em}
 #flightUI.replaying #fBtns,#flightUI.replaying #landGuide,#flightUI.replaying #thrTouch,#flightUI.replaying #btnEngCut{display:none!important}
 #fWindArrow{display:inline-block;margin-left:4px;color:var(--accent);font-weight:900;font-size:17px;vertical-align:-2px;line-height:1;transition:transform .25s ease}
+/* cockpit view: the button bar stays reachable but lets the instruments show through */
+body.ckpt #fBtns{opacity:.5;transition:opacity .2s}body.ckpt #fBtns:hover,body.ckpt #fBtns:focus-within{opacity:1}

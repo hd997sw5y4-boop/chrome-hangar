@@ -14,7 +14,10 @@ export class Input {
     this.flightKeys = false;   // flight sets this so Ctrl can lower the throttle without tripping browser shortcuts
     addEventListener('keydown', e => {
       if (e.target.tagName === 'INPUT' && e.target.type === 'text') return;
-      if (['Tab', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+      // Menus, panels and form controls keep their own keys (Tab moves focus, arrows change a slider / select, Space presses a
+      // button). Everywhere else these keys belong to the game, so the page never scrolls or tabs away from the canvas.
+      const ui = e.target.closest?.('#menu, #panel, .modal, select, input, textarea');
+      if (!ui && ['Tab', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
       if (!this.keys.has(e.code)) this.pressed.add((e.ctrlKey || e.metaKey ? 'Ctrl+' : '') + (e.shiftKey && e.code !== 'ShiftLeft' && e.code !== 'ShiftRight' ? 'Shift+' : '') + e.code);
       this.keys.add(e.code); this.lastDevice = 'kb';
       if ((e.ctrlKey || e.metaKey) && (e.code === 'KeyZ' || e.code === 'KeyY')) e.preventDefault();
