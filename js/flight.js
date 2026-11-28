@@ -21,6 +21,8 @@ import { Cockpit } from './cockpit.js';
 import * as FL from './freelook.js';
 import { applyKeys, applyAbs, cut as cutThr, toggle as toggleEng, snapshot, engineState } from './throttle.js';
 import { Gb5Flight } from './rcs-ui.js';   // GB5-RCS
+import { rememberExternalCam, cockpitToggleTarget } from './cockpit-touch.js';
+import { syncCockpitButton } from './cockpit-phone.js';
 import { MoonRocketFlight } from './moonrocket.js';   // gb3-moon-rocket: staging + Moon autopilot (keys, buttons, HUD, stage rebuild)
 
 const $ = id => document.getElementById(id);
@@ -49,6 +51,8 @@ export class FlightMode {
     $('btnViews').onclick = () => { pk.classList.toggle('hidden'); this.g.audio.tap(); };
     $('btnLaunch').onclick = () => this.launch();
     $('btnCam').onclick = () => this.nextCam();
+    const ckBtn = $('btnCockpit');
+    if (ckBtn) ckBtn.onclick = e => { e.stopPropagation(); this.toggleCockpitCam(); };
     $('btnSky').onclick = () => this.nextSky();
     $('btnAssist').onclick = () => { this.g.settings.assist = !this.g.settings.assist; this.g.applySettingsLight(); };
     $('btnGuide').onclick = () => { this.g.settings.guide = !this.g.settings.guide; this.g.applySettingsLight(); };
@@ -76,10 +80,16 @@ export class FlightMode {
   }
   nextSky() { const k = Object.keys(SKIES), i = (k.indexOf(this.g.settings.timeOfDay) + 1) % k.length; this.g.setTimeOfDay(k[i]); this.g.audio.tap(); }
   nextCam(step = 1) { this.setCam((this.cam + step + CAMS.length) % CAMS.length); }
+  toggleCockpitCam() {
+    if (!this.f) return;
+    this.setCam(cockpitToggleTarget(this.cam, this._extCam));
+  }
   setCam(i, quiet = false) {
+    if (i === CAM_COCKPIT && this.cam !== CAM_COCKPIT) this._extCam = rememberExternalCam(this.cam);
     this.cam = i; this.camInit = false; this.dir = { i: 0, t: 0 };
     if (i === CAM_COCKPIT) this.cockpit?.enter(); else this.cockpit?.off();
     $('btnCam').textContent = 'View: ' + CAMS[i];
+    syncCockpitButton(i);
     $('camPicker').querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.cam === i));
     if (!quiet) { this.g.audio.tap(); const el = $('camName'); el.textContent = `${i + 1} · ${CAMS[i]}`; el.classList.remove('show'); void el.offsetWidth; el.classList.add('show'); }
     this.g.settings.flightCam = i; this.g.applySettingsLight?.();
@@ -111,7 +121,7 @@ export class FlightMode {
     this.syncPose(); this.syncButtons(); this.setCam(this.cam, true); this.zoomT = this.zoom = 1;
     this.moon.reset();
     this.mr.reset();   // gb3-moon-rocket
-    if (this.g.mission && !this.g.training?.active) this.g.prompt(IS_TOUCH ? 'Tap <b>Launch</b>. Throttle on the right, <b>ENGINE ON/OFF</b> to cut or relight, steer with the left stick. Views includes Cockpit.' : 'Press <b>Space</b> to launch. Shift / R throttle up, Ctrl / F down, Z full, X cut, WASD steer, 5 or C for cockpit, V cycles views.');
+    if (this.g.mission && !this.g.training?.active) this.g.prompt(IS_TOUCH ? 'Tap <b>Launch</b>. Throttle on the right, <b>ENGINE ON/OFF</b> to cut or relight, steer with the left stick. <b>Cockpit</b> sits above the stick; drag to look around.' : 'Press <b>Space</b> to launch. Shift / R throttle up, Ctrl / F down, Z full, X cut, WASD steer, 5 or C for cockpit, V cycles views.');
   }
   exit() { this.mr?.clear();   /* gb3-moon-rocket */ this.g.input.flightKeys = false; this.cockpit.off(); this.moon?.exit(); this.w.post.setDOF(false); this.w.post.setBlur(0); this.w.post.setHeat(new THREE.Vector4(0, 0, 0, 0)); this.w.setAltitude(0); this.w.followSun(SPOTS.pad); this.w.camera.near = 0.1; this.w.camera.far = 60000; this.w.camera.updateProjectionMatrix(); this.clear(); $('camPicker').classList.add('hidden'); this.w.camera.up.set(0, 1, 0); this.guideLine.visible = false; this.hpUI.detach(); this.g.prompt(null); $('landGuide').classList.add('hidden'); this.g.audio.setEngine(0); this.padRel?.reset(null); this.fr.hide(); this.kit.hide(); this.slow.reset(); this.g.fxScale = 1; this.endReplay(); }
   st0Top() { return stats(this.g.rocket, this.g.fill).top; }

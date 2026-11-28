@@ -7,6 +7,8 @@ import { mergeGeometries } from '../vendor/three/addons/utils/BufferGeometryUtil
 import { layout } from './rocket.js';
 import { Instruments, CAUTIONS } from './cockpit-instruments.js';
 import { engineGauges } from './cockpit-engine.js';
+import { orbitLookAfterHead } from './cockpit-touch.js';
+import { installCockpitPhone, noteCockpitTap, shouldBuildPhoneCockpit, buildPhoneCockpit, syncCockpitHint } from './cockpit-phone.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const EYE_DROP = 1.55;          // eye sits this far below the top of the stack
@@ -100,6 +102,7 @@ export class Cockpit {
     this.prevVel = new THREE.Vector3(); this.gs = 1; this.moonObj = null; this.moonScan = 0; this.prevMoon = null; this.flashT = 0;
     this.tmp = { q: new THREE.Quaternion(), q2: new THREE.Quaternion(), e: new THREE.Euler(0, 0, 0, 'YXZ'), a: V(0, 0, 0), b: V(0, 0, 0), c: V(0, 0, 0), u: V(0, 1, 0), h: V(0, 0, 1) };
     this.qX = new THREE.Quaternion().setFromAxisAngle(V(1, 0, 0), Math.PI / 2);   // capsule -Z -> rocket +Y, capsule +Y -> rocket +Z
+    installCockpitPhone(this);   // touch: keep head-look off the throttle / stick, double-tap recenters
     const st = document.createElement('style');
     st.textContent = 'body.ckpt #fStats,body.ckpt #fMeters{display:none}';
     document.head.appendChild(st);
@@ -111,6 +114,9 @@ export class Cockpit {
     if (!this.on) return;
     if (inp.hit('KeyQ') || inp.hit('Pad11')) this.recenter(); // Q / R3
     this.look(inp.look.x, inp.look.y);
+    // Touch drag looks the head. Leave mouse / right-stick on inp.look so the outside orbit camera is unchanged.
+    if (inp.lookTouch) { const rest = orbitLookAfterHead(inp.look, inp.lookTouch); inp.look.x = rest.x; inp.look.y = rest.y; }
+    if (inp.lastDevice === 'touch') noteCockpitTap(this, inp);
   }
   look(dx, dy) { this.yawT = THREE.MathUtils.clamp(this.yawT - dx, -YAW_MAX, YAW_MAX); this.pitchT = THREE.MathUtils.clamp(this.pitchT - dy, PITCH_MIN, PITCH_MAX); }
   recenter() { this.yawT = 0; this.pitchT = REST_PITCH; }
@@ -124,6 +130,7 @@ export class Cockpit {
     if (want) { this.build(); this.recenter(); this.yaw = 0; this.pitch = REST_PITCH; this.prevVel.set(f.vel.x, f.vel.y, f.vel.z); this.inst.update(0, this.data(1 / 60), true); }
     else this.hide();
     document.body.classList.toggle('ckpt', this.on);
+    if (this.g.input?.isTouch) syncCockpitHint(this.on);
   }
   off() { this.setOn(false); }
   hide() { if (!this.built) return; this.root.visible = false; for (const l of this.lights) l.intensity = 0; this.fm.camInit = false; }
@@ -139,6 +146,8 @@ export class Cockpit {
   // ---- geometry: built once, on first use ----
   build() {
     if (this.built) { this.root.visible = true; return; }
+    // Phone / coarse-short viewports get a light interior. The desktop mesh below is not used on that path.
+    if (shouldBuildPhoneCockpit(this.g)) { buildPhoneCockpit(this); return; }
     this.built = true;
     const root = this.root = new THREE.Group(); root.name = 'cockpit';
     const q = quiltTextures(), rough = roughTex();

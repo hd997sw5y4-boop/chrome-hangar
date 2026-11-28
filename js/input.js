@@ -11,6 +11,7 @@ export class Input {
     this.taps = []; this.throttleAbs = null; this.padArmed = false; this.padPrev = []; this.padActive = false;
     this.sens = 1; this.invertY = false; this.locked = false; this.enabled = true;
     this.touchMove = { x: 0, y: 0 }; this.zoom = 0;
+    this.lookTouch = { x: 0, y: 0 };   // touch-only part of look, so a cockpit drag does not also orbit the outside camera
     this.flightKeys = false;   // flight sets this so Ctrl can lower the throttle without tripping browser shortcuts
     addEventListener('keydown', e => {
       if (e.target.tagName === 'INPUT' && e.target.type === 'text') return;
@@ -59,7 +60,10 @@ export class Input {
     const c = this.canvas, touches = new Map();
     c.addEventListener('touchstart', e => {
       e.preventDefault(); this.lastDevice = 'touch';
-      for (const t of e.changedTouches) touches.set(t.identifier, { x0: t.clientX, y0: t.clientY, x: t.clientX, y: t.clientY, t0: performance.now(), moved: 0 });
+      for (const t of e.changedTouches) {
+        const blockLook = this.blockLookAt?.(t.clientX, t.clientY) === true;
+        touches.set(t.identifier, { x0: t.clientX, y0: t.clientY, x: t.clientX, y: t.clientY, t0: performance.now(), moved: 0, blockLook });
+      }
     }, { passive: false });
     c.addEventListener('touchmove', e => {
       e.preventDefault();
@@ -78,7 +82,9 @@ export class Input {
         const s = touches.get(t.identifier); if (!s) continue;
         const dx = t.clientX - s.x, dy = t.clientY - s.y;
         s.moved += Math.abs(dx) + Math.abs(dy); s.x = t.clientX; s.y = t.clientY;
-        this.look.x += dx * 0.006 * this.sens; this.look.y += dy * 0.006 * this.sens * (this.invertY ? -1 : 1);
+        if (s.blockLook) continue;   // thumb landed on the throttle, stick, or a button: do not look
+        const lx = dx * 0.006 * this.sens, ly = dy * 0.006 * this.sens * (this.invertY ? -1 : 1);
+        this.look.x += lx; this.look.y += ly; this.lookTouch.x += lx; this.lookTouch.y += ly;
       }
     }, { passive: false });
     const end = e => {
@@ -88,6 +94,11 @@ export class Input {
       }
     };
     c.addEventListener('touchend', end); c.addEventListener('touchcancel', end);
+    // iOS Safari can cancel a drag (gesture, incoming UI) without a matching touchend.
+    const drop = () => { touches.clear(); this.pinchD = 0; };
+    c.addEventListener('pointercancel', drop);
+    addEventListener('blur', drop);
+    document.addEventListener('visibilitychange', () => { if (document.hidden) drop(); });
   }
   // on-screen stick element -> target vector object (written into this[key])
   bindStick(el, key) {
@@ -130,5 +141,5 @@ export class Input {
     }
     for (const v of [this.move, this.steer]) { const l = Math.hypot(v.x, v.y); if (l > 1) { v.x /= l; v.y /= l; } }
   }
-  endFrame() { this.pressed.clear(); this.look.x = this.look.y = 0; this.zoom = 0; this.mouse.clicked = false; this.mouse.right = false; this.taps.length = 0; }
+  endFrame() { this.pressed.clear(); this.look.x = this.look.y = 0; this.lookTouch.x = this.lookTouch.y = 0; this.zoom = 0; this.mouse.clicked = false; this.mouse.right = false; this.taps.length = 0; }
 }
