@@ -2,7 +2,7 @@
 --sl:env(safe-area-inset-left,0px);--sr:env(safe-area-inset-right,0px);--st:env(safe-area-inset-top,0px);--sb:env(safe-area-inset-bottom,0px)}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%;overflow:hidden;background:#0e1114;color:var(--ink);font:15px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;user-select:none;-webkit-user-select:none;touch-action:none;overscroll-behavior:none}
-canvas#c{position:fixed;inset:0;width:100%;height:100%;display:block}
+canvas#c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
 .hidden{display:none!important}
 button{font:inherit;color:var(--ink);background:rgba(255,255,255,.08);border:1px solid var(--line);border-radius:12px;padding:9px 14px;cursor:pointer;transition:background .15s,box-shadow .15s,transform .08s;min-height:40px}
 button:hover{background:rgba(127,231,255,.16);box-shadow:0 0 0 1px rgba(127,231,255,.5),0 0 18px rgba(127,231,255,.25)}
@@ -131,6 +131,13 @@ input[type=text]{font:inherit;background:#1d242b;color:var(--ink);border:1px sol
 #btnEngCut.on{background:rgba(40,180,90,.35);border-color:#5dff9a;color:#e8ffe8}
 #btnEngCut.off{background:rgba(255,255,255,.08);color:var(--ink)}
 #btnEngCut.dry{background:rgba(255,174,46,.2);border-color:#ffae2e;color:#ffd59a}
+/* phone cockpit: above the left stick in both orientations, clear of the throttle, ENGINE, and the striped ABORT on the right. */
+#btnCockpit{position:fixed;z-index:28;left:calc(28px + var(--sl));bottom:calc(176px + var(--sb));min-width:118px;min-height:48px;padding:10px 12px;border-radius:16px;font-weight:700;font-size:15px;letter-spacing:.02em;line-height:1.1;text-align:center;background:rgba(12,18,24,.84);border:1px solid rgba(127,231,255,.7);box-shadow:0 8px 22px rgba(0,0,0,.4);touch-action:manipulation}
+#btnCockpit.on{background:rgba(127,231,255,.28);border-color:#fff;color:#fff}
+#ckptHint{display:none;position:fixed;z-index:26;left:50%;top:calc(8px + var(--st));transform:translateX(-50%);max-width:min(280px,calc(100vw - 128px - var(--sl) - var(--sr)));padding:6px 12px;border-radius:999px;background:rgba(12,16,22,.62);border:1px solid rgba(127,231,255,.28);color:#d5e6ee;font:600 12px/1.3 system-ui,sans-serif;text-align:center;pointer-events:none}
+#flightUI #ckptHint{pointer-events:none}
+body.touch.ckpt #ckptHint.show{display:block;animation:ckptHint 4.6s ease forwards}
+@keyframes ckptHint{0%{opacity:0}10%{opacity:1}68%{opacity:1}100%{opacity:0}}
 #fEng.on{color:#5dff9a}#fEng.off{color:var(--dim)}#fEng.dry{color:#ffae2e}
 body.touch.build #tray{left:calc(160px + var(--sl))}body.touch.build #standCtl{top:calc(60px + var(--st));transform:none}
 body.menuopen #hud,body.menuopen #buildUI,body.menuopen #testUI,body.menuopen #flightUI,body.menuopen #stickL,body.menuopen #crosshair{display:none!important}
@@ -162,6 +169,10 @@ body.touch #fBtns{max-width:calc(100% - 320px - var(--sl) - var(--sr))}
  #flightUI #moonPad{left:calc(50% + 80px);max-width:min(400px,calc(100vw - 340px))}   /* keep the Moon practice bar clear of the health panel */
  body.ckpt #hpPanel{display:none}   /* the health panel sat on top of the attitude ball */
  .stick{width:110px;height:110px}#thrTouch{height:160px}#thrTouch .track{height:140px}#btnEngCut{bottom:calc(196px + var(--sb));min-height:58px;width:70px;font-size:11px}
+ #btnCockpit{left:calc(22px + var(--sl));right:auto;bottom:calc(156px + var(--sb));min-width:110px;min-height:48px;font-size:14px;padding:8px 10px}
+}
+@media (max-width:520px){
+ #btnCockpit{left:calc(16px + var(--sl));min-width:96px}
 }
 
 /* flight view picker + view name flash */
@@ -213,7 +224,7 @@ body.intro #hud,body.intro #menu,body.intro #buildUI,body.intro #testUI,body.int
 #replayBar i{display:block;width:160px;height:4px;border-radius:2px;background:rgba(255,255,255,.12);overflow:hidden}#replayBar em{display:block;height:100%;width:0;background:var(--accent)}
 #replayBar button{min-height:32px;padding:4px 12px;font-size:13px}#replayBar kbd{font:inherit;font-size:11px;color:var(--dim);border:1px solid var(--line);border-radius:5px;padding:0 5px;margin-left:6px}
 #replayBar small{flex-basis:100%;text-align:center;color:#ffd34d;font-size:13px;min-height:1em}
-#flightUI.replaying #fBtns,#flightUI.replaying #landGuide,#flightUI.replaying #thrTouch,#flightUI.replaying #btnEngCut{display:none!important}
+#flightUI.replaying #fBtns,#flightUI.replaying #landGuide,#flightUI.replaying #thrTouch,#flightUI.replaying #btnEngCut,#flightUI.replaying #btnCockpit,#flightUI.replaying #ckptHint{display:none!important}
 #fWindArrow{display:inline-block;margin-left:4px;color:var(--accent);font-weight:900;font-size:17px;vertical-align:-2px;line-height:1;transition:transform .25s ease}
 /* cockpit view: the button bar stays reachable but lets the instruments show through */
 body.ckpt #fBtns{opacity:.5;transition:opacity .2s}body.ckpt #fBtns:hover,body.ckpt #fBtns:focus-within{opacity:1}
