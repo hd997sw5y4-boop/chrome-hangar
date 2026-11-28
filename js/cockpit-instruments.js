@@ -1,6 +1,7 @@
 // Cockpit glass displays: each one is a canvas texture redrawn from a plain data object (see Cockpit.data()).
 // Nothing here reads the sim directly, so a phone layout can reuse the same displays with its own input.
 import * as THREE from 'three';
+import { engineReadout } from './cockpit-engine.js';
 
 const FONT = '"DejaVu Sans Mono", Consolas, "Roboto Mono", monospace';
 const C = { bg: '#05080a', grid: '#16222a', text: '#d8e4ea', dim: '#6d7f88', green: '#4fe08a', cyan: '#5cd6ff', amber: '#ffb23d', red: '#ff4a3d', magenta: '#e070ff', sky: '#2f6fa8', ground: '#7a5530' };
@@ -110,7 +111,11 @@ function arcGauge(x, cx, cy, r, v, lo, hi, label, val, col, mark) {
   txt(x, val, cx, cy + r * 0.55, 22, '#fff', 'center', 700); txt(x, label, cx, cy + r + 4, 15, C.dim, 'center');
 }
 function drawENG(x, d, W, H) {
-  txt(x, 'ENGINE', 16, 22, 17, C.cyan); txt(x, d.engOn ? 'RUN' : d.engFailed ? 'FAIL' : 'SAFE', W - 16, 22, 16, d.engOn ? C.green : d.engFailed ? C.red : C.dim, 'right');
+  const st = engineReadout(d);
+  const stCol = d.engFailed ? C.red : st === 'ON' ? C.green : st === 'NO FUEL' ? C.amber : C.dim;
+  txt(x, 'ENGINE', 16, 22, 17, C.cyan);
+  x.beginPath(); x.arc(W - 118, 22, 7, 0, Math.PI * 2); x.fillStyle = stCol; x.fill();
+  txt(x, st, W - 16, 22, 16, stCol, 'right');
   arcGauge(x, W * 0.28, 140, 74, d.thr * 100, 0, 100, 'THROTTLE %', fmt(d.thr * 100), C.green, d.thrCmd * 100);
   const hc = d.heat > 80 ? C.red : d.heat > 55 ? C.amber : C.cyan;
   arcGauge(x, W * 0.72, 140, 74, d.temp, 0, Math.max(1, d.limitTemp), 'CHAMBER \u00b0C', fmt(d.temp), hc);

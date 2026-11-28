@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from '../vendor/three/addons/utils/BufferGeometryUtils.js';
 import { layout } from './rocket.js';
 import { Instruments, CAUTIONS } from './cockpit-instruments.js';
+import { engineGauges } from './cockpit-engine.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const EYE_DROP = 1.55;          // eye sits this far below the top of the stack
@@ -323,13 +324,13 @@ export class Cockpit {
     const vel = V(f.vel.x, f.vel.y, f.vel.z), acc = vel.clone().sub(this.prevVel).divideScalar(Math.max(dt, 1e-3)); this.prevVel.copy(vel);
     const gNow = f.phase === 'flying' ? acc.add(V(0, G0, 0)).length() / G0 : (f.phase === 'crashed' ? 0 : 1);
     this.gs += (Math.min(gNow, 20) - this.gs) * (1 - Math.exp(-dt * 4));
-    // tanks drain bottom-up off one shared fuel line: active / next / spent per tank
+    // window.CH.engine (also game.engine) from gb3-throttle; fall back to the sim if the hook is missing
+    const pub = (typeof window !== 'undefined' ? window.CH?.engine : null) || this.g.engine;
+    const { thr: act, thrCmd: cmd, on, failed, fuelFrac, state: engState } = engineGauges(e, f.fuelFrac, pub);
+    // tanks drain bottom-up off one shared fuel line: active / next / spent per tank (driven by fuelFrac)
     const items = layout(f.rocket).items.filter(it => it.d.fuelMass > 0), caps = items.map(it => it.d.fuelMass), tot = caps.reduce((a, b) => a + b, 0) || 1;
-    let burned = (1 - f.fuelFrac) * tot, activeSet = false;
+    let burned = (1 - fuelFrac) * tot, activeSet = false;
     const tanks = caps.map(c => { const used = Math.min(c, Math.max(0, burned)); burned -= c; const frac = 1 - used / c; let state = 'next'; if (frac <= 0.002) state = 'spent'; else if (!activeSet) { state = 'active'; activeSet = true; } return { frac, state }; });
-    const pub = this.g.engine || (typeof window !== 'undefined' ? window.CH?.engine : null);
-    const on = pub ? pub.on : !!e.on, cmd = pub ? pub.thrCmd : e.cmd, act = pub ? pub.thr : (e.thr * (e.on ? 1 : 0));
-    const failed = pub ? pub.failed : !!e.failed, fuelFrac = pub ? pub.fuelFrac : f.fuelFrac;
     const nE = eng?.engines || 1, live = 1 - (e.out || 0) / nE, eff = on ? e.thr * e.spool : 0;
     const thrust = eng ? eng.thrust * eff * live / 1000 : 0, mdot = eng ? eng.thrust * eff * live / (eng.isp * G0) : 0;
     const fuel = f.st?.fuel ?? 0, wind = Math.hypot(f.windNow?.x || 0, f.windNow?.z || 0);
@@ -343,7 +344,7 @@ export class Cockpit {
     };
     return {
       alt: f.alt, vs: f.vs, speed: f.speed, pitch, roll: this.roll || 0, hdg, assist: f.assist,
-      thr: act, thrCmd: cmd, heat: e.heat, temp: e.temp, limitTemp: eng?.heat?.limitTemp || 3000, engOn: on, engFailed: failed,
+      thr: act, thrCmd: cmd, heat: e.heat, temp: e.temp, limitTemp: eng?.heat?.limitTemp || 3000, engOn: on, engFailed: failed, engState,
       thrust, g: this.gs, q: f.q, wind, tanks, fuelFrac, burnLeft: mdot > 0 ? fuel / mdot : null, apex: f.apex,
       phase: f.phase, phaseLabel, moon: moon?.d ?? null, moonRate: moon?.rate ?? null, cautions, master: CAUTIONS.some(n => cautions[n]),
     };
