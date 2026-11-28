@@ -1,8 +1,9 @@
 // Golf-cart playground on the apron: a steel tabletop jump, a kicker ramp, a cone slalom, and loose
 // crates / barrels / cones that get knocked around by the cart, the player's boots and flying robot parts.
-// Owns the drivable ground height (terrain + ramps) and steps every loose rigid body.
+// Builds the ramps (their height profiles live in ground.js) and steps every loose rigid body.
 import * as THREE from 'three';
 import { height } from './terrain.js';
+import { RAMPS, groundAt, onRamp as onRampAt } from './ground.js';
 import { applyPBR } from './tex.js';
 import { prop } from './models.js';
 import { Body, bodyPair, SampleBank } from './bodies.js';
@@ -11,11 +12,6 @@ import { playerFrame } from './collide.js';
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
-// ramps: centre, forward heading (radians, 0 = +z), half width, profile u -> h over [u0, u1]
-const RAMPS = [
-  { name: 'tabletop', x: -46, z: -50, yaw: Math.PI, hw: 2.1, u0: -6.2, u1: 6.2, prof: u => { const a = Math.abs(u); return a < 2.2 ? 1.05 : 1.05 * Math.max(0, (6.2 - a) / 4.0); } },
-  { name: 'kicker', x: -46, z: -94, yaw: Math.PI, hw: 1.8, u0: -4.6, u1: 0.45, prof: u => u <= 0 ? 1.3 * Math.pow((u + 4.6) / 4.6, 1.55) : 1.3 * Math.max(0, 1 - u / 0.45) },
-];
 export const CART_PARK = { x: -15.5, z: -22.5, yaw: Math.PI };
 
 export class Course {
@@ -23,7 +19,6 @@ export class Course {
     this.g = game; this.w = game.world;
     this.group = new THREE.Group(); this.group.name = 'cartCourse'; this.w.scene.add(this.group);
     this.bodies = []; this.sounds = new SampleBank(game.audio);
-    for (const r of RAMPS) { r.fx = Math.sin(r.yaw); r.fz = Math.cos(r.yaw); }
     this.buildRamps(); this.buildCones();
   }
   async load() {
@@ -42,16 +37,9 @@ export class Course {
   }
 
   // ---------- ground: terrain plus ramp profiles ----------
-  h(x, z) {
-    let g = height(x, z);
-    for (const r of RAMPS) {
-      const dx = x - r.x, dz = z - r.z, u = dx * r.fx + dz * r.fz, v = dx * r.fz - dz * r.fx;
-      if (u > r.u0 && u < r.u1 && Math.abs(v) < r.hw) g = Math.max(g, r.prof(u));
-    }
-    return g;
-  }
+  h(x, z) { return groundAt(x, z); }   // terrain plus ramp profiles (ground.js, shared with walkers)
   n(x, z, out) { const e = 0.08, hx = this.h(x + e, z) - this.h(x - e, z), hz = this.h(x, z + e) - this.h(x, z - e); return out.set(-hx, 2 * e, -hz).normalize(); }
-  onRamp(x, z) { for (const r of RAMPS) { const dx = x - r.x, dz = z - r.z, u = dx * r.fx + dz * r.fz, v = dx * r.fz - dz * r.fx; if (u > r.u0 - 0.2 && u < r.u1 + 0.2 && Math.abs(v) < r.hw + 0.2) return true; } return false; }
+  onRamp(x, z) { return onRampAt(x, z); }
 
   buildRamps() {
     const top = new THREE.MeshStandardMaterial({ color: 0xb8bcc0, metalness: 0.85, roughness: 0.42 });

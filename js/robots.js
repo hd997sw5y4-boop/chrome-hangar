@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from '../vendor/three/addons/utils/BufferGeometryUtils.js';
 import { C, R_ROBOT, R_PLAYER, detour, resolve, hangarFrame, playerFrame } from './collide.js';
+import { groundAt, rampEdges } from './ground.js';
 
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const UP = V3(0, 1, 0);
@@ -263,7 +264,8 @@ class Robot {
   setJob(job, key = job.type) { this.job = job; this.jobKey = key; this.wp = 0; this.wait = job.type === 'patrol' ? 1 : 0; this.workT = 0; }
   // what he is doing right now, for UI and hooks: 'greeting' | 'walking' | 'working' | 'following' | 'idle'
   get state() { return this.greet ? 'greeting' : this.jobKey === 'follow' ? 'following' : this.gesture ? 'working' : this.v > 0.05 ? 'walking' : 'idle'; }
-  footIdeal(s, p, yaw, out = V3()) { return out.set(p.x + Math.cos(yaw) * 0.105 * s, this.ground, p.z - Math.sin(yaw) * 0.105 * s); }
+  // where a foot rests, on the shared ground (terrain + walkable ramps), so a planted foot sits on the slope under it
+  footIdeal(s, p, yaw, out = V3()) { const x = p.x + Math.cos(yaw) * 0.105 * s, z = p.z - Math.sin(yaw) * 0.105 * s; return out.set(x, groundAt(x, z), z); }
   fwd(yaw = this.yaw, out = V3()) { return out.set(Math.sin(yaw), 0, Math.cos(yaw)); }
   at(x, z, face, tol = 0.15) { return Math.hypot(x - this.pos.x, z - this.pos.z) < tol && (face == null || Math.abs(wrapA(face - this.yaw)) < 0.2); }
 
@@ -404,6 +406,9 @@ class Robot {
 
     this.gesture = gesture;
     this.steer(dt, goal, speed, ctx?.obs);
+    // body height follows the ground under him, eased so walking up a ramp never pops (a teleport snaps)
+    const gt = groundAt(this.pos.x, this.pos.z);
+    this.ground = Math.abs(gt - this.ground) > 0.5 ? gt : damp(this.ground, gt, 10, dt);
     this.gait(dt);
     const wk = this.walkK, ph = this.ph;
 
@@ -628,7 +633,7 @@ export class Robots {
     this.hangar.visible = w.indoor || Math.hypot(cam.x, cam.y, cam.z) < 90;
     if (!this.hangar.visible) return;
     const P = g.mode === 'build' ? g.build?.player : null;
-    const base = hangarFrame(g), wide = this.list.some(r => r.jobKey === 'follow') ? playerFrame(g) : null;
+    const base = hangarFrame(g), wide = this.list.some(r => r.jobKey === 'follow') ? playerFrame(g).concat(rampEdges()) : null;
     for (const r of this.list) {
       if (!r.enabled) continue;
       const follow = r.jobKey === 'follow';

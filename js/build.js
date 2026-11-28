@@ -5,7 +5,7 @@ import { PARTS, PART_IDS, layout, stats, stability, problems, candidates, applyP
 import { rocketMesh, partMesh, finPair, legSet, ghostify, disposeTree, initMaterials } from './parts3d.js';
 import { HANGAR, IS_TOUCH } from './env.js';
 import { DECK } from './stand.js';
-import { height } from './terrain.js';
+import { groundAt, rampEdges } from './ground.js';
 import { walk as collideWalk, playerFrame, R_PLAYER, insideHangar } from './collide.js';
 import { Tray } from './tray.js';
 import { TrayView } from './trayview.js';
@@ -230,7 +230,13 @@ export class BuildMode {
   idle() {
     this.applyCam(); this.view.update(0, null); this.w.stand.position.y = 0; this.w.stand.rotation.y = this.standYaw;
   }
-  applyCam() { const P = this.player; this.w.camera.position.set(P.x, EYE + height(P.x, P.z), P.z); this.w.camera.rotation.set(P.pitch, P.yaw, 0, 'YXZ'); }
+  // eye over the shared ground (terrain + walkable ramps); with dt it eases onto a slope so steps never pop, a teleport snaps
+  applyCam(dt = 0) {
+    const P = this.player, g = groundAt(P.x, P.z);
+    if (dt > 0 && this.eyeG != null && Math.abs(g - this.eyeG) < 1.5) this.eyeG += (g - this.eyeG) * (1 - Math.exp(-(g > this.eyeG ? 14 : 18) * dt));
+    else this.eyeG = g;
+    this.w.camera.position.set(P.x, EYE + this.eyeG, P.z); this.w.camera.rotation.set(P.pitch, P.yaw, 0, 'YXZ');
+  }
 
   camRay() {
     const cam = this.w.camera;
@@ -362,12 +368,12 @@ export class BuildMode {
     // forward = (fx, fz), right = (-fz, fx); move.x > 0 strafes right, move.y < 0 walks forward
     const nx = P.x + (fx * -inp.move.y + -fz * inp.move.x) * sp, nz = P.z + (fz * -inp.move.y + fx * inp.move.x) * sp;
     const moved = Math.hypot(nx - P.x, nz - P.z);
-    const obs = playerFrame(this.g), bots = this.g.robots?.obstacles(); if (bots?.length) obs.push(...bots);
+    const obs = playerFrame(this.g).concat(rampEdges()), bots = this.g.robots?.obstacles();   // ramp sides are too tall to step up if (bots?.length) obs.push(...bots);
     const p = collideWalk(nx, nz, R_PLAYER, obs); P.x = p.x; P.z = p.z;
     const wantIn = insideHangar(P.x, P.z, this.w.indoor ? -0.4 : 1.0);
     if (wantIn !== this.w.indoor) this.w.setIndoor(wantIn);
     if (moved > 0.001) { this.stepT += moved; if (this.stepT > 0.75) { this.stepT = 0; this.g.audio.step(); } }
-    this.applyCam(); this.view.update(dt, inp);
+    this.applyCam(dt); this.view.update(dt, inp);
     // stand: R/F raise/lower, Q/E turn (also d-pad and on-screen buttons)
     const k = c => inp.down(c) ? 1 : 0, pb = inp.pad?.b || [];
     const up = k('KeyR') + (pb[12] > 0.5) + (this.held.up ? 1 : 0) - k('KeyF') - (pb[13] > 0.5) - (this.held.down ? 1 : 0);

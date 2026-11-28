@@ -10,6 +10,7 @@
 // themselves back together magnetically after about 15 seconds.
 import * as THREE from 'three';
 import { insideHangar, playerFrame, resolve, overlaps, lineBlocked, C, R_ROBOT } from './collide.js';
+import { rampEdges } from './ground.js';
 import { Body } from './bodies.js';
 import { JOBS, aimActuators } from './robots.js';
 
@@ -133,7 +134,7 @@ export class Crew {
   }
   obsFor(r) {
     const solid = r.solid; r.solid = false;   // leave his own circle out of robots.obstacles()
-    const list = playerFrame(this.g).slice(); r.solid = solid;
+    const list = playerFrame(this.g).concat(rampEdges()); r.solid = solid;   // ramp sides are too tall for him to step up
     for (const o of this.list) if (o !== r && !o.broken && !o.seat) list.push(C(o.pos.x, o.pos.z, R_ROBOT));
     return list;
   }
