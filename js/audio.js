@@ -60,7 +60,6 @@ export class Audio {
   }
   bad() { this.tone(220, 0.16, 'triangle', 0.08, 0.1); this.tone(180, 0.2, 'triangle', 0.06, 0.1, 0.09); }
   remove() { this.tone(500, 0.18, 'sine', 0.12, 0.2, 0, 0.5); this.noise(0.12, 1800, 0.8, 0.05); }
-  step() { this.noise(0.05, 2300, 3, 0.05, 0, 'bandpass', 0.05); this.tone(90, 0.06, 'sine', 0.06, 0); }
   whoosh() { this.noise(0.5, 700, 0.7, 0.08, 0, 'bandpass', 0.3); }
   beep(hi) { this.tone(hi ? 1320 : 880, hi ? 0.5 : 0.12, 'sine', 0.12, 0.3); }
   star(i) { this.tone(880 * Math.pow(1.26, i), 0.4, 'sine', 0.12, 0.4, i * 0.18); }

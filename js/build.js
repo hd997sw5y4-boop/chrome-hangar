@@ -28,7 +28,7 @@ export class BuildMode {
     this.markMat = new THREE.MeshBasicMaterial({ color: 0x7fe7ff, transparent: true, opacity: 0.35, depthWrite: false });
     this.markHot = new THREE.MeshBasicMaterial({ color: 0xbff6ff, transparent: true, opacity: 0.95, depthWrite: false });
     this.ringGeo = new THREE.TorusGeometry(1.22, 0.035, 8, 64); this.dotGeo = new THREE.SphereGeometry(0.22, 16, 12);
-    this.ray = new THREE.Raycaster(); this.stepT = 0; this.tut = null; this.aimXY = null; this.dragging = null;
+    this.ray = new THREE.Raycaster(); this.tut = null; this.aimXY = null; this.dragging = null;
     this.held = {};
     this.view = new TrayView(this); this.trayOpen = true;
     this.wireUI();
@@ -367,12 +367,10 @@ export class BuildMode {
     const fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw);
     // forward = (fx, fz), right = (-fz, fx); move.x > 0 strafes right, move.y < 0 walks forward
     const nx = P.x + (fx * -inp.move.y + -fz * inp.move.x) * sp, nz = P.z + (fz * -inp.move.y + fx * inp.move.x) * sp;
-    const moved = Math.hypot(nx - P.x, nz - P.z);
-    const obs = playerFrame(this.g).concat(rampEdges()), bots = this.g.robots?.obstacles();   // ramp sides are too tall to step up if (bots?.length) obs.push(...bots);
+    const obs = playerFrame(this.g).concat(rampEdges()), bots = this.g.robots?.obstacles(); if (bots?.length) obs.push(...bots);   // ramp sides are too tall to step up
     const p = collideWalk(nx, nz, R_PLAYER, obs); P.x = p.x; P.z = p.z;
     const wantIn = insideHangar(P.x, P.z, this.w.indoor ? -0.4 : 1.0);
     if (wantIn !== this.w.indoor) this.w.setIndoor(wantIn);
-    if (moved > 0.001) { this.stepT += moved; if (this.stepT > 0.75) { this.stepT = 0; this.g.audio.step(); } }
     this.applyCam(dt); this.view.update(dt, inp);
     // stand: R/F raise/lower, Q/E turn (also d-pad and on-screen buttons)
     const k = c => inp.down(c) ? 1 : 0, pb = inp.pad?.b || [];
