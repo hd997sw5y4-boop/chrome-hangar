@@ -16,6 +16,7 @@ import { Goals } from './goals.js';
 import { LandingKit } from './landing.js';
 import { SlowMo } from './slowmo.js';
 import { ShardPool, WreckSettle } from './wreck.js';
+import { FlightRecorder, ReplayPlayer } from './replay.js';
 
 const $ = id => document.getElementById(id);
 // Flight views (keys 1-8, C cycles). Index order is what the picker and the saved setting use.
@@ -50,7 +51,7 @@ export class FlightMode {
     const line = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 1, 0)]);
     this.guideLine = new THREE.Line(line, new THREE.LineDashedMaterial({ color: 0x7fe7ff, dashSize: 3, gapSize: 2, transparent: true, opacity: 0.8 }));
     this.guideLine.frustumCulled = false; this.guideLine.visible = false; this.w.scene.add(this.guideLine);
-    this.health = new RocketHealth(); this.hpUI = new HealthPanel(game); this.fr = new FlightResults(game); this.goals = new Goals(game); this.kit = new LandingKit(game); this.slow = new SlowMo(); this.shards = new ShardPool(game.world.scene); this.wreckFx = new WreckSettle();
+    this.health = new RocketHealth(); this.hpUI = new HealthPanel(game); this.fr = new FlightResults(game); this.goals = new Goals(game); this.kit = new LandingKit(game); this.slow = new SlowMo(); this.shards = new ShardPool(game.world.scene); this.wreckFx = new WreckSettle(); this.rec = new FlightRecorder(); this.rp = new ReplayPlayer(game); this.fr.onReplay = () => this.startReplay();
     this.syncButtons();
   }
   syncButtons() {
@@ -88,7 +89,7 @@ export class FlightMode {
     // build the smoke depth pre-pass target and its shader now (first smoke would otherwise allocate it on the ignition frame)
     this.g.smoke.emit(SPOTS.pad.x, 0.3, SPOTS.pad.z, 0, 0, 0, 0.01, 0.12, 0, 0, 0);
     this.flash = 0; this.armT = 0; this.w.captureLocal('out', new THREE.Vector3(SPOTS.pad.x, 8, SPOTS.pad.z), [this.group]);
-    this.thr = Math.min(1, eng.heat.safeThrottle); this.touchThr = null; this.hotWarned = false; this.countdown = null; this.acc = 0; this.ended = false; this.endT = 0; this.freeEnd = null; this.fr.hide(); this.goals.enter(this.f, !m && !this.g.training?.active); this.kit.reset(this.f); this.slow.reset(); this.g.fxScale = 1; this.reached = null; this.shake = 0; this.camInit = false; this.armed = false;
+    this.thr = Math.min(1, eng.heat.safeThrottle); this.touchThr = null; this.hotWarned = false; this.countdown = null; this.acc = 0; this.ended = false; this.endT = 0; this.freeEnd = null; this.fr.hide(); this.goals.enter(this.f, !m && !this.g.training?.active); this.kit.reset(this.f); this.slow.reset(); this.g.fxScale = 1; this.rec.reset(); this.endReplay(); this.reached = null; this.shake = 0; this.camInit = false; this.armed = false;
     $('btnLaunch').classList.remove('hidden'); $('countdown').classList.add('hidden');
     this.st0 = stats(this.g.rocket, this.g.fill);
     $('mThr').querySelector('em').style.bottom = (eng.minThrottle * 100) + '%';
@@ -96,7 +97,7 @@ export class FlightMode {
     this.syncPose(); this.syncButtons(); this.setCam(this.cam, true); this.zoomT = this.zoom = 1;
     if (this.g.mission && !this.g.training?.active) this.g.prompt(IS_TOUCH ? 'Tap <b>Launch</b>. Throttle on the right, steer with the left stick.' : 'Press <b>Space</b> to launch. Shift / R throttle up, F down, WASD steer, C camera.');
   }
-  exit() { this.w.post.setDOF(false); this.w.post.setBlur(0); this.w.post.setHeat(new THREE.Vector4(0, 0, 0, 0)); this.w.setAltitude(0); this.w.followSun(SPOTS.pad); this.w.camera.near = 0.1; this.w.camera.far = 60000; this.w.camera.updateProjectionMatrix(); this.clear(); $('camPicker').classList.add('hidden'); this.w.camera.up.set(0, 1, 0); this.guideLine.visible = false; this.hpUI.detach(); this.g.prompt(null); $('landGuide').classList.add('hidden'); this.g.audio.setEngine(0); this.padRel?.reset(null); this.fr.hide(); this.goals.exit(); this.kit.hide(); this.slow.reset(); this.g.fxScale = 1; }
+  exit() { this.w.post.setDOF(false); this.w.post.setBlur(0); this.w.post.setHeat(new THREE.Vector4(0, 0, 0, 0)); this.w.setAltitude(0); this.w.followSun(SPOTS.pad); this.w.camera.near = 0.1; this.w.camera.far = 60000; this.w.camera.updateProjectionMatrix(); this.clear(); $('camPicker').classList.add('hidden'); this.w.camera.up.set(0, 1, 0); this.guideLine.visible = false; this.hpUI.detach(); this.g.prompt(null); $('landGuide').classList.add('hidden'); this.g.audio.setEngine(0); this.padRel?.reset(null); this.fr.hide(); this.goals.exit(); this.kit.hide(); this.slow.reset(); this.g.fxScale = 1; this.endReplay(); }
   st0Top() { return stats(this.g.rocket, this.g.fill).top; }
   clear() { clearTimeout(this.cdTimer); this.shards?.clear(); this.wreckFx?.clear(); if (this.wreck) { this.wreck.removeFromParent(); disposeTree(this.wreck); this.wreck = null; } if (this.crashFlash) { this.crashFlash.light.removeFromParent(); this.crashFlash = null; } if (this.group) { this.group.removeFromParent(); disposeTree(this.group); this.group = null; } }
   back() {
@@ -143,6 +144,7 @@ export class FlightMode {
 
   update(dt, blocked) {
     const inp = this.g.input, f = this.f, eng = f.eng;
+    if (this.rp.on) { this.rp.update(dt, inp); this.shards.update(dt); this.wreckFx.update(dt); return; }   // replay owns the camera; the sim is over
     if (this.fr.open) this.fr.poll(inp, dt);
     // slow-mo beat: any key / button / tap eases it out early; ts scales sim + effects time (the sim still takes fixed DT steps)
     if (this.slow.active && (inp.pressed.size || inp.taps.length || inp.mouse.clicked)) this.slow.skip();
@@ -188,7 +190,7 @@ export class FlightMode {
     // (dt is already capped by the game loop; steps per frame are capped here too so one slow frame can never snowball)
     let steps = 0;
     while (this.acc >= DT) {
-      this.copyPose(this.prev, this.cur); flightStep(f, DT); this.health.step(f, DT); this.capture(this.cur); this.goals.step(f); this.acc -= DT;
+      this.copyPose(this.prev, this.cur); flightStep(f, DT); this.health.step(f, DT); this.capture(this.cur); this.goals.step(f); this.rec.step(f); this.acc -= DT;
       if (++steps >= 8) { this.acc = 0; break; }
     }
     this.blendPose(this.acc / DT);
@@ -213,6 +215,7 @@ export class FlightMode {
   onEvent(ev) {
     const a = this.g.audio;
     const delay = this.group ? this.w.camera.position.distanceTo(this.group.position) / 343 : 0;   // sound arrives late from far away
+    const cap = { liftoff: 'Liftoff', chute: 'Chute out', chuteTorn: 'Chute torn', landed: 'Touchdown', crash: 'Impact' }[ev.type]; if (cap) this.rec.event(this.f, cap);
     if (ev.type === 'liftoff') { a.noise(1.6, 160, 0.5, 0.7, delay, 'lowpass', 0.5); this.flash = 1; this.burst(70, 26); }
     if (ev.type === 'ignite') { a.noise(0.7, 420, 0.6, 0.6, delay, 'lowpass', 0.35); a.noise(0.35, 2600, 0.7, 0.18, delay, 'bandpass', 0.2); this.flash = 0.7; this.burst(40, 18); }
     if (ev.type === 'cutoff') a.coolTicks();
@@ -226,7 +229,7 @@ export class FlightMode {
     if (p.lost === 'out') this.flame?.setOut?.(p.nz);
     if (p.lost !== 'detach' || !this.group) return;
     const f = this.f;
-    this.beat(f.pos);
+    this.beat(f.pos); this.rec.event(f, p.name + ' torn off');
     if (p.kind === 'fins') { const s = f.rocket.stack[p.i]; if (s) delete s.fins; }
     if (p.kind === 'legs') f.legs = false;
     const tmp = new THREE.Group(); this.w.scene.add(tmp);
@@ -270,6 +273,15 @@ export class FlightMode {
     this.g.audio.boom(Math.min(1, 0.45 + k * 0.55)); this.g.audio.setEngine(0);
     this.endFlight('crash', kind);
   }
+  // Replay (results panel): fly a fresh copy of the build along the recorded path, then come back to the same results panel
+  startReplay() {
+    if (this.rp.on || this.rec.n < 2) return;
+    const mesh = rocketMesh(this.g.rocket), eng = PARTS[this.g.rocket.engine], lite = this.w.quality === 'phone' || this.w.quality === 'low';
+    const flame = eng && mesh.userData.engine ? attachFlames(mesh.userData.engine, eng.color, lite) : null;
+    this.fr.suspend();
+    this.rp.start(this.rec, mesh, flame, this.st0.length, eng, () => { disposeTree(mesh); this.fr.resume(); });
+  }
+  endReplay() { const m = this.rp.mesh; this.rp.abort(); if (m) disposeTree(m); }
   brokeText() { const H = this.health; return H.tier === 3 ? 'Whole vehicle lost' : H.broken?.length ? 'Broke: ' + H.broken.join(', ') : ''; }
   endFlight(how, kind) {
     if (this.ended) return; this.ended = true; this.endT = 0; this.resultsShown = false;

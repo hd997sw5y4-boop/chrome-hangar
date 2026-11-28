@@ -18,11 +18,12 @@ export class FlightResults {
     const el = this.el = document.createElement('div');
     el.id = 'fResults'; el.className = 'modal hidden';
     el.innerHTML = '<div class="card"><h2 id="frTitle"></h2><div id="frBanner" class="hidden"></div><div id="frStars"></div><p id="frReason"></p><p id="frBroke" class="hidden"></p><p id="frHint" class="hidden"></p>' +
-      '<div id="frStats"></div><div class="row"><button id="frHangar"></button><button id="frAgain" class="go"></button></div></div>';
+      '<div id="frStats"></div><div class="row"><button id="frHangar"></button><button id="frReplay"></button><button id="frAgain" class="go"></button></div></div>';
     document.body.appendChild(el);
     this.$ = id => el.querySelector('#' + id);
     this.$('frAgain').onclick = () => this.choose('again');
     this.$('frHangar').onclick = () => this.choose('hangar');
+    this.$('frReplay').onclick = () => this.replay();
     el.querySelectorAll('button').forEach(b => b.addEventListener('mouseenter', () => this.g.audio.hover()));
   }
   // 1-3 stars: [met, label] per star. goal (optional) is { text, done, bonusText, bonusDone } from the mission goals.
@@ -62,6 +63,7 @@ export class FlightResults {
     const pad = g.input.lastDevice === 'pad', kb = !pad && g.input.lastDevice !== 'touch';
     $('frAgain').innerHTML = 'Fly again' + (pad ? ' <kbd>✕</kbd>' : kb ? ' <kbd>Enter</kbd>' : '');
     $('frHangar').innerHTML = 'Back to hangar' + (pad ? ' <kbd>○</kbd>' : kb ? ' <kbd>Esc</kbd>' : '');
+    $('frReplay').innerHTML = 'Replay' + (pad ? ' <kbd>□</kbd>' : kb ? ' <kbd>R</kbd>' : ''); $('frReplay').classList.toggle('hidden', !flew);
     g.input.exitLock(); document.activeElement?.blur?.();
     this.timers.forEach(clearTimeout); this.timers = [];
     const spans = $('frStars').querySelectorAll('span');
@@ -78,7 +80,12 @@ export class FlightResults {
     if (t0 < 0.6) { const b = this.$('frAgain'); b.focus({ preventScroll: true }); b.scrollIntoView?.({ block: 'nearest' }); }
     if (inp.hit('Enter') || inp.hit('NumpadEnter') || inp.hit('Space') || inp.hit('Pad0')) this.choose('again');
     else if (inp.hit('Escape') || inp.hit('KeyB') || inp.hit('Backspace') || inp.hit('Pad1')) this.choose('hangar');
+    else if (inp.hit('KeyR') || inp.hit('Pad2')) this.replay();
   }
+  // Replay: the panel steps aside (results stay "open" for input blocking) and comes back as it was afterwards
+  replay() { if (!this.open || this.done || !this.onReplay) return; this.g.audio.tap(); this.onReplay(); }
+  suspend() { this.el.classList.add('hidden'); this.open = false; this.g.resultsOpen = true; }
+  resume() { this.el.classList.remove('hidden'); this.open = true; this.t = 0; this.done = false; this.g.resultsOpen = true; }
   choose(what) {
     if (this.done || !this.open) return; this.done = true;
     const g = this.g; g.audio.tap(); this.hide();

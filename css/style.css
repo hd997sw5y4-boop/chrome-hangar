@@ -208,3 +208,9 @@ body.intro #hud,body.intro #menu,body.intro #buildUI,body.intro #testUI,body.int
 }
 #frStars small b.soft{color:#7dffa8;font-weight:700}
 #frBroke{margin:-2px 0 6px;color:#ff9a7a;font-size:13px;font-weight:600}
+#replayBar{position:absolute;left:50%;bottom:calc(14px + var(--sb));transform:translateX(-50%);display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center;background:var(--glass);border:1px solid var(--line);border-radius:16px;padding:8px 14px;z-index:31;max-width:calc(100% - 20px)}
+#replayBar b{color:var(--accent);font-size:12px;letter-spacing:.12em;text-transform:uppercase}#replayBar span{font-variant-numeric:tabular-nums;font-size:13px;min-width:90px}
+#replayBar i{display:block;width:160px;height:4px;border-radius:2px;background:rgba(255,255,255,.12);overflow:hidden}#replayBar em{display:block;height:100%;width:0;background:var(--accent)}
+#replayBar button{min-height:32px;padding:4px 12px;font-size:13px}#replayBar kbd{font:inherit;font-size:11px;color:var(--dim);border:1px solid var(--line);border-radius:5px;padding:0 5px;margin-left:6px}
+#replayBar small{flex-basis:100%;text-align:center;color:#ffd34d;font-size:13px;min-height:1em}
+#flightUI.replaying #fBtns,#flightUI.replaying #landGuide,#flightUI.replaying #goalHud,#flightUI.replaying #thrTouch{display:none!important}
