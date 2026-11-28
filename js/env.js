@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { HDRLoader } from '../vendor/three/addons/loaders/HDRLoader.js';
 import { initMaterials, partMesh, setRocketEnv } from './parts3d.js';
 import { PARTS } from './rocket.js';
-import { applyPBR, setTexTier } from './tex.js';
+import { applyPBR, setTexTier, tileRepeat, FLOOR_TILE } from './tex.js';
 import { setModelTier } from './models.js';
 import { Outdoor, bake } from './outdoor.js';
 import './haze.js';   // height-integrated blue haze for every fogged material
@@ -59,8 +59,8 @@ export class World {
     this.scene.fog = new THREE.FogExp2(0xa9bcd6, 0.00004); // density = sea-level haze extinction (1/m), thinned with height in haze.js
     this.pmrem = new THREE.PMREMGenerator(r);
     this.envs = {};
-    this.M = initMaterials();
     setTexTier(quality, r); setModelTier(quality);
+    this.M = initMaterials();
     this.wind = { x: 2, z: 0.6 };
     this.earth = new Earth(this); this.post = new Post(this); this._rt = performance.now();
     this.buildLights(); this.buildHangar(); this.buildOutside(); this.buildTestStand(); this.buildPad();
@@ -177,6 +177,7 @@ export class World {
   applyQuality(q, w, h, aa) {
     const p = PRESETS[q] || PRESETS.high;
     this.quality = q; this.preset = p;
+    setTexTier(q, this.renderer); setModelTier(q);
     this.renderer.setPixelRatio(this._video ? videoPixelRatio(this._video, q, p) : Math.min(window.devicePixelRatio || 1, p.pr));
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.shadowMap.autoUpdate = false;
@@ -324,7 +325,7 @@ export class World {
 
   buildHangar() {
     const H = HANGAR, s = this.scene, g = this.hangar = new THREE.Group(); s.add(g);
-    // sealed concrete floor (no pit — the assembly stand is bolted flush to the slab)
+    // painted concrete shop floor (no pit — the assembly stand is bolted flush to the slab)
     const floorTex = canvasTex(1024, 1024, (c, w, h) => {
       c.fillStyle = '#8d8f91'; c.fillRect(0, 0, w, h);
       for (let i = 0; i < 9000; i++) { const v = 110 + rnd() * 60 | 0; c.fillStyle = `rgba(${v},${v},${v - 4},${0.08 + rnd() * 0.15})`; c.fillRect(rnd() * w, rnd() * h, 2 + rnd() * 3, 2 + rnd() * 3); }
@@ -334,7 +335,7 @@ export class World {
     floorTex.repeat.set(1 / 6, 1 / 6);
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(H.x * 2, H.z * 2), new THREE.MeshStandardMaterial({ map: floorTex, color: 0xb8b8b8, roughness: 0.3, metalness: 0.0, envMapIntensity: 0.8 }));
     floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; g.add(floor); this.floor = floor;
-    applyPBR(floor.material, 'hangar_concrete_floor', [1 / 5, 1 / 5], { normalScale: 0.5 }).then(m => { m.color.set(0xd2d2d0); m.roughness = 0.42; m.envMapIntensity = 1.1; }).catch(() => {});   // sealed, lightly polished: soft lamp streaks, no mirror
+    applyPBR(floor.material, 'painted_concrete_02', tileRepeat(H.x * 2, H.z * 2, FLOOR_TILE), { normalScale: 0.8 }).then(m => { m.color.set(0xffffff); m.roughness = 1; m.envMapIntensity = 0.7; }).catch(() => {});   // 4 m tiles across the 44×32 m slab, no stretch
     // square steel assembly stand, floor markings, uplights and the fold-out work tower
     buildAssemblyStand(this, g, H, this.M, this.quality === 'phone' || this.quality === 'low');
     this.standDeck = STAND_DECK; this.standHalf = STAND_HALF;

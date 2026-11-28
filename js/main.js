@@ -293,24 +293,36 @@ class Game {
   }
   showSettings() {
     const s = this.settings;
+    fillVideo(s);
     const sl = (k, label, min, max, st) => `<div class="setRow"><span>${label}</span><input type="range" data-k="${k}" min="${min}" max="${max}" step="${st}" value="${s[k]}"></div>`;
     const ck = (k, label) => `<div class="setRow"><span>${label}</span><button data-t="${k}" class="${s[k] ? 'on' : ''}">${s[k] ? 'On' : 'Off'}</button></div>`;
-    const html = `${sl('master', 'Master volume', 0, 1, 0.05)}${sl('music', 'Music volume', 0, 1, 0.05)}${sl('sfx', 'Effects volume', 0, 1, 0.05)}
-      ${sl('sens', 'Look sensitivity', 0.3, 2.5, 0.05)}${ck('invertY', 'Invert look up/down')}${ck('assist', 'Hold-upright assist')}${ck('guide', 'Landing guide')}${ck('healthPanel', 'Rocket health panel (P)')}
-      <div class="setRow"><span>Time of day</span><select id="selSky">${Object.entries(SKIES).map(([k, p]) => `<option value="${k}" ${k === s.timeOfDay ? 'selected' : ''}>${p.label}</option>`).join('')}</select></div>
+    const open = s.settingsSec || 'audio';
+    const sec = (id, title, body) => `<div class="setSec${open === id ? ' open' : ''}" data-sec="${id}"><button type="button" class="setSecHead" data-sec="${id}" aria-expanded="${open === id ? 'true' : 'false'}">${title}</button><div class="setSecBody">${body}</div></div>`;
+    const html = sec('audio', 'Audio', `${sl('master', 'Master volume', 0, 1, 0.05)}${sl('music', 'Music volume', 0, 1, 0.05)}${sl('sfx', 'Effects volume', 0, 1, 0.05)}`)
+      + sec('controls', 'Controls', `${sl('sens', 'Look sensitivity', 0.3, 2.5, 0.05)}${ck('invertY', 'Invert look up/down')}${ck('assist', 'Hold-upright assist')}${ck('guide', 'Landing guide')}${ck('healthPanel', 'Rocket health panel (P)')}`)
+      + sec('graphics', 'Graphics', `<div class="setRow"><span>Time of day</span><select id="selSky">${Object.entries(SKIES).map(([k, p]) => `<option value="${k}" ${k === s.timeOfDay ? 'selected' : ''}>${p.label}</option>`).join('')}</select></div>
       <div class="setRow"><span>Graphics</span><select id="selQ">${Object.entries(PRESETS).map(([k, p]) => `<option value="${k}" ${k === s.quality ? 'selected' : ''}>${p.label}</option>`).join('')}</select></div>
       <div class="setRow"><span>Anti-aliasing</span><select id="selAA">${Object.entries(AA_MODES).map(([k, p]) => `<option value="${k}" ${k === (s.aa || defaultAA(s.quality)) ? 'selected' : ''}>${p.label}</option>`).join('')}</select></div>
-      ${videoRows(s)}
-      <div class="row"><button id="resetDefaults">Reset to defaults</button><button id="resetProgress">Reset mission progress</button></div>`;
+      ${videoRows(s)}`)
+      + `<div class="row"><button id="resetDefaults">Reset to defaults</button><button id="resetProgress">Reset mission progress</button></div>`;
     this.openPanel('Settings', html);
     const pb = $('panelBody');
     pb.querySelectorAll('input[type=range][data-k]').forEach(i => i.oninput = () => { s[i.dataset.k] = +i.value; this.applySettingsLight(); });
     pb.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { s[b.dataset.t] = !s[b.dataset.t]; this.applySettingsLight(); this.audio.tap(); this.showSettings(); });
+    pb.querySelectorAll('.setSecHead').forEach(b => b.onclick = () => {
+      const id = b.dataset.sec;
+      pb.querySelectorAll('.setSec').forEach(el => {
+        const on = el.dataset.sec === id;
+        el.classList.toggle('open', on);
+        el.querySelector('.setSecHead')?.setAttribute('aria-expanded', on ? 'true' : 'false');
+      });
+      s.settingsSec = id; LS.set('settings', s); this.audio.tap(); b.focus();
+    });
     $('selQ').onchange = e => { s.quality = e.target.value; s.aa = defaultAA(s.quality); this.applySettings(); this.showSettings(); };
     $('selAA').onchange = e => { s.aa = e.target.value; this.applySettings(); };
     bindVideoRows(s, rebuild => { if (rebuild) this.applySettings(); else this.applyVideoLive(); });
     $('selSky').onchange = e => this.setTimeOfDay(e.target.value);
-    $('resetDefaults').onclick = () => { this.settings = { ...DEFAULTS() }; fillVideo(this.settings); this.settings.aa = defaultAA(this.settings.quality); this.applySettings(); this.flight.syncButtons(); this.showSettings(); };
+    $('resetDefaults').onclick = () => { const keep = this.settings.settingsSec; this.settings = { ...DEFAULTS() }; fillVideo(this.settings); this.settings.aa = defaultAA(this.settings.quality); if (keep) this.settings.settingsSec = keep; this.applySettings(); this.flight.syncButtons(); this.showSettings(); };
     $('resetProgress').onclick = () => { if (confirm('Reset all mission stars?')) { this.progress = { stars: {}, best: {} }; this.saveState(); this.build.makeTray(); this.toast('Progress reset'); } };
   }
   setTimeOfDay(k) {

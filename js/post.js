@@ -119,10 +119,12 @@ export class Post {
     this.dispose();
     this.tier = q === 'low' ? 0 : (q === 'phone' || q === 'medium') ? 1 : 2;
     this.aa = AA_MODES[aa] ? aa : defaultAA(q);
+    const bloomAmt = Math.max(0, +(this.w._video?.bloom) || 0);
     r.toneMapping = THREE.ACESFilmicToneMapping;
     // Low with AA off draws straight to the canvas (no composer). Every other combo needs the chain
     // so FXAA/SMAA have a texture, and so canvas MSAA is not relied on (the renderer is created without it).
-    this.enabled = this.tier > 0 || this.aa !== 'off';
+    // A Bloom slider above 0 also needs the chain, even on Low / Phone with AA off.
+    this.enabled = this.tier > 0 || this.aa !== 'off' || bloomAmt > 0;
     if (!this.enabled) return;
     const pr = r.getPixelRatio(), W = Math.max(1, w * pr | 0), H = Math.max(1, h * pr | 0);
     const useMSAA = this.aa === 'msaa-smaa' && r.capabilities.isWebGL2;
@@ -141,13 +143,15 @@ export class Post {
       const bk = this.bokeh = new BokehPass(this.w.scene, this.w.camera, { focus: 30, aperture: 0.00012, maxblur: 0.008 });
       bk.enabled = false; C.addPass(bk);
     }
-    if (this.tier > 0) {
-      const bloom = this.bloom = new UnrealBloomPass(new THREE.Vector2(W, H).multiplyScalar(this.tier === 2 ? 0.5 : 0.35), this.tier === 2 ? 0.28 : 0.24, 0.5, 4.0);   // only real light sources (flames, lamps, sun glints) cross the threshold
+    if (this.tier > 0 || bloomAmt > 0) {
+      // strength comes from the Bloom slider (0 = pass disabled). Resolution stays lower on Medium/Phone.
+      const bloom = this.bloom = new UnrealBloomPass(new THREE.Vector2(W, H).multiplyScalar(this.tier === 2 ? 0.5 : 0.35), bloomAmt, 0.5, 4.0);   // only real light sources (flames, lamps, sun glints) cross the threshold
       // energy-conserving threshold: only the light ABOVE the threshold blooms, capped, so chrome glints glow without a white-out
       bloom.materialHighPassFilter.fragmentShader = `uniform sampler2D tDiffuse; uniform float luminosityThreshold; varying vec2 vUv;
         void main(){ vec3 c = texture2D(tDiffuse, vUv).rgb; float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
           float k = max(0.0, l - luminosityThreshold) / max(l, 1e-4); gl_FragColor = vec4(min(c * k, vec3(6.0)), 1.0); }`;
       bloom.materialHighPassFilter.needsUpdate = true;
+      bloom.enabled = bloomAmt > 0;
       C.addPass(bloom);
     }
     // SMAA in this three.js build (r187) works in linear-sRGB and must run before OutputPass. The old
@@ -177,6 +181,15 @@ export class Post {
     }
   }
   // per-frame inputs from the modes
+  // Live Bloom slider: 0 turns the pass off. If the composer was skipped (Low + AA off), rebuild it.
+  applyBloom(s) {
+    const amt = Math.max(0, +(s?.bloom) || 0);
+    if (amt > 0 && !this.bloom) {
+      this.setup(this.w.quality, this.w.w || 1, this.w.h || 1, s.aa || this.aa || defaultAA(this.w.quality));
+      return;
+    }
+    if (this.bloom) { this.bloom.enabled = amt > 0; this.bloom.strength = amt; }
+  }
   setDOF(on, focus = 30, aperture = 0.00012) { this.dof.on = on; if (this.bokeh) { this.bokeh.enabled = on; this.bokeh.uniforms.focus.value = focus; this.bokeh.uniforms.aperture.value = aperture; } }
   setBlur(k) { if (this.grade) this.grade.uniforms.uBlur.value = k; }
   setHeat(v4, dir) { if (this.grade) { this.grade.uniforms.uHeat.value.copy(v4); if (dir) this.grade.uniforms.uHeatDir.value.copy(dir); } }

@@ -1,8 +1,16 @@
-// PBR texture sets (Poly Haven, CC0) packed as WebP: <name>_{diff,nor,arm}_{1k,2k}.webp.
+// PBR texture sets packed as WebP: <name>_{diff,nor,arm}_{1k,2k}.webp (sources are 2K JPG, CC0).
 // Phone/Low: 1K colour + ARM only (no normal maps). Medium: 1K with normals. High/Ultra: 2K where shipped.
+// ARM is AO in R, roughness in G, metalness in B. Sets are loaded once and shared (cloned per material for tiling).
 import * as THREE from 'three';
 
-const HAS2K = new Set(['hangar_concrete_floor', 'corrugated_iron_02', 'concrete_floor_worn_001', 'diamond_plate']);
+const HAS2K = new Set(['painted_concrete_02', 'metal059a', 'corrugated_iron_02', 'concrete_floor_worn_001', 'diamond_plate']);
+
+// Real-world coverage of the source scans, used so tiles do not stretch across a part or the slab.
+export const METAL_TILE = 1;     // ambientCG Metal059A, ~1 m
+export const FLOOR_TILE = 4;     // Poly Haven painted_concrete_02, 4 m
+export function tileRepeat(sizeU, sizeV, tile) {
+  return [Math.max(0.25, sizeU / tile), Math.max(0.25, sizeV / tile)];
+}
 const loader = new THREE.TextureLoader();
 const cache = new Map();
 let tier = 'high', maxAniso = 8;
