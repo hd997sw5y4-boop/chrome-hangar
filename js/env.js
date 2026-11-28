@@ -171,6 +171,7 @@ export class World {
     this.scene.traverse(o => { if (o.material) [].concat(o.material).forEach(m => m.needsUpdate = true); });
     this.resize(w, h);
     this.post.setup(q, w, h, aa);
+    this.warmup();
     if (p.hdri !== (this.hdriSize || '1k') && this.envs.hangar) this.loadHDRIs(p.hdri, this.skyKey).catch(() => {});
   }
   resize(w, h) {
@@ -178,6 +179,11 @@ export class World {
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
     this.post?.resize(w, h);
+  }
+  // Compile the active programs so the first real frame does not hitch on shader compile.
+  warmup() {
+    const r = this.renderer;
+    try { r.compile(this.scene, this.camera); } catch (_) {}
   }
   // headless / settings diagnostics: AA config plus last-frame draw stats
   gfxInfo() {

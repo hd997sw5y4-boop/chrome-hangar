@@ -80,6 +80,7 @@ class Game {
       this.setMode('build');
       this.showMenu(true);
     }
+    this.world.warmup();
     window.__chGfx = () => this.world.gfxInfo();
     this.loop();
     if (this.settings.quality === 'ultra') this.world.loadHDRIs('2k').catch(() => {});
