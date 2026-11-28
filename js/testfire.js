@@ -65,7 +65,7 @@ export class TestMode {
       if (inp.hit('Space') || inp.hit('Pad0')) this.toggleFire();
       if (inp.hit('KeyB') || inp.hit('Pad1')) { this.g.travel('build'); return; }
       const k = c => inp.down(c) ? 1 : 0;
-      const d = k('ShiftLeft') + k('KeyR') - k('KeyF');
+      const d = k('ShiftLeft') + k('ShiftRight') + k('KeyR') - k('KeyF') - k('ControlLeft') - k('ControlRight');
       if (d) { this.thr = THREE.MathUtils.clamp(this.thr + d * 0.6 * dt, 0, 1); $('tThr').value = Math.round(this.thr * 100); }
       if (inp.hit('KeyZ')) { this.thr = 1; $('tThr').value = 100; } if (inp.hit('KeyX')) { s.e.cmd = 0; this.updateFireBtn(); }
       if (inp.padThrottle != null && inp.pad && inp.pad.b[7] > 0.04) { this.thr = inp.pad.b[7]; $('tThr').value = Math.round(this.thr * 100); }
