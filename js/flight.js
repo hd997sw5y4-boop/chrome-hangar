@@ -14,6 +14,7 @@ import { HealthPanel } from './healthui.js';
 import { FlightResults } from './flightresults.js';
 import { Goals } from './goals.js';
 import { LandingKit } from './landing.js';
+import { SlowMo } from './slowmo.js';
 
 const $ = id => document.getElementById(id);
 // Flight views (keys 1-8, C cycles). Index order is what the picker and the saved setting use.
@@ -48,7 +49,7 @@ export class FlightMode {
     const line = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 1, 0)]);
     this.guideLine = new THREE.Line(line, new THREE.LineDashedMaterial({ color: 0x7fe7ff, dashSize: 3, gapSize: 2, transparent: true, opacity: 0.8 }));
     this.guideLine.frustumCulled = false; this.guideLine.visible = false; this.w.scene.add(this.guideLine);
-    this.health = new RocketHealth(); this.hpUI = new HealthPanel(game); this.fr = new FlightResults(game); this.goals = new Goals(game); this.kit = new LandingKit(game);
+    this.health = new RocketHealth(); this.hpUI = new HealthPanel(game); this.fr = new FlightResults(game); this.goals = new Goals(game); this.kit = new LandingKit(game); this.slow = new SlowMo();
     this.syncButtons();
   }
   syncButtons() {
@@ -86,7 +87,7 @@ export class FlightMode {
     // build the smoke depth pre-pass target and its shader now (first smoke would otherwise allocate it on the ignition frame)
     this.g.smoke.emit(SPOTS.pad.x, 0.3, SPOTS.pad.z, 0, 0, 0, 0.01, 0.12, 0, 0, 0);
     this.flash = 0; this.armT = 0; this.w.captureLocal('out', new THREE.Vector3(SPOTS.pad.x, 8, SPOTS.pad.z), [this.group]);
-    this.thr = Math.min(1, eng.heat.safeThrottle); this.touchThr = null; this.hotWarned = false; this.countdown = null; this.acc = 0; this.ended = false; this.endT = 0; this.freeEnd = null; this.fr.hide(); this.goals.enter(this.f, !m && !this.g.training?.active); this.kit.reset(this.f); this.reached = null; this.shake = 0; this.camInit = false; this.armed = false;
+    this.thr = Math.min(1, eng.heat.safeThrottle); this.touchThr = null; this.hotWarned = false; this.countdown = null; this.acc = 0; this.ended = false; this.endT = 0; this.freeEnd = null; this.fr.hide(); this.goals.enter(this.f, !m && !this.g.training?.active); this.kit.reset(this.f); this.slow.reset(); this.g.fxScale = 1; this.reached = null; this.shake = 0; this.camInit = false; this.armed = false;
     $('btnLaunch').classList.remove('hidden'); $('countdown').classList.add('hidden');
     this.st0 = stats(this.g.rocket, this.g.fill);
     $('mThr').querySelector('em').style.bottom = (eng.minThrottle * 100) + '%';
@@ -94,7 +95,7 @@ export class FlightMode {
     this.syncPose(); this.syncButtons(); this.setCam(this.cam, true); this.zoomT = this.zoom = 1;
     if (this.g.mission && !this.g.training?.active) this.g.prompt(IS_TOUCH ? 'Tap <b>Launch</b>. Throttle on the right, steer with the left stick.' : 'Press <b>Space</b> to launch. Shift / R throttle up, F down, WASD steer, C camera.');
   }
-  exit() { this.w.post.setDOF(false); this.w.post.setBlur(0); this.w.post.setHeat(new THREE.Vector4(0, 0, 0, 0)); this.w.setAltitude(0); this.w.followSun(SPOTS.pad); this.w.camera.near = 0.1; this.w.camera.far = 60000; this.w.camera.updateProjectionMatrix(); this.clear(); $('camPicker').classList.add('hidden'); this.w.camera.up.set(0, 1, 0); this.guideLine.visible = false; this.hpUI.detach(); this.g.prompt(null); $('landGuide').classList.add('hidden'); this.g.audio.setEngine(0); this.padRel?.reset(null); this.fr.hide(); this.goals.exit(); this.kit.hide(); }
+  exit() { this.w.post.setDOF(false); this.w.post.setBlur(0); this.w.post.setHeat(new THREE.Vector4(0, 0, 0, 0)); this.w.setAltitude(0); this.w.followSun(SPOTS.pad); this.w.camera.near = 0.1; this.w.camera.far = 60000; this.w.camera.updateProjectionMatrix(); this.clear(); $('camPicker').classList.add('hidden'); this.w.camera.up.set(0, 1, 0); this.guideLine.visible = false; this.hpUI.detach(); this.g.prompt(null); $('landGuide').classList.add('hidden'); this.g.audio.setEngine(0); this.padRel?.reset(null); this.fr.hide(); this.goals.exit(); this.kit.hide(); this.slow.reset(); this.g.fxScale = 1; }
   st0Top() { return stats(this.g.rocket, this.g.fill).top; }
   clear() { clearTimeout(this.cdTimer); if (this.crashFlash) { this.crashFlash.light.removeFromParent(); this.crashFlash = null; } if (this.group) { this.group.removeFromParent(); disposeTree(this.group); this.group = null; } }
   back() {
@@ -142,6 +143,9 @@ export class FlightMode {
   update(dt, blocked) {
     const inp = this.g.input, f = this.f, eng = f.eng;
     if (this.fr.open) this.fr.poll(inp, dt);
+    // slow-mo beat: any key / button / tap eases it out early; ts scales sim + effects time (the sim still takes fixed DT steps)
+    if (this.slow.active && (inp.pressed.size || inp.taps.length || inp.mouse.clicked)) this.slow.skip();
+    const ts = this.slow.update(dt), sdt = dt * ts; this.g.fxScale = ts;
     if (!blocked) {
       if (inp.hit('Space') || inp.hit('Pad0')) this.launch();
       if (inp.hit('KeyC') || inp.hit('Pad3') || inp.hit('Pad15')) this.nextCam(1);
@@ -179,7 +183,7 @@ export class FlightMode {
     }
     if (this.armed && !this.ended) f.e.cmd = this.thr;
     // fixed-rate physics
-    this.acc += dt;
+    this.acc += sdt;
     // (dt is already capped by the game loop; steps per frame are capped here too so one slow frame can never snowball)
     let steps = 0;
     while (this.acc >= DT) {
@@ -195,9 +199,9 @@ export class FlightMode {
     if (m && f.alt > RANGE_TOP && !this.ended) this.endFlight('range');
     if (this.crashFlash) { const c = this.crashFlash; c.t += dt / 0.33; c.light.intensity = 40000 * Math.max(0, 1 - c.t); }
     if (this.goals.frame(f, dt)) { this.g.toast('Goal complete: ' + this.goals.goal.text); this.g.audio.star(0); this.g.audio.star(1); }
-    this.syncPose(dt);
-    this.kit.update(dt, f, this.rs, this.st0.top, this.group);
-    this.visuals(dt);
+    this.syncPose(sdt);
+    this.kit.update(sdt, f, this.rs, this.st0.top, this.group);
+    this.visuals(sdt);
     this.hud();
     this.camera(dt);
     this.hpUI.update(dt, this.g.audio);
@@ -220,12 +224,18 @@ export class FlightMode {
     if (p.lost === 'out') this.flame?.setOut?.(p.nz);
     if (p.lost !== 'detach' || !this.group) return;
     const f = this.f;
+    this.beat(f.pos);
     if (p.kind === 'fins') { const s = f.rocket.stack[p.i]; if (s) delete s.fins; }
     if (p.kind === 'legs') f.legs = false;
     const tmp = new THREE.Group(); this.w.scene.add(tmp);
     for (const pk of this.group.userData.picks) if (pk.t.type === p.kind && pk.t.index === p.i && pk.obj.parent) tmp.attach(pk.obj);
     this.g.debris.explode(tmp, new THREE.Vector3(f.vel.x, f.vel.y, f.vel.z), new THREE.Vector3(f.pos.x, f.pos.y, f.pos.z));
     tmp.removeFromParent(); this.g.audio.noise(0.25, 1400, 1, 0.2, 0, 'bandpass', 0.2);
+  }
+  // slow-mo + framing shot when something leaves the rocket in flight (skipped once the flight is over)
+  beat(at) {
+    const f = this.f; if (this.ended || f.phase !== 'flying') return;
+    if (this.slow.trigger(this.tmp.d.set(at.x, at.y, at.z), f.vel, this.w.camera)) this.g.audio.tone(70, 0.9, 'sine', 0.18, 0, 0, 0.5);
   }
   crash(kind) {
     const f = this.f;
@@ -447,6 +457,7 @@ export class FlightMode {
       const t = this.dir.t, p = orbitPos(R0 * 1.4, this.orbit.yaw + t * 0.25 + this.dir.i, 0.25 + 0.1 * Math.sin(t * 0.5)); p.y = Math.max(3, p.y);
       c.fov = 50; place(p, tgt, 4);
     }
+    this.slow.frame(c, tgt, L);
     const near = Math.max(view === 4 || view === 5 ? 0.1 : 0.4, Math.min(5, f.alt / 400)), far = Math.max(60000, f.alt * 2.5);
     c.near = near; c.far = far; c.updateProjectionMatrix();
     if (this.shake > 0.001) {   // layered shake: low rumble sway + high-frequency buzz, scaled by distance (zoomed lenses shake less in world units)

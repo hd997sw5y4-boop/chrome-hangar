@@ -353,11 +353,12 @@ class Game {
         this.hands?.frame(dt, paused || driving);
         if (this.modeObj) { if (!paused && !held) this.modeObj.update(dt, this.resultsOpen); else if (paused) this.modeObj.idle?.(dt); }
       }
-      this.smoke.update(dt, this.windNow || { x: 0, z: 0 }, this.world.h * this.world.renderer.getPixelRatio() / Math.tan(this.world.camera.fov * Math.PI / 360) / 2);
+      const fxDt = dt * (this.fxScale ?? 1);   // flight slow-mo beat slows the particles with the sim (1 otherwise)
+      this.smoke.update(fxDt, this.windNow || { x: 0, z: 0 }, this.world.h * this.world.renderer.getPixelRatio() / Math.tan(this.world.camera.fov * Math.PI / 360) / 2);
       this.robots?.update(dt);
       this.cart?.late(dt);
       this.world.assembly?.update(dt);
-      this.debris.update(dt); this.sparks.update(dt, this.world.h * this.world.renderer.getPixelRatio() / Math.tan(this.world.camera.fov * Math.PI / 360) / 2);
+      this.debris.update(fxDt); this.sparks.update(fxDt, this.world.h * this.world.renderer.getPixelRatio() / Math.tan(this.world.camera.fov * Math.PI / 360) / 2);
       if (this.windNow) this.world.wind = this.windNow;
       this.world.update(dt);
       this.world.render();
