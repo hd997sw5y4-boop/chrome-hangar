@@ -403,6 +403,7 @@ export class FlightMode {
     const bar = (el, key, pct) => { const v = pct + '%'; if (H[key] !== v) { H[key] = v; el.style.height = v; } };
     txt('fAlt', fmt(f.alt)); txt('fVs', f.vs.toFixed(1)); txt('fSpd', fmt(f.speed));
     txt('fTilt', fmt(f.tilt)); txt('fWind', Math.hypot(f.windNow.x, f.windNow.z).toFixed(1));
+    this.windArrow(f);
     const q = x => Math.round(x * 10) / 10;
     bar(this.thrI ??= $('mThr').querySelector('i'), 'thr', q(this.thr * 100)); bar(this.thrTI ??= $('thrTouch').querySelector('i'), 'thrT', q(this.thr * 100));
     bar(this.fuelI ??= $('mFuel').querySelector('i'), 'fuel', q(f.fuelFrac * 100)); bar(this.heatI ??= $('mHeat').querySelector('i'), 'heat', q(Math.min(100, f.e.heat)));
@@ -421,6 +422,16 @@ export class FlightMode {
       pos.setXYZ(0, f.origin.x, f.origin.y, f.origin.z); pos.setXYZ(1, SPOTS.pad.x, 0.2, SPOTS.pad.z); pos.needsUpdate = true;
       this.guideLine.computeLineDistances();
     }
+  }
+  // wind arrow next to the readout: which way the air is moving, relative to the view (up = away from the camera). Quantised to 5
+  // degrees and only written when it changes, so it is a handful of style writes a second at most.
+  windArrow(f) {
+    const el = this.windEl ??= $('fWindArrow'), H = this.hudCache, wx = f.windNow.x, wz = f.windNow.z, s = Math.hypot(wx, wz);
+    const on = s > 0.15; if (H.wOn !== on) { H.wOn = on; el.classList.toggle('hidden', !on); }
+    if (!on) return;
+    const fw = this.tmp.c; this.w.camera.getWorldDirection(fw); const fl = Math.hypot(fw.x, fw.z) || 1, fx = fw.x / fl, fz = fw.z / fl;
+    const deg = Math.round(Math.atan2(wx * -fz + wz * fx, wx * fx + wz * fz) * 180 / Math.PI / 5) * 5;
+    if (H.wDeg !== deg) { H.wDeg = deg; el.style.transform = `rotate(${deg}deg)`; }
   }
   camera(dt) {
     const f = this.f, c = this.w.camera, L = this.st0.length;

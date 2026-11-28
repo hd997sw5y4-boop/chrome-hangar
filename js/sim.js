@@ -56,11 +56,14 @@ export function engineStep(e, d, dt, fuelLeft, rho = 1.225) {
 }
 
 // ---------- wind ----------
-export function windAt(base, dirAng, t, h) {
+// floor: calm below this height, easing in over the next 200 m (Free Mode's easy goals fly in still air near the ground)
+export function windAt(base, dirAng, t, h, floor = 0) {
   if (!base) return v3();
+  const k = floor > 0 ? Math.min(1, Math.max(0, (h - floor) / 200)) : 1;
+  if (k <= 0) return v3();
   const gust = 1 + 0.35 * Math.sin(t * 0.63) + 0.2 * Math.sin(t * 1.7 + 1.3) + 0.1 * Math.sin(t * 3.1 + 0.4);
   const prof = Math.min(2.2, 0.55 + Math.max(0, h) / 400);
-  const s = base * gust * prof;
+  const s = base * gust * prof * k * k * (3 - 2 * k);
   const a = dirAng + 0.25 * Math.sin(t * 0.21);
   return v3(Math.cos(a) * s, 0, Math.sin(a) * s);
 }
@@ -74,7 +77,7 @@ export function newFlight(rocket, opts = {}) {
     fuelFrac: 1, st, padPos: opts.padPos || v3(),
     up: v3(0, 1, 0), w: v3(), vel: v3(), pos: null, t: 0, phase: 'pad',
     e: newEngine(), steer: { x: 0, z: 0 }, assist: opts.assist ?? true,
-    wind: opts.wind || 0, windDir: opts.windDir ?? 0.6, windNow: v3(),
+    wind: opts.wind || 0, windDir: opts.windDir ?? 0.6, windFloor: opts.windFloor || 0, windNow: v3(),
     apex: 0, topSpeed: 0, alt: 0, vs: 0, speed: 0, q: 0, aoa: 0, tilt: 0, landSpeed: 0,
     heavyT: 0, failure: null, events: [], samples: [], sampleT: 0, flippedHint: false, windHint: false,
     reached: null, gimbal: v3(), maxQ: 0,
@@ -163,7 +166,7 @@ export function flightStep(f, dt = DT) {
   F = add(F, v3(0, -m * G0, 0));
 
   // aerodynamics
-  f.windNow = windAt(f.wind, f.windDir, f.t, h);
+  f.windNow = windAt(f.wind, f.windDir, f.t, h, f.windFloor);   // applied through the aero forces below (fixed step, so framerate independent)
   const va = add(f.vel, f.windNow, -1);
   const V = len(va);
   const q = 0.5 * rho * V * V;

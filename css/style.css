@@ -214,3 +214,4 @@ body.intro #hud,body.intro #menu,body.intro #buildUI,body.intro #testUI,body.int
 #replayBar button{min-height:32px;padding:4px 12px;font-size:13px}#replayBar kbd{font:inherit;font-size:11px;color:var(--dim);border:1px solid var(--line);border-radius:5px;padding:0 5px;margin-left:6px}
 #replayBar small{flex-basis:100%;text-align:center;color:#ffd34d;font-size:13px;min-height:1em}
 #flightUI.replaying #fBtns,#flightUI.replaying #landGuide,#flightUI.replaying #goalHud,#flightUI.replaying #thrTouch{display:none!important}
+#fWindArrow{display:inline-block;margin-left:4px;color:var(--accent);font-weight:900;font-size:17px;vertical-align:-2px;line-height:1;transition:transform .25s ease}

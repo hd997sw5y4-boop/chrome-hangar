@@ -8,11 +8,12 @@ import { SPOTS } from './env.js';
 const KEY = 'ch_goal_idx';
 const RING = { h: 120, dx: 14, dz: -11, r: 9 };   // a hoop 120 m up, ~18 m off the pad centre, 9 m radius: needs a little steering
 export const GOALS = [
-  { id: 'alt150', kind: 'alt', target: 150, text: 'Climb to 150 m', bonus: 'Reach 250 m', bonusTarget: 250 },
-  { id: 'ring', kind: 'ring', text: 'Fly up through the cyan ring', bonus: 'Pass through its centre' },
-  { id: 'land', kind: 'land', minApex: 60, text: 'Climb above 60 m, then land on the pad', bonus: 'Land within 6 m of the pad centre' },
-  { id: 'down120', kind: 'down', target: 120, text: 'Fly 120 m downrange', bonus: 'Reach 200 m downrange', bonusTarget: 200 },
-  { id: 'alt500', kind: 'alt', target: 500, text: 'Climb to 500 m', bonus: 'Reach 800 m', bonusTarget: 800 },
+  // wind: base crosswind (m/s, grows with height in the sim); 0 = calm air below 800 m for the easy goals (a gentle breeze above it)
+  { id: 'alt150', kind: 'alt', target: 150, text: 'Climb to 150 m', bonus: 'Reach 250 m', bonusTarget: 250, wind: 0 },
+  { id: 'ring', kind: 'ring', text: 'Fly up through the cyan ring', bonus: 'Pass through its centre', wind: 0 },
+  { id: 'land', kind: 'land', minApex: 60, text: 'Climb above 60 m, then land on the pad', bonus: 'Land within 6 m of the pad centre', wind: 2.5, windDir: 2.2 },
+  { id: 'down120', kind: 'down', target: 120, text: 'Fly 120 m downrange', bonus: 'Reach 200 m downrange', bonusTarget: 200, wind: 3, windDir: 0.6 },
+  { id: 'alt500', kind: 'alt', target: 500, text: 'Climb to 500 m', bonus: 'Reach 800 m', bonusTarget: 800, wind: 3.5, windDir: -1.1 },
 ];
 const num = v => Math.round(v).toLocaleString();
 
@@ -42,7 +43,8 @@ export class Goals {
   }
   exit() { this.on = false; this.card.classList.add('hidden'); this.hud.classList.add('hidden'); this.ring.visible = false; }
   showGoal() {
-    const G = this.goal; this.cText.textContent = G.text; this.cBonus.textContent = '★ Bonus: ' + G.bonus;
+    const G = this.goal; this.cText.textContent = G.text; this.cBonus.textContent = '★ Bonus: ' + G.bonus + (G.wind ? ` · crosswind ${G.wind} m/s` : ' · calm air');
+    if (this.f) { this.f.wind = G.wind || 2; this.f.windFloor = G.wind ? 0 : 800; this.f.windDir = G.windDir ?? 0.6; }   // the sim's crosswind for this goal
     this.ring.visible = G.kind === 'ring'; this.state.done = false; this.state.ringHit = 0;
   }
   cycle() { if (!this.on) return; this.idx = (this.idx + 1) % GOALS.length; this.save(); this.showGoal(); }
