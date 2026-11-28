@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from '../vendor/three/addons/utils/BufferGeometryUtils.js';
 import { PARTS, layout } from './rocket.js';
+import { applyPBR, tileRepeat, METAL_TILE } from './tex.js';
 
 let M = null; // shared materials
 const cache = new Map();
@@ -143,6 +144,9 @@ export function initMaterials() {
     hose: new THREE.MeshStandardMaterial({ color: 0x8b8f96, metalness: 0.9, roughness: 0.35 }),
   };
   for (const k in M) track(M[k]);
+  // Shared Metal059A PBR (loaded once). Repeat ~1 m so small fittings are not stretched; colour tints stay.
+  const metalRep = tileRepeat(1.2, 1.2, METAL_TILE);
+  for (const k of Object.keys(M)) applyPBR(M[k], 'metal059a', metalRep, { metal: true, ao: false, normalScale: k === 'darkMatte' ? 0.4 : 0.7 }).catch(() => {});
   Object.assign(M, {
     ghost: new THREE.MeshBasicMaterial({ color: 0x7fe7ff, transparent: true, opacity: 0.38, depthWrite: false }),
     ghostBad: new THREE.MeshBasicMaterial({ color: 0xff5a5a, transparent: true, opacity: 0.38, depthWrite: false }),
@@ -150,13 +154,15 @@ export function initMaterials() {
   return M;
 }
 // hull material for a finish / length (cached; heat = soot and temper tint at the bottom)
-export function finishMat(f, len = 2, heat = false, style) {
+export function finishMat(f, len = 2, heat = false, style, radius = 0.9) {
   const st = style || (f === 'dark' ? 'dark' : f === 'brushed' ? 'brushed' : 'mirror');
-  const key = `mat:${st}:${len}:${heat ? 1 : 0}`; if (cache.has(key)) return cache.get(key);
-  const t = hullMaps(st, len, heat);
+  const key = `mat:${st}:${len}:${heat ? 1 : 0}:${radius}`; if (cache.has(key)) return cache.get(key);
+  // Per-part colour/tint stays; Metal059A supplies the PBR maps, tiled in world metres (1 m tiles, no stretch).
+  const tint = heat ? (st === 'dark' ? 0x4a3a32 : 0xc8b4a0) : (st === 'dark' ? 0x3a3e44 : st === 'brushed' ? 0xd9dde2 : 0xffffff);
   const m = st === 'dark'
-    ? new THREE.MeshPhysicalMaterial({ color: 0xffffff, map: t.color, metalness: 0.35, roughness: 1, roughnessMap: t.rough, normalMap: t.normal, normalScale: new THREE.Vector2(0.5, 0.5), clearcoat: 0.7, clearcoatRoughness: 0.12 })
-    : new THREE.MeshPhysicalMaterial({ color: 0xffffff, map: t.color, metalness: 1, roughness: 1, roughnessMap: t.rough, normalMap: t.normal, normalScale: new THREE.Vector2(0.85, 0.85), anisotropy: st === 'brushed' ? 0.45 : 0.2 });
+    ? new THREE.MeshPhysicalMaterial({ color: tint, metalness: 0.35, roughness: 1, clearcoat: 0.7, clearcoatRoughness: 0.12 })
+    : new THREE.MeshPhysicalMaterial({ color: tint, metalness: 1, roughness: 1, anisotropy: st === 'brushed' ? 0.45 : 0.2 });
+  applyPBR(m, 'metal059a', tileRepeat(Math.PI * 2 * radius, len, METAL_TILE), { metal: true, ao: false, normalScale: st === 'dark' ? 0.5 : 0.85 }).catch(() => {});
   track(m); cache.set(key, m); return m;
 }
 
@@ -188,7 +194,7 @@ function boltRing(k, r, y, n, size, mat) { const b = new THREE.CylinderGeometry(
 // ---------- parts ----------
 function tankMesh(d, heat) {
   const g = new THREE.Group(), k = new Kit(), R = d.radius, L = d.length;
-  k.add(new THREE.CylinderGeometry(R, R, L, 72, 1, true), finishMat(d.finish, L, heat), xf([0, L / 2, 0]));
+  k.add(new THREE.CylinderGeometry(R, R, L, 72, 1, true), finishMat(d.finish, L, heat, undefined, R), xf([0, L / 2, 0]));
   // joint flanges at both ends with bolt heads
   for (const y of [0.04, L - 0.04]) { k.add(new THREE.CylinderGeometry(R + 0.014, R + 0.014, 0.08, 72, 1, true), M.dark, xf([0, y, 0])); boltRing(k, R + 0.016, y, 36, 0.022, M.chromeTrim); }
   // cable raceway with brackets, and a pressurisation line on the opposite side
@@ -205,7 +211,7 @@ function noseMesh(d) {
     const t = i / N, r = blunt ? R * Math.sqrt(Math.max(0, 1 - t * t)) : R * Math.sqrt(Math.max(0, 1 - Math.pow(t, 1.5))) * (1 - 0.1 * t);
     pts.push(new THREE.Vector2(Math.max(0.06, r), t * L * 0.985));
   }
-  k.add(new THREE.LatheGeometry(pts, 72), finishMat(d.finish, L, false, d.finish === 'dark' ? 'dark' : 'nose'));
+  k.add(new THREE.LatheGeometry(pts, 72), finishMat(d.finish, L, false, d.finish === 'dark' ? 'dark' : 'nose', R));
   k.add(new THREE.SphereGeometry(0.09, 16, 10, 0, TAU, 0, Math.PI / 2), M.dark, xf([0, L * 0.985 - 0.02, 0], [0, 0, 0], [1, 0.8, 1]));
   k.add(new THREE.CylinderGeometry(R + 0.014, R + 0.014, 0.08, 72, 1, true), M.dark, xf([0, 0.04, 0])); boltRing(k, R + 0.016, 0.04, 36, 0.022, M.chromeTrim);
   // two RCS pods with small nozzles near the base

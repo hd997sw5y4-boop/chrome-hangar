@@ -49,7 +49,7 @@ PBR textures — Poly Haven, CC0 1.0
   "Concrete Wall 008" by Dario Barresi, Charlotte Baglioni — https://polyhaven.com/a/concrete_wall_008
   "Corrugated Iron 02" by Jenelle van Heerden, Sergej Majboroda — https://polyhaven.com/a/corrugated_iron_02
   "Dry Ground 01" by Rob Tuytel — https://polyhaven.com/a/dry_ground_01
-  "Hangar Concrete Floor" by Dimitrios Savva — https://polyhaven.com/a/hangar_concrete_floor
+  "Painted Concrete 02" by Rob Tuytel — https://polyhaven.com/a/painted_concrete_02
   "Metal Grate Rusty" by Dimitrios Savva (photography), Rob Tuytel (processing) — https://polyhaven.com/a/metal_grate_rusty
   "Rocky Terrain 02" by Amal Kumar — https://polyhaven.com/a/rocky_terrain_02
   "Rusty Painted Metal" by Amal Kumar — https://polyhaven.com/a/rusty_painted_metal
@@ -57,6 +57,7 @@ PBR textures — Poly Haven, CC0 1.0
 
 PBR textures — ambientCG, CC0 1.0
   "Diamond Plate 008C" — https://ambientcg.com/view?id=DiamondPlate008C
+  "Metal 059 A" — https://ambientcg.com/view?id=Metal059A
 
 Environment lighting (HDRI) — Poly Haven, CC0 1.0
   "Hangar Interior" — https://polyhaven.com/a/hangar_interior

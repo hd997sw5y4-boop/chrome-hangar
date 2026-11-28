@@ -36,7 +36,7 @@
   "concrete_wall_008",
   "corrugated_iron_02",
   "dry_ground_01",
-  "hangar_concrete_floor",
+  "painted_concrete_02",
   "rocky_terrain_02",
   "rusty_painted_metal",
   "sparse_grass"
@@ -178,10 +178,6 @@
    "Dry Ground 01",
    "Rob Tuytel"
   ],
-  "hangar_concrete_floor": [
-   "Hangar Concrete Floor",
-   "Dimitrios Savva"
-  ],
   "rocky_terrain_02": [
    "Rocky Terrain 02",
    "Amal Kumar"
@@ -213,6 +209,10 @@
   "old_tyre": [
    "Old Tyre",
    "MP"
+  ],
+  "painted_concrete_02": [
+   "Painted Concrete 02",
+   "Rob Tuytel"
   ]
  }
 }

@@ -4,7 +4,7 @@
 // Graphics quality stays the existing CH dropdown. Persistence is the CH `ch_settings` object, not ww_v_* keys.
 import * as THREE from 'three';
 
-export const VIDEO_DEFAULTS = () => ({ bri: 1, roomBri: 1, exp: 1, sh: true, shq: 'auto', ss: true, rs: 1, fps: 0 });
+export const VIDEO_DEFAULTS = () => ({ bri: 1, roomBri: 1, exp: 1, sh: true, shq: 'auto', ss: true, rs: 1, fps: 0, bloom: 0.28 });
 
 export const SHADOW_Q = {
   auto: { label: 'Auto (follows Graphics)' },
@@ -22,6 +22,8 @@ export function fillVideo(s) {
   if (typeof s.sh === 'string') s.sh = s.sh !== '0' && s.sh !== 'false';
   if (typeof s.ss === 'string') s.ss = s.ss !== '0' && s.ss !== 'false';
   s.bri = +s.bri; s.roomBri = +s.roomBri; s.exp = +s.exp; s.rs = +s.rs; s.fps = +s.fps;
+  s.bloom = Math.min(2, Math.max(0, +s.bloom));
+  if (!Number.isFinite(s.bloom)) s.bloom = 0.28;
   if (!SHADOW_Q[s.shq]) s.shq = 'auto';
   return s;
 }
@@ -35,6 +37,7 @@ export function videoRows(s) {
   return rng('vBri', 'Brightness', 0.5, 1.6, 0.05, s.bri, pct)
     + rng('roomBri', 'Room brightness', 0.4, 1.6, 0.05, s.roomBri, pct)
     + rng('vExp', 'Exposure', 0.6, 1.6, 0.05, s.exp, v => Number(v).toFixed(2))
+    + rng('vBloom', 'Bloom', 0, 2, 0.02, s.bloom, v => v <= 0 ? 'Off' : Number(v).toFixed(2))
     + sel('vShOn', 'Shadows', [['1', 'On'], ['0', 'Off']], s.sh ? '1' : '0')
     + sel('vShQ', 'Shadow quality', Object.entries(SHADOW_Q).map(([k, p]) => [k, p.label]), s.shq)
     + sel('vSS', 'Ultra supersampling', [['1', '150%'], ['0', 'Off']], s.ss ? '1' : '0')
@@ -51,6 +54,7 @@ export function bindVideoRows(s, onChange) {
   num('vBri', pct, v => { s.bri = v; });
   num('roomBri', pct, v => { s.roomBri = v; });
   num('vExp', v => Number(v).toFixed(2), v => { s.exp = v; });
+  num('vBloom', v => v <= 0 ? 'Off' : Number(v).toFixed(2), v => { s.bloom = v; });
   num('vRS', pct, v => { s.rs = v; });
   const sel = (id, fn) => {
     const e = document.getElementById(id);
@@ -95,6 +99,7 @@ export function applyVideo(world, s) {
     else if (world.hemi && world.indoor) world.hemi.intensity = (world.sky.hemi || 0.35) * bri;
   }
   world._relight?.();
+  world.post?.applyBloom?.(s);
 }
 
 export function applyShadows(world, s, quality, preset) {
