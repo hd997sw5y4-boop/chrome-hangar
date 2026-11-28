@@ -226,7 +226,8 @@ class Game {
   // ---------- menus ----------
   showMenu(v) {
     $('menu').classList.toggle('hidden', !v); document.body.classList.toggle('menuopen', v);
-    if (v) { this.input.exitLock(); this.input.clearHeld(); }
+    if (v) { this.input.exitLock(); this.input.clearHeld(); if (!this.panelOpen) $('menu').querySelector('button')?.focus({ preventScroll: true }); }
+    else if ($('menu').contains(document.activeElement)) document.activeElement.blur();
     this.menuOpen = v;
   }
   startMission(i) {
@@ -251,8 +252,15 @@ class Game {
     this.startFreeMode();
   }
   startTraining() { this.startMission(0); }
-  openPanel(title, html) { $('panelTitle').textContent = title; $('panelBody').innerHTML = html; $('panel').classList.remove('hidden'); this.input.exitLock(); this.panelOpen = true; }
-  closePanel() { $('panel').classList.add('hidden'); this.panelOpen = false; }
+  openPanel(title, html) {
+    if (!this.panelOpen) this._panelFrom = document.activeElement;
+    $('panelTitle').textContent = title; $('panelBody').innerHTML = html; $('panel').classList.remove('hidden'); this.input.exitLock(); this.panelOpen = true;
+    $('panelClose').focus({ preventScroll: true });   // keyboard users land in the panel (Esc / the X close it)
+  }
+  closePanel() {
+    const was = this.panelOpen; $('panel').classList.add('hidden'); this.panelOpen = false;
+    if (was) { const f = this._panelFrom; this._panelFrom = null; if (f && f.isConnected && this.menuOpen && f.focus) f.focus({ preventScroll: true }); else if ($('panel').contains(document.activeElement)) document.activeElement.blur(); }
+  }
   starStr(id) { const s = this.progress.stars[id] || []; return [0, 1, 2].map(i => s[i] ? '★' : '<span class="off">★</span>').join(''); }
   showMissions() {
     const html = '<div class="mList">' + this.missions.map((m, i) => `<div class="mItem"><div><b>${i}. ${m.name}</b> <span class="st">${this.starStr(m.id)}</span><p>${m.desc}</p><p>${m.stars.map((s, k) => `${k + 1}★ ${s}`).join(' · ')}</p></div><button data-m="${i}" ${this.missionUnlocked(i) ? '' : 'disabled'}>${this.missionUnlocked(i) ? 'Play' : 'Locked'}</button></div>`).join('') + '</div>' +
@@ -376,6 +384,9 @@ class Game {
       const inp = this.input;
       if (this.intro && !this.intro.done) {
         if (inp.hit('Escape') || inp.hit('Pad9') || inp.hit('Space') || inp.hit('Enter')) this.intro.skip();
+      } else if (this.menuOpen && !this.panelOpen && (inp.hit('ArrowDown') || inp.hit('ArrowUp'))) {   // arrow keys walk the menu buttons
+        const bs = [...$('menu').querySelectorAll('button')], i = bs.indexOf(document.activeElement), d = inp.hit('ArrowDown') ? 1 : -1;
+        bs[(i < 0 ? (d > 0 ? 0 : bs.length - 1) : (i + d + bs.length) % bs.length)].focus({ preventScroll: true });
       } else if ((inp.hit('Escape') || inp.hit('Pad9')) && !this.interact?.eatEscape()) {
         if (this.panelOpen) this.closePanel();
         else if (this.intro && this.mode === 'loading') this.continueGame();
