@@ -12,7 +12,6 @@ import { overheatHint } from './testfire.js';
 import { RocketHealth } from './health.js';
 import { HealthPanel } from './healthui.js';
 import { FlightResults } from './flightresults.js';
-import { Goals } from './goals.js';
 import { LandingKit } from './landing.js';
 import { SlowMo } from './slowmo.js';
 import { ShardPool, WreckSettle } from './wreck.js';
@@ -51,7 +50,7 @@ export class FlightMode {
     const line = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 1, 0)]);
     this.guideLine = new THREE.Line(line, new THREE.LineDashedMaterial({ color: 0x7fe7ff, dashSize: 3, gapSize: 2, transparent: true, opacity: 0.8 }));
     this.guideLine.frustumCulled = false; this.guideLine.visible = false; this.w.scene.add(this.guideLine);
-    this.health = new RocketHealth(); this.hpUI = new HealthPanel(game); this.fr = new FlightResults(game); this.goals = new Goals(game); this.kit = new LandingKit(game); this.slow = new SlowMo(); this.shards = new ShardPool(game.world.scene); this.wreckFx = new WreckSettle(); this.rec = new FlightRecorder(); this.rp = new ReplayPlayer(game); this.fr.onReplay = () => this.startReplay();
+    this.health = new RocketHealth(); this.hpUI = new HealthPanel(game); this.fr = new FlightResults(game); this.kit = new LandingKit(game); this.slow = new SlowMo(); this.shards = new ShardPool(game.world.scene); this.wreckFx = new WreckSettle(); this.rec = new FlightRecorder(); this.rp = new ReplayPlayer(game); this.fr.onReplay = () => this.startReplay();
     this.syncButtons();
   }
   syncButtons() {
@@ -74,7 +73,7 @@ export class FlightMode {
     this.w.setIndoor(false); this.w.camera.fov = 60; this.w.camera.updateProjectionMatrix();
     const m = this.g.mission;
     // the flight flies its own copy: parts that break off (fins) come off this one, never the saved build
-    this.f = newFlight(cloneRocket(this.g.rocket), { fill: this.g.fill, padPos: { x: SPOTS.pad.x, y: 0, z: SPOTS.pad.z }, assist: this.g.settings.assist, wind: m?.wind ?? 2, windDir: 0.6 });
+    this.f = newFlight(cloneRocket(this.g.rocket), { fill: this.g.fill, padPos: { x: SPOTS.pad.x, y: 0, z: SPOTS.pad.z }, assist: this.g.settings.assist, wind: m?.wind ?? 2, windDir: m?.windDir ?? 0.6, windFloor: m?.windFloor ?? 0 });
     this.clear();
     this.group = rocketMesh(this.g.rocket); this.w.scene.add(this.group);
     this.health.reset(this.f.rocket, this.g.fill); this.lostSeen = 0; this.hpUI.attach(this.health);
@@ -89,7 +88,7 @@ export class FlightMode {
     // build the smoke depth pre-pass target and its shader now (first smoke would otherwise allocate it on the ignition frame)
     this.g.smoke.emit(SPOTS.pad.x, 0.3, SPOTS.pad.z, 0, 0, 0, 0.01, 0.12, 0, 0, 0);
     this.flash = 0; this.armT = 0; this.w.captureLocal('out', new THREE.Vector3(SPOTS.pad.x, 8, SPOTS.pad.z), [this.group]);
-    this.thr = Math.min(1, eng.heat.safeThrottle); this.touchThr = null; this.hotWarned = false; this.countdown = null; this.acc = 0; this.ended = false; this.endT = 0; this.freeEnd = null; this.fr.hide(); this.goals.enter(this.f, !m && !this.g.training?.active); this.kit.reset(this.f); this.slow.reset(); this.g.fxScale = 1; this.rec.reset(); this.endReplay(); this.reached = null; this.shake = 0; this.camInit = false; this.armed = false;
+    this.thr = Math.min(1, eng.heat.safeThrottle); this.touchThr = null; this.hotWarned = false; this.countdown = null; this.acc = 0; this.ended = false; this.endT = 0; this.freeEnd = null; this.landedToast = false; this.fr.hide(); this.kit.reset(this.f); try { localStorage.removeItem('ch_goal_idx'); } catch (_) {} this.syncEndBtn(); this.slow.reset(); this.g.fxScale = 1; this.rec.reset(); this.endReplay(); this.reached = null; this.shake = 0; this.camInit = false; this.armed = false;
     $('btnLaunch').classList.remove('hidden'); $('countdown').classList.add('hidden');
     this.st0 = stats(this.g.rocket, this.g.fill);
     $('mThr').querySelector('em').style.bottom = (eng.minThrottle * 100) + '%';
@@ -97,21 +96,27 @@ export class FlightMode {
     this.syncPose(); this.syncButtons(); this.setCam(this.cam, true); this.zoomT = this.zoom = 1;
     if (this.g.mission && !this.g.training?.active) this.g.prompt(IS_TOUCH ? 'Tap <b>Launch</b>. Throttle on the right, steer with the left stick.' : 'Press <b>Space</b> to launch. Shift / R throttle up, F down, WASD steer, C camera.');
   }
-  exit() { this.w.post.setDOF(false); this.w.post.setBlur(0); this.w.post.setHeat(new THREE.Vector4(0, 0, 0, 0)); this.w.setAltitude(0); this.w.followSun(SPOTS.pad); this.w.camera.near = 0.1; this.w.camera.far = 60000; this.w.camera.updateProjectionMatrix(); this.clear(); $('camPicker').classList.add('hidden'); this.w.camera.up.set(0, 1, 0); this.guideLine.visible = false; this.hpUI.detach(); this.g.prompt(null); $('landGuide').classList.add('hidden'); this.g.audio.setEngine(0); this.padRel?.reset(null); this.fr.hide(); this.goals.exit(); this.kit.hide(); this.slow.reset(); this.g.fxScale = 1; this.endReplay(); }
+  exit() { this.w.post.setDOF(false); this.w.post.setBlur(0); this.w.post.setHeat(new THREE.Vector4(0, 0, 0, 0)); this.w.setAltitude(0); this.w.followSun(SPOTS.pad); this.w.camera.near = 0.1; this.w.camera.far = 60000; this.w.camera.updateProjectionMatrix(); this.clear(); $('camPicker').classList.add('hidden'); this.w.camera.up.set(0, 1, 0); this.guideLine.visible = false; this.hpUI.detach(); this.g.prompt(null); $('landGuide').classList.add('hidden'); this.g.audio.setEngine(0); this.padRel?.reset(null); this.fr.hide(); this.kit.hide(); this.slow.reset(); this.g.fxScale = 1; this.endReplay(); }
   st0Top() { return stats(this.g.rocket, this.g.fill).top; }
   clear() { clearTimeout(this.cdTimer); this.shards?.clear(); this.wreckFx?.clear(); if (this.wreck) { this.wreck.removeFromParent(); disposeTree(this.wreck); this.wreck = null; } if (this.crashFlash) { this.crashFlash.light.removeFromParent(); this.crashFlash = null; } if (this.group) { this.group.removeFromParent(); disposeTree(this.group); this.group = null; } }
   back() {
     this.g.audio.tap();
-    if (this.f.phase === 'flying' && !this.ended) {
-      this.endFlight('abort');
-      if (!this.g.mission && !this.freeEnd) { this.g.setMode('build'); return; }   // (Free Mode shows the results screen first, which has Back to hangar)
-    } else this.g.setMode('build');
+    if (this.ended) { this.g.setMode('build'); return; }
+    // on the pad, this is just "back to hangar"; once it has left the ground, it is End Flight (results in Free Mode)
+    if (this.f.phase === 'pad' || this.countdown != null) { this.g.setMode('build'); return; }
+    this.endFlight('abort');
+  }
+  syncEndBtn() {
+    const b = $('btnFlightBack'); if (!b || !this.f) return;
+    const flying = !this.ended && this.f.phase !== 'pad' && this.countdown == null;
+    const pad = this.g.input.lastDevice === 'pad', kb = !pad && this.g.input.lastDevice !== 'touch';
+    const html = flying ? 'End flight' + (pad ? ' <kbd>○</kbd>' : kb ? ' <kbd>B</kbd>' : '') : 'Back to hangar';
+    if (this._endBtn === html) return; this._endBtn = html; b.innerHTML = html;
   }
   launch() {
     if (this.countdown != null || this.f.phase !== 'pad' || this.f.e.on) return;
     this.countdown = 3.999; $('btnLaunch').classList.add('hidden'); this.g.prompt(null); this.g.audio.beep(false); this.lastBeep = 3;
     this.w.assembly?.setFold(0);   // swing the work platforms back before ignition
-    this.goals.onLaunch();
   }
 
   capture(d) { const f = this.f; d.o.set(f.origin.x, f.origin.y, f.origin.z); d.p.set(f.pos.x, f.pos.y, f.pos.z); d.u.set(f.up.x, f.up.y, f.up.z); }
@@ -153,8 +158,8 @@ export class FlightMode {
       if (inp.hit('Space') || inp.hit('Pad0')) this.launch();
       if (inp.hit('KeyC') || inp.hit('Pad3') || inp.hit('Pad15')) this.nextCam(1);
       if (inp.hit('Pad14')) this.nextCam(-1);
-      if (this.goals.on && f.phase === 'pad' && this.countdown == null && (inp.hit('KeyN') || inp.hit('Pad13'))) { this.goals.cycle(); this.g.audio.tap(); }
       this.kit.input(inp);   // L / D-pad down = legs, K / R1 = chute (flying only)
+      if (inp.hit('KeyE') && this.f.phase !== 'pad' && !this.ended) { this.back(); return; }
       if (inp.hit('KeyT')) this.nextSky();
       if (inp.hit('KeyV') || inp.hit('Pad12')) $('camPicker').classList.toggle('hidden');
       for (let i = 1; i <= CAMS.length; i++) if (inp.hit('Digit' + i) || inp.hit('Numpad' + i)) this.setCam(i - 1);
@@ -190,7 +195,7 @@ export class FlightMode {
     // (dt is already capped by the game loop; steps per frame are capped here too so one slow frame can never snowball)
     let steps = 0;
     while (this.acc >= DT) {
-      this.copyPose(this.prev, this.cur); flightStep(f, DT); this.health.step(f, DT); this.capture(this.cur); this.goals.step(f); this.rec.step(f); this.acc -= DT;
+      this.copyPose(this.prev, this.cur); flightStep(f, DT); this.health.step(f, DT); this.capture(this.cur); this.rec.step(f); this.acc -= DT;
       if (++steps >= 8) { this.acc = 0; break; }
     }
     this.blendPose(this.acc / DT);
@@ -202,13 +207,12 @@ export class FlightMode {
     if (m && f.alt > RANGE_TOP && !this.ended) this.endFlight('range');
     if (this.crashFlash) { const c = this.crashFlash; c.t += sdt / 0.33; c.light.intensity = 40000 * (c.k ?? 1) * Math.max(0, 1 - c.t); }
     this.shards.update(sdt); this.wreckFx.update(sdt);
-    if (this.goals.frame(f, dt)) { this.g.toast('Goal complete: ' + this.goals.goal.text); this.g.audio.star(0); this.g.audio.star(1); }
     this.syncPose(sdt);
     this.kit.update(sdt, f, this.rs, this.st0.top, this.group);
     this.visuals(sdt);
     this.hud();
     this.camera(dt);
-    this.hpUI.update(dt, this.g.audio);
+    this.syncEndBtn(); this.hpUI.update(dt, this.g.audio);
     if (this.g.training?.active) this.g.training.onFlightFrame();
     if (this.ended) { this.endT += dt; if (this.endT > 2.6 && !this.g.resultsOpen && !this.resultsShown) { this.resultsShown = true; if (this.g.mission && this.result) this.g.showResults(this.result); else if (this.freeEnd) this.fr.show(f, this.freeEnd.how, this.freeEnd); } }
   }
@@ -221,7 +225,7 @@ export class FlightMode {
     if (ev.type === 'cutoff') a.coolTicks();
     if (ev.type === 'chute') { a.noise(0.5, 700, 0.8, 0.25, 0, 'bandpass', 0.3); this.g.toast('Chute out'); }
     if (ev.type === 'chuteTorn') { a.noise(0.3, 2400, 1, 0.25, 0, 'highpass', 0.2); a.bad(); this.g.toast(`Chute torn: opened at ${Math.round(ev.speed)} m/s (under 140 holds)`, 3000); }
-    if (ev.type === 'landed') { a.clamp(); a.coolTicks(); this.endFlight('landed'); }
+    if (ev.type === 'landed') { a.clamp(); a.coolTicks(); if (this.g.mission) this.endFlight('landed'); else { this.rec.event(this.f, this.f.soft ? 'Soft landing' : 'Touchdown'); if (!this.landedToast) { this.landedToast = true; this.g.toast('Touched down — throttle up to take off, or End flight when you are done'); } } }
     if (ev.type === 'crash') this.crash(ev.kind);
   }
   // a cluster bell that quit goes dark; fins that tore off leave the stack (sim + mesh) and tumble away
@@ -294,9 +298,9 @@ export class FlightMode {
       this.freeEnd = how === 'landed' ? { title: f.soft ? 'Soft landing' : 'Landed', reason: `Touched down at ${sp(f.landSpeed, 1)} m/s${f.chute === 'cut' ? ' under the chute' : ''}, ${sp(f.landDist || 0)} m from the pad centre.` }
         : fail ? { title: fail.title, reason: fail.reason, hint: fail.hint }
         : how === 'range' ? { title: 'Left the test range', reason: `Past ${RANGE_TOP / 1000} km, above where the space station flies.` }
-        : { title: 'Flight ended', reason: 'You called it early.' };
+        : { title: 'Flight ended', reason: f.landSpeed ? `You ended it after a ${f.soft ? 'soft ' : ''}touchdown at ${sp(f.landSpeed, 1)} m/s.` : 'You called it early.' };
       if (how === 'crash') this.freeEnd.broke = this.brokeText();
-      this.freeEnd.how = how; this.freeEnd.goal = this.goals.finish(f, how); if (how === 'abort' || how === 'range') this.endT = 2.6;
+      this.freeEnd.how = how; if (how === 'abort' || how === 'range') this.endT = 2.6;
       return;
     }
     const fmt = (v, d = 0) => v.toLocaleString(undefined, { maximumFractionDigits: d, minimumFractionDigits: d });

@@ -26,40 +26,30 @@ export class FlightResults {
     this.$('frReplay').onclick = () => this.replay();
     el.querySelectorAll('button').forEach(b => b.addEventListener('mouseenter', () => this.g.audio.hover()));
   }
-  // 1-3 stars: [met, label] per star. goal (optional) is { text, done, bonusText, bonusDone } from the mission goals.
-  rate(f, how, goal) {
-    const landed = how === 'landed';
-    return [
-      goal ? [goal.done, 'Goal: ' + goal.text] : [f.apex >= 20, 'Clear the pad (above 20 m)'],
-      [landed, 'Land in one piece'],
-      goal ? [goal.bonusDone, 'Bonus: ' + goal.bonusText] : [f.apex >= 150, 'Climb above 150 m'],
-    ];
-  }
-  // soft-landing bonus: a touchdown under 1.5 m/s fills the first star still missing (and always shows as its own line)
-  softBonus(f, how, stars) {
-    if (how !== 'landed' || !f.soft) return null;
-    const miss = stars.findIndex(s => !s[0]); if (miss >= 0) stars[miss] = [true, stars[miss][1] + ' (filled by the soft landing)'];
-    return `Soft-landing bonus: ${f.landSpeed.toFixed(1)} m/s touchdown`;
+  // Free Mode results have no stars (goals were removed). A soft touchdown is recorded as a stat, not a rating.
+  softNote(f) {
+    if (!f.soft) return null;
+    return `Soft landing: ${f.landSpeed.toFixed(1)} m/s touchdown`;
   }
   show(f, how, info) {
-    const g = this.g, $ = this.$, flew = f.apex > 1, goal = info.goal;
+    const g = this.g, $ = this.$, flew = f.apex > 1;
     // personal best: compare, then save
     const prev = loadBest(), next = { ...(prev || {}) }, won = {};
     let changed = false;
     if (flew) for (const [k, , get] of STATS) { const v = get(f); if (v > (prev?.[k] || 0) + 1e-6) { next[k] = v; won[k] = !!prev?.[k]; changed = true; } }
     const anyNew = Object.values(won).some(Boolean), first = flew && !prev;
     if (changed) saveBest(next);
-    const stars = this.rate(f, how, goal), soft = this.softBonus(f, how, stars), lit = stars.filter(s => s[0]).length;
-    $('frTitle').textContent = info.title; $('frTitle').className = how === 'landed' || how === 'range' ? 'good' : '';
+    const soft = this.softNote(f);
+    $('frTitle').textContent = info.title; $('frTitle').className = how === 'landed' || how === 'range' || f.soft ? 'good' : '';
     $('frReason').textContent = info.reason || ''; $('frBroke').textContent = info.broke || ''; $('frBroke').classList.toggle('hidden', !info.broke); $('frHint').innerHTML = info.hint ? '<b>Try this:</b> ' + info.hint : ''; $('frHint').classList.toggle('hidden', !info.hint);
-    const bn = $('frBanner'); bn.classList.toggle('hidden', !(anyNew || first));
-    bn.textContent = first ? 'First flight on record' : '★ New best!';
-    $('frStars').innerHTML = stars.map(() => '<span>★</span>').join('') + '<small>' + stars.map(s => (s[0] ? '✓ ' : '· ') + s[1]).join('<br>') + (soft ? '<br><b class="soft">★ ' + soft + '</b>' : '') + '</small>';
+    const bn = $('frBanner'); bn.classList.toggle('hidden', !(anyNew || first || soft));
+    bn.textContent = first ? 'First flight on record' : anyNew ? '★ New best!' : (soft || '');
+    $('frStars').innerHTML = ''; $('frStars').classList.add('hidden');
     $('frStats').innerHTML = STATS.map(([k, label, get, unit, d]) => {
       const b = next[k] ?? 0;
       return `<div class="${won[k] ? 'best' : ''}"><label>${label}</label><b>${fmt(get(f), d)} <i>${unit}</i></b>` +
         (won[k] ? '<em>New best!</em>' : `<small>Best ${b ? fmt(b, d) + ' ' + unit : '—'}</small>`) + '</div>';
-    }).join('');
+    }).join('') + (soft ? `<div class="soft"><label>Touchdown</label><b>${fmt(f.landSpeed, 1)} <i>m/s</i></b><em>${soft}</em></div>` : '');
     const pad = g.input.lastDevice === 'pad', kb = !pad && g.input.lastDevice !== 'touch';
     $('frAgain').innerHTML = 'Fly again' + (pad ? ' <kbd>✕</kbd>' : kb ? ' <kbd>Enter</kbd>' : '');
     $('frHangar').innerHTML = 'Back to hangar' + (pad ? ' <kbd>○</kbd>' : kb ? ' <kbd>Esc</kbd>' : '');
@@ -68,7 +58,7 @@ export class FlightResults {
     this.timers.forEach(clearTimeout); this.timers = [];
     const spans = $('frStars').querySelectorAll('span');
     stars.forEach((s, i) => s[0] && this.timers.push(setTimeout(() => { spans[i].classList.add('lit'); g.audio.star(i); }, 400 + i * 300)));
-    if (!lit) g.audio.bad();
+    if (how === 'crash') g.audio.bad();
     this.el.classList.remove('hidden'); this.open = true; this.t = 0; this.done = false; g.resultsOpen = true;
   }
   hide() { this.timers.forEach(clearTimeout); this.timers = []; if (!this.open) return; this.open = false; this.el.classList.add('hidden'); this.g.resultsOpen = false; }

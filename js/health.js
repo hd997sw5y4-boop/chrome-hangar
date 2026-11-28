@@ -67,6 +67,8 @@ export class RocketHealth {
     if (f.phase === 'crashed') { if (!this.crashed) this.onCrash(f); return; }
     if (f.phase === 'landed') { if (!this.landedDone) this.onLand(f); this.relax(dt); return; }
     if (f.phase !== 'flying') { this.pv = null; return; }
+    if (this.landedDone) { this.landedDone = false; this.pv = null; }   // lifted off again: the next touchdown can score
+
     // proper acceleration from the velocity change (semi-implicit Euler makes this exact), smoothed to skip contact spikes
     if (this.pv) {
       const ax = (f.vel.x - this.pv.x) / dt, ay = (f.vel.y - this.pv.y) / dt + G0, az = (f.vel.z - this.pv.z) / dt;
