@@ -1,0 +1,6 @@
+moon_lroc_2k.jpg, moon_lroc_1k.jpg
+Source: NASA Scientific Visualization Studio, "CGI Moon Kit" (Ernie Wright, Noah Petro), https://svs.gsfc.nasa.gov/4720/
+  colour map "lroc_color_poles" (LRO LROC WAC mosaic, with the poles filled in), fetched via the public-domain Wikimedia
+  Commons copy: https://commons.wikimedia.org/wiki/File:CGI_Moon_Kit_-_Lroc_color_poles.tif
+License: public domain (NASA imagery; no copyright). Downscaled to 2048x1024 and 1024x512 JPEG (quality 85).
+NASA imagery is used for illustration; no NASA logo or endorsement is implied.

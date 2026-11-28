@@ -93,6 +93,12 @@ The whole Earth (high-altitude flights) — NASA imagery, public domain (credit:
   Suomi NPP VIIRS) — https://science.nasa.gov/earth/earth-observatory/earth-at-night/maps/
   NASA imagery is used for illustration; no NASA logo or endorsement is implied.
 
+The Moon (Moon flight) — NASA imagery, public domain
+  CGI Moon Kit colour map (LRO LROC WAC mosaic), NASA's Scientific Visualization Studio, Ernie Wright and
+  Noah Petro — https://svs.gsfc.nasa.gov/4720/ (via https://commons.wikimedia.org/wiki/File:CGI_Moon_Kit_-_Lroc_color_poles.tif),
+  downscaled to 2K / 1K JPEG in assets/moon/ (see assets/moon/LICENSE.txt). The close-up regolith and small craters
+  under the lander are drawn in code.
+
 Music, CC0 1.0
   HoliznaCC0 — "Puppy Love", "New Shoes", and "Poor, But Happy" from the Happy Lo-Fi collection
   (https://opengameart.org/content/happy-lo-fi-lofi-collection). Warm, relaxed hip-hop style lo-fi
