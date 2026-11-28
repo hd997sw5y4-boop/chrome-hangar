@@ -49,6 +49,7 @@ const ACT = [
   { body: 'kaB', rod: 'kaR', child: 'kn', anchor: V3(0, -0.09, 0.072) },
 ];
 const _q = new THREE.Quaternion(), _v = V3(), _w = V3(), _m = new THREE.Matrix4();
+const _gi = V3(), _gp = V3(), _gf = V3(), _gl = V3();   // gait scratch (no per-frame allocations)
 export function aimActuators(bones, S) {   // exported for robotbreak.js / cart.js poses
   for (const a of ACT) {
     const body = bones[a.body + S], rod = bones[a.rod + S], ch = bones[a.child + S];
@@ -262,8 +263,8 @@ class Robot {
   setJob(job, key = job.type) { this.job = job; this.jobKey = key; this.wp = 0; this.wait = job.type === 'patrol' ? 1 : 0; this.workT = 0; }
   // what he is doing right now, for UI and hooks: 'greeting' | 'walking' | 'working' | 'following' | 'idle'
   get state() { return this.greet ? 'greeting' : this.jobKey === 'follow' ? 'following' : this.gesture ? 'working' : this.v > 0.05 ? 'walking' : 'idle'; }
-  footIdeal(s, p, yaw) { return V3(p.x + Math.cos(yaw) * 0.105 * s, this.ground, p.z - Math.sin(yaw) * 0.105 * s); }
-  fwd(yaw = this.yaw) { return V3(Math.sin(yaw), 0, Math.cos(yaw)); }
+  footIdeal(s, p, yaw, out = V3()) { return out.set(p.x + Math.cos(yaw) * 0.105 * s, this.ground, p.z - Math.sin(yaw) * 0.105 * s); }
+  fwd(yaw = this.yaw, out = V3()) { return out.set(Math.sin(yaw), 0, Math.cos(yaw)); }
   at(x, z, face, tol = 0.15) { return Math.hypot(x - this.pos.x, z - this.pos.z) < tol && (face == null || Math.abs(wrapA(face - this.yaw)) < 0.2); }
 
   // ---- locomotion: steer toward a goal; gentle curves while walking, turn in place when the heading is far off ----
@@ -286,7 +287,7 @@ class Robot {
     const err = wrapA(wantYaw - this.yaw), maxR = this.v > 0.3 ? 1.3 : 1.8;
     this.yawRate = damp(this.yawRate, clamp(err * 3, -maxR, maxR), 6, dt);
     this.yaw += this.yawRate * dt;
-    this.pos.addScaledVector(this.fwd(), this.v * dt);
+    this.pos.addScaledVector(this.fwd(this.yaw, _gf), this.v * dt);
     if (obs?.length) { const p = resolve(this.pos.x, this.pos.z, R_ROBOT, obs); this.pos.x = p.x; this.pos.z = p.z; }
   }
 
@@ -295,7 +296,7 @@ class Robot {
     const v = this.v, kv = clamp(v / 0.3, 0, 1);
     const stride = strideFor(v);
     let need = false;   // a foot is far from where it should rest (stopping, turning in place)
-    for (const f of this.feet) if (!f.swinging && (f.pos.distanceTo(this.footIdeal(f.s, this.pos, this.yaw)) > 0.06 || Math.abs(wrapA(f.yaw - this.yaw)) > 0.22)) need = true;
+    for (const f of this.feet) if (!f.swinging && (f.pos.distanceTo(this.footIdeal(f.s, this.pos, this.yaw, _gi)) > 0.06 || Math.abs(wrapA(f.yaw - this.yaw)) > 0.22)) need = true;
     const midSwing = this.feet.some(f => f.swinging);
     const moving = v > 0.05 || Math.abs(this.yawRate) > 0.35 || need || midSwing;
     const rate = moving ? Math.max(v / stride, RATE_MIN) : 0;   // cycles per second
@@ -305,12 +306,12 @@ class Robot {
     for (const f of this.feet) {
       const u = (this.ph + f.off) % 1;
       if (u < SWING && moving) {
-        if (!f.swinging) { f.swinging = true; f.from = f.pos.clone(); f.fy = f.yaw; }
+        if (!f.swinging) { f.swinging = true; f.from = (f.from || V3()).copy(f.pos); f.fy = f.yaw; }
         const s = u / SWING, tLeft = (SWING - u) / Math.max(rate, 1e-3);
         // land under where the body will be, ahead of the hip by half the stance travel
         const pyaw = this.yaw + this.yawRate * tLeft;
-        const pp = this.pos.clone().addScaledVector(this.fwd(), v * tLeft);
-        const land = this.footIdeal(f.s, pp, pyaw).addScaledVector(this.fwd(pyaw), stepLen * (1 - SWING) * 0.5 * kv);
+        const pp = _gp.copy(this.pos).addScaledVector(this.fwd(this.yaw, _gf), v * tLeft);
+        const land = this.footIdeal(f.s, pp, pyaw, _gl).addScaledVector(this.fwd(pyaw, _gf), stepLen * (1 - SWING) * 0.5 * kv);
         const e = smooth(clamp(s * 1.08, 0, 1));
         f.pos.lerpVectors(f.from, land, e);
         f.yaw = f.fy + wrapA(pyaw - f.fy) * e;
@@ -346,7 +347,7 @@ class Robot {
     hip.rotation.set(-phi, clamp(wrapA(f.yaw - this.yaw) - b.pelvis.rotation.y, -0.7, 0.7), roll);
     kn.rotation.set(knee, 0, 0);
     // foot pitch: + = heel up / toes down; the toe joint bends back so the toes stay flat while the heel peels
-    an.rotation.set(phi - knee - b.pelvis.rotation.x + (f.pitch || 0), 0, -roll);
+    an.rotation.set(phi - knee - b.pelvis.rotation.x + (f.pitch || 0), 0, -roll - b.pelvis.rotation.z);   // sole stays level under the hip sway
     toe.rotation.set(-Math.max(0, f.pitch || 0), 0, 0);
   }
 
@@ -359,7 +360,7 @@ class Robot {
 
   update(dt, ctx) {
     this.t += dt;
-    const P = { ...REST }, t = this.t, job = this.job;
+    const P = Object.assign(this._P ??= {}, REST), t = this.t, job = this.job;   // reused target pose
     let goal = null, speed = WALK, look = null, gesture = null, waveT = 0;
 
     if (this.greet) {
