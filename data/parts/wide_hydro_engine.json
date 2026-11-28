@@ -1,0 +1,29 @@
+{
+ "id": "wide_hydro_engine",
+ "name": "Wide Hydrogen Engine (5 bells)",
+ "section": "propulsion",
+ "kind": "engine",
+ "attach": "engine",
+ "fuel": "hydrogen",
+ "engines": 5,
+ "bellRadius": 1.2,
+ "bellGap": 0.1,
+ "length": 4.3,
+ "radius": 5.0,
+ "dryMass": 16000,
+ "thrust": 9900000,
+ "isp": 400,
+ "minThrottle": 0.4,
+ "gimbalDeg": 5,
+ "heat": {
+  "safeThrottle": 1.0,
+  "risePerSec": 0,
+  "coolPerSec": 8,
+  "baseTemp": 600,
+  "spanTemp": 2000,
+  "limitTemp": 3200
+ },
+ "color": "#a9d8ff",
+ "blurb": "Five hydrogen bells for a 10 m upper stage: about 2.2 MN each in vacuum (10.9 MN together) at 440 s of Isp, 3.2 t per engine. Needs Wide Hydrogen Tanks.",
+ "unlockStars": 7
+}

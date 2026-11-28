@@ -1,0 +1,17 @@
+{
+ "id": "crew_capsule",
+ "name": "Crew Capsule",
+ "section": "structure",
+ "kind": "nose",
+ "attach": "stack",
+ "capsule": true,
+ "length": 3.2,
+ "radius": 2.0,
+ "dryMass": 5800,
+ "fuelMass": 0,
+ "cnAlpha": 1.4,
+ "cd": -0.2,
+ "finish": "mirror",
+ "blurb": "A 3-seat crew capsule for the top of the stack: 3.9 m across, 3.2 m tall, 5.8 t with its heat shield. The cockpit view rides in it, looking out of its windows.",
+ "unlockStars": 0
+}

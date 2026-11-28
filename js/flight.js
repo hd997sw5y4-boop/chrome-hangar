@@ -18,6 +18,7 @@ import { ShardPool, WreckSettle } from './wreck.js';
 import { FlightRecorder, ReplayPlayer } from './replay.js';
 import { MoonFlight } from './moon.js';
 import { Cockpit } from './cockpit.js';
+import { launchStandFor } from './launchstand.js';   // gb3-stand
 import * as FL from './freelook.js';
 import { applyKeys, applyAbs, cut as cutThr, toggle as toggleEng, snapshot, engineState } from './throttle.js';
 import { Gb5Flight } from './rcs-ui.js';   // GB5-RCS
@@ -88,7 +89,7 @@ export class FlightMode {
     this.w.setIndoor(false); this.w.camera.fov = 60; this.w.camera.updateProjectionMatrix();
     const m = this.g.mission;
     // the flight flies its own copy: parts that break off (fins) come off this one, never the saved build
-    this.f = newFlight(cloneRocket(this.g.rocket), { fill: this.g.fill, padPos: { x: SPOTS.pad.x, y: 0, z: SPOTS.pad.z }, assist: this.g.settings.assist, wind: m?.wind ?? 2, windDir: m?.windDir ?? 0.6, windFloor: m?.windFloor ?? 0 });
+    this.f = newFlight(cloneRocket(this.g.rocket), { fill: this.g.fill, padPos: { x: SPOTS.pad.x, y: launchStandFor(this.w).flightPadY(this.g.rocket), z: SPOTS.pad.z } /* gb3-stand: on the Launch Stand's mount */, assist: this.g.settings.assist, wind: m?.wind ?? 2, windDir: m?.windDir ?? 0.6, windFloor: m?.windFloor ?? 0 });
     this.clear();
     this.group = rocketMesh(this.g.rocket); this.w.scene.add(this.group);
     this.health.reset(this.f.rocket, this.g.fill); this.lostSeen = 0; this.hpUI.attach(this.health);
@@ -224,6 +225,7 @@ export class FlightMode {
       this.mr.checkTakeover(inp, prev);   // gb3-moon-rocket: any player throttle / stick / control / RCS input hands the rocket back
       this.orbit.yaw -= inp.look.x; this.orbit.pitch = THREE.MathUtils.clamp(this.orbit.pitch - inp.look.y, -0.45, 1.5);
     } else { inp.flightKeys = false; this.shapeSteer(0, 0, dt); }   // menus / results open: let go of the stick instead of holding the last value
+    this.w.launchStand?.flightTick(dt, this);   // gb3-stand: swing arms clear
     this.mr.update(dt);   // gb3-moon-rocket: autopilot (only throttle / steer / hold upright / pointing / staging / warp)
     // countdown
     if (this.countdown != null) {

@@ -8,8 +8,23 @@ import fs from 'fs';
 import { makeFlight, PRESETS, O, R, ST } from './helpers/game.mjs';
 import { HEAT } from '../js/heat.js';
 const { MoonRocketFlight } = await import('../js/moonrocket.js');
+const LS = await import('../js/launchstand.js');   // gb3-stand
 let pass = 0; const t = (name, fn) => { fn(); pass++; console.log('ok -', name); };
 const km = x => (x / 1e3).toFixed(1);
+
+t('Moon Rocket preset: Saturn V proportions (10 m wide, ~10x as tall) with physical tank densities', () => {
+  const r = PRESETS.moonRocket(), L = R.layout(r), w = 2 * L.radius;
+  assert.ok(Math.abs(w - 10) < 0.5, 'width ' + w); assert.ok(L.top / w > 9 && L.top / w < 12, 'height / width ' + L.top / w);
+  for (const s of r.stack) {   // propellant density in each tank (with ullage): kerosene/LOX ~800-1000, hydrogen/LOX ~230-300, storables ~900-1200 kg/m^3
+    const d = R.PARTS[s.p]; if (!d.fuelMass) continue;
+    const rho = d.fuelMass / (Math.PI * d.radius * d.radius * d.length), want = d.fuel === 'hydrogen' ? [230, 300] : d.id === 'lander_tank' ? [900, 1200] : [780, 1050];
+    assert.ok(rho >= want[0] && rho <= want[1], `${d.id} ${rho.toFixed(0)} kg/m^3`);
+  }
+  const st = R.stats(r, 1, 1), A = Math.PI * 25;   // drag: the reference area times cd is the real 10 m frontal area times the shape coefficient
+  assert.ok(st.cd * Math.PI * 0.81 > A * 0.5 && st.cd * Math.PI * 0.81 < A * 1.2, 'drag area ' + st.cd * Math.PI * 0.81);
+  assert.equal(R.PARTS[r.stack.at(-1).p].id, 'crew_capsule');
+  console.log(`   ${L.top.toFixed(1)} m tall, ${w.toFixed(1)} m wide (${(L.top / w).toFixed(1)}:1), drag area Cd*A ${(st.cd * Math.PI * 0.81).toFixed(1)} m^2`);
+});
 
 t('Moon Rocket preset: builds clean, liftoff TWR >= 1.2, stable, 15+ km/s in vacuum over 4 stages', () => {
   const r = PRESETS.moonRocket(), st = R.stats(r, 1, 1), S4 = ST.stageStats(r, 1), tot = S4.reduce((a, x) => a + x.dvVac, 0);
@@ -21,8 +36,27 @@ t('Moon Rocket preset: builds clean, liftoff TWR >= 1.2, stable, 15+ km/s in vac
   assert.ok(tot >= 15000, 'total ' + tot);
   for (const x of S4) console.log(`   ${x.engine.padEnd(22)} ${km(x.mass).padStart(6)} t  dv ${Math.round(x.dvSL)} SL / ${Math.round(x.dvVac)} vac m/s  TWR ${x.twr.toFixed(2)} SL / ${x.twrVac.toFixed(2)} vac`);
   console.log(`   total ${km(tot)} km/s, ${r.stack.length} stack parts, ${R.layout(r).top.toFixed(1)} m tall, ${km(st.mass)} t`);
-  const L = S4[3], fl = R.PARTS.flicker, lunarW = L.mass * 1.62, minT = fl.thrust * 1.1 * fl.minThrottle;   // the lander can nearly hover on the Moon
+  const L = S4[3], fl = R.PARTS[L.engineId], lunarW = L.mass * 1.62, minT = fl.thrust * 1.1 * fl.minThrottle;   // the lander can nearly hover on the Moon
   assert.ok(minT < lunarW * 1.6, `min thrust ${minT} vs lunar weight ${lunarW}`);
+});
+
+// gb3-stand: the stack is too tall for the hangar, so it launches from the Launch Stand's mount and must climb clear of its tower
+t('Launch Stand: the Moon Rocket sits on the mount, lifts off and clears the tower (arms swung away)', () => {
+  const r = PRESETS.moonRocket(), s = LS.standSize(r);
+  assert.ok(LS.needsStand(r) && s.h > LS.HANGAR_MAX_STACK, 'too tall for the hangar');
+  assert.ok(s.towerH > s.tipY * 1.1 && s.towerH < s.tipY * 1.15, 'tower ' + s.towerH + ' vs tip ' + s.tipY);
+  assert.ok(Math.abs(s.rin - s.R) < 0.3 && s.rout > s.R, 'mount ring matches the base');
+  const g = makeFlight(r), f = g.f; g.ap.engage();
+  assert.ok(Math.abs(f.origin.y - s.baseY) < 1e-6 && s.baseY > 4, 'on the mount, ' + f.origin.y.toFixed(1) + ' m up');
+  let worst = 0, tt = 0; const top = R.layout(r).top;
+  while (tt < 120 && !g.crash) {   // every point on the axis below the tower top: horizontal distance from the pad axis
+    g.frame(); tt += 1 / 60;
+    for (let y = 0; y <= top; y += 2) { const p = { x: f.origin.x + f.up.x * y, y: f.origin.y + f.up.y * y, z: f.origin.z + f.up.z * y }; if (p.y < s.towerH + 10) worst = Math.max(worst, Math.hypot(p.x - f.padPos.x, p.z - f.padPos.z)); }
+    if (f.origin.y > s.towerH + 10) break;
+  }
+  console.log(`   mount ${s.mountH.toFixed(1)} m (rocket base ${s.baseY.toFixed(1)} m), tower ${s.towerH.toFixed(1)} m at ${s.face.toFixed(1)} m from the axis; cleared the tower top at ${tt.toFixed(1)} s, max drift below it ${worst.toFixed(2)} m (skin-to-tower gap ${(s.face - s.R - worst).toFixed(2)} m)`);
+  assert.ok(!g.crash && f.origin.y > s.towerH, 'climbed above the tower');
+  assert.ok(s.R + worst < s.face - 1, 'clears the tower face by more than 1 m');
 });
 
 t('staging: separation drops the spent stage for real (mass, engine, fuel), keeps the velocity, fires the stage event', () => {
@@ -31,7 +65,7 @@ t('staging: separation drops the spent stage for real (mass, engine, fuel), keep
   const m0 = R.stats(f.rocket, 1, 0).mass, lowerDry = R.stats(ST.split(f.rocket).lower, 1, 0).mass, seen = [], off = ST.onStage(e => seen.push(e));
   assert.ok(ST.canStage(f) && ST.stageDry(f));
   const s = ST.separate(f); off();
-  assert.ok(s); assert.equal(f.stage, 1); assert.equal(ST.stageIndex(f), 1); assert.equal(f.eng.id, 'hydro_upper'); assert.equal(f.fuelFrac, 1);
+  assert.ok(s); assert.equal(f.stage, 1); assert.equal(ST.stageIndex(f), 1); assert.equal(f.eng.id, 'wide_hydro_engine'); assert.equal(f.fuelFrac, 1);
   const m1 = R.stats(f.rocket, 1, 1).mass;
   assert.ok(lowerDry > 10000 && Math.abs(m0 - m1 - lowerDry) < 1, `dropped ${m0 - m1} kg, the empty stage is ${lowerDry} kg`);
   assert.deepEqual(f.vel, { x: 10, y: 300, z: 0 });
@@ -88,7 +122,7 @@ for (const d of dates) t(`pad -> stable orbit -> TLI -> Moon SOI -> capture -> p
   const lander = R.stats(f.rocket, 1, f.fuelFrac);
   console.log(`   orbit ${km(coast.pe)} x ${km(coast.ap)} km, ${((coast.t1 - coast.t0) / coast.period).toFixed(2)} orbits engine-off before TLI; Moon SOI at ${(soi.t / 3600).toFixed(1)} h; captured ${km(cap.pe)} x ${km(cap.ap)} km`);
   console.log(`   stages 1-3 dropped dry at ${g.stageEvents.map(s => `${(s.t / 60).toFixed(1)} min (${s.mode})`).join(', ')}; MCC ${JSON.stringify((g.ap.stats.mcc || []).map(x => +(x.dv ?? 0).toFixed(1)))} m/s`);
-  console.log(`   hull peak ${(g.hullPeak - 273.15).toFixed(0)} °C (ascent ${(hullAscent - 273.15).toFixed(0)} °C; damage starts at ${(HEAT.T_DMG * 1.25 - 273.15).toFixed(0)} °C for the Dome Cap)`);
+  console.log(`   hull peak ${(g.hullPeak - 273.15).toFixed(0)} °C (ascent ${(hullAscent - 273.15).toFixed(0)} °C; damage starts at ${(HEAT.T_DMG * (f.hull?.spec?.tol ?? 1) - 273.15).toFixed(0)} °C for the nose)`);
   console.log(`   active stage fuel at each phase start: ${fuelAt.join(' · ')}`);
   console.log(`   landed ${ld.speed.toFixed(2)} m/s, tilt ${ld.tilt.toFixed(2)} deg; lander fuel left ${Math.round(ld.fuel)} kg (${(f.fuelFrac * 100).toFixed(1)}%, ~${Math.round(f.eng.isp * 1.1 * 9.80665 * Math.log(lander.mass / lander.dry))} m/s); mission ${(ld.t / 3600).toFixed(1)} h; wall ${((Date.now() - w0) / 1000).toFixed(1)} s`);
 });

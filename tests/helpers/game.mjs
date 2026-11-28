@@ -22,13 +22,16 @@ export const { MoonFlight } = await import(ROOT + 'js/moon.js');
 export const { RocketHealth } = await import(ROOT + 'js/health.js');
 export const PRESETS = await import(ROOT + 'js/presets.js');
 export const { Gb5Flight } = await import(ROOT + 'js/rcs-ui.js');   // GB5: RCS input + space-leg heating / heat damage, as in flight.js
+const LS = await import('../../js/launchstand.js');   // gb3-stand
 const idx = JSON.parse(fs.readFileSync(new URL('data/parts/index.json', ROOT))).parts;
 R.registerParts(idx.map(id => JSON.parse(fs.readFileSync(new URL(`data/parts/${id}.json`, ROOT)))));
 const noop = () => {};
 const { V } = O;
 
 export function makeFlight(rocket, opts = {}) {
-  const f = S.newFlight(R.cloneRocket(rocket), { fill: 1, padPos: { x: 0, y: 0, z: -115 }, assist: true, wind: opts.wind ?? 0, windDir: 0.6 });
+  // gb3-stand: like flight.js, a stack too tall for the hangar launches from the Launch Stand's mount (opts.padY overrides)
+  const padY = opts.padY ?? (LS.needsStand(rocket) ? LS.standSize(rocket).baseY : 0);
+  const f = S.newFlight(R.cloneRocket(rocket), { fill: 1, padPos: { x: 0, y: padY, z: -115 }, assist: true, wind: opts.wind ?? 0, windDir: 0.6 });
   const notes = [];
   const fm = { f, g: { audio: { tap: noop, star: noop, noise: noop }, settings: { assist: true }, fill: 1, toast: (t) => notes.push(t), input: { hit: () => false }, resultsOpen: false, menuOpen: false, mission: null, training: null, prompt: noop },
     w: { camera: { position: { x: 0, y: 0, z: 0 } } }, ended: false, camInit: false, countdown: null, capture: noop, copyPose: noop, cur: {}, prev: {}, thr: 0, armed: false, acc: 0 };

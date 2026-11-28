@@ -1,0 +1,16 @@
+{
+ "id": "wide_tank_kero",
+ "name": "Wide Booster Tank",
+ "section": "structure",
+ "kind": "tank",
+ "attach": "stack",
+ "length": 8.7,
+ "radius": 5.0,
+ "dryMass": 15000,
+ "fuelMass": 560000,
+ "cnAlpha": 1.6,
+ "cd": 0.0,
+ "finish": "brushed",
+ "blurb": "10 m wide, 8.7 m tall: 560 t of kerosene and liquid oxygen on 15 t of aluminium (about 820 kg per cubic metre with the ullage, like a real first stage).",
+ "unlockStars": 7
+}

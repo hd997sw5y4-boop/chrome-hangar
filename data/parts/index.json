@@ -26,6 +26,18 @@
   "hydro_upper",
   "tank_hydro",
   "tank_saturn",
-  "saturn_engine"
+  "saturn_engine",
+  "wide_booster_engine",
+  "wide_mount",
+  "wide_tank_kero",
+  "wide_decoupler",
+  "wide_tank_hydro",
+  "wide_hydro_engine",
+  "wide_adapter",
+  "mid_decoupler",
+  "mid_mount",
+  "lander_tank",
+  "lunar_engine",
+  "crew_capsule"
  ]
 }

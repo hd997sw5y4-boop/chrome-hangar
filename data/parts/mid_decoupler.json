@@ -1,0 +1,16 @@
+{
+ "id": "mid_decoupler",
+ "name": "Mid Decoupler",
+ "section": "structure",
+ "kind": "decoupler",
+ "attach": "stack",
+ "length": 0.8,
+ "radius": 2.0,
+ "dryMass": 600,
+ "fuelMass": 0,
+ "cnAlpha": 0.15,
+ "cd": 0.0,
+ "finish": "dark",
+ "blurb": "4 m separation ring for landers and capsules. The next stage's Mid Engine Mount goes on top.",
+ "unlockStars": 7
+}

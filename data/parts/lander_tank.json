@@ -1,0 +1,16 @@
+{
+ "id": "lander_tank",
+ "name": "Lander Tank",
+ "section": "structure",
+ "kind": "tank",
+ "attach": "stack",
+ "length": 2.6,
+ "radius": 2.0,
+ "dryMass": 1800,
+ "fuelMass": 32000,
+ "cnAlpha": 0.6,
+ "cd": 0.0,
+ "finish": "mirror",
+ "blurb": "4 m wide, 2.6 m tall: 32 t of storable lander propellant (about 1000 kg per cubic metre) on 1.8 t. Put the legs here.",
+ "unlockStars": 7
+}

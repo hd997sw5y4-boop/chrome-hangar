@@ -1,0 +1,25 @@
+{
+ "id": "lunar_engine",
+ "name": "Lunar Descent Engine",
+ "section": "propulsion",
+ "kind": "engine",
+ "attach": "engine",
+ "length": 2.2,
+ "radius": 0.95,
+ "dryMass": 1100,
+ "thrust": 320000,
+ "isp": 300,
+ "minThrottle": 0.1,
+ "gimbalDeg": 6,
+ "heat": {
+  "safeThrottle": 1.0,
+  "risePerSec": 0,
+  "coolPerSec": 9,
+  "baseTemp": 600,
+  "spanTemp": 2000,
+  "limitTemp": 3100
+ },
+ "color": "#a8f0c8",
+ "blurb": "Deep-throttling lander engine: 350 kN in vacuum, down to 10%, about 330 s of Isp. Lets a 40 t lander nearly hover on the Moon.",
+ "unlockStars": 7
+}

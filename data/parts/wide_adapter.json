@@ -1,0 +1,18 @@
+{
+ "id": "wide_adapter",
+ "name": "Wide Adapter (10 m to 4 m)",
+ "section": "structure",
+ "kind": "tank",
+ "attach": "stack",
+ "adapter": true,
+ "length": 5.0,
+ "radius": 5.0,
+ "radiusTop": 2.0,
+ "dryMass": 4000,
+ "fuelMass": 0,
+ "cnAlpha": 0.8,
+ "cd": 0.0,
+ "finish": "brushed",
+ "blurb": "A cone that narrows a 10 m stage to a 4 m payload (a Mid Decoupler and a lander or capsule). Holds no fuel.",
+ "unlockStars": 7
+}

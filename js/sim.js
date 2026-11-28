@@ -1,5 +1,5 @@
 // Flight + engine physics. Fixed-step, deterministic, single rigid body (plan: no joints).
-import { PARTS, stats, layout, hasLegs, G0 } from './rocket.js';
+import { PARTS, stats, layout, hasLegs, G0 , legFoot } from './rocket.js';   // gb3-wide: legFoot
 import { extraForces } from './rcs.js';   // GB5-RCS
 
 export const DT = 1 / 120;
@@ -118,7 +118,7 @@ function basis(up) {
 export function contactPoints(f) {
   const O = f.origin, up = f.up, [e1, e2] = basis(up), pts = [];
   const L = layout(f.rocket);
-  const lg = legsDown(f), r = lg ? PARTS.legs.footRadius : (f.eng ? f.eng.radius : 0.9);
+  const lg = legsDown(f), r = lg ? legFoot(f.rocket) : (f.eng ? f.eng.radius : 0.9);   // gb3-wide: wider landers splay their legs further
   const y = lg ? -PARTS.legs.drop : 0;
   for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) pts.push(add(add(add(O, up, y), e1, a * r), e2, b * r));
   for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) pts.push(add(add(add(O, up, L.top), e1, a * 0.9), e2, b * 0.9));

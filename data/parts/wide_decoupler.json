@@ -1,0 +1,16 @@
+{
+ "id": "wide_decoupler",
+ "name": "Wide Decoupler",
+ "section": "structure",
+ "kind": "decoupler",
+ "attach": "stack",
+ "length": 1.5,
+ "radius": 5.0,
+ "dryMass": 5000,
+ "fuelMass": 0,
+ "cnAlpha": 0.15,
+ "cd": 0.0,
+ "finish": "dark",
+ "blurb": "10 m interstage ring with separation bolts. The next stage's Wide Engine Mount goes on top; staging drops everything below.",
+ "unlockStars": 7
+}

@@ -5,7 +5,7 @@
 // generated normal / roughness / colour maps.
 import * as THREE from 'three';
 import { mergeGeometries } from '../vendor/three/addons/utils/BufferGeometryUtils.js';
-import { PARTS, layout } from './rocket.js';
+import { PARTS, layout, finScale, legFoot } from './rocket.js';   // gb3-wide: finScale, legFoot
 
 let M = null; // shared materials
 const cache = new Map();
@@ -187,6 +187,7 @@ function boltRing(k, r, y, n, size, mat) { const b = new THREE.CylinderGeometry(
 
 // ---------- parts ----------
 function tankMesh(d, heat) {
+  if (d.radiusTop) return adapterMesh(d);   // gb3-wide: a cone (Wide Adapter)
   const g = new THREE.Group(), k = new Kit(), R = d.radius, L = d.length;
   k.add(new THREE.CylinderGeometry(R, R, L, 72, 1, true), finishMat(d.finish, L, heat), xf([0, L / 2, 0]));
   // joint flanges at both ends with bolt heads
@@ -233,6 +234,7 @@ export function clusterOffsets(n, bellR, gap = 0.05) {
   const out = [], pitch = 2 * bellR + gap;
   const ring = (count, r, a0 = 0) => { for (let i = 0; i < count; i++) { const a = a0 + i / count * TAU; out.push({ x: Math.cos(a) * r, z: Math.sin(a) * r }); } };
   if (n === 3) ring(3, pitch / Math.sqrt(3), Math.PI / 6);
+  else if (n === 5) { out.push({ x: 0, z: 0 }); ring(4, pitch, Math.PI / 4); }   // gb3-wide: one centre bell and four around it
   else if (n === 9) { out.push({ x: 0, z: 0 }); ring(8, pitch / (2 * Math.sin(Math.PI / 8))); }
   else { out.push({ x: 0, z: 0 }); ring(6, pitch); const o = n - 7; ring(o, pitch / (2 * Math.sin(Math.PI / o)), Math.PI / o); }
   return out;
@@ -357,13 +359,13 @@ export function finPair(pairIndex, radius = 0.9) {
   fg.dispose();
   return k.build(g);
 }
-export function legSet(dropTo, radius = 0.9) {
+export function legSet(dropTo, radius = 0.9, footR = null) {
   // dropTo = distance from the attach point down to the feet. A-frame: hinge, damper strut with chrome piston, two braces, foot pad.
   // Each leg is its own group pivoting at its hinge so it can fold up flat against the body in flight (setLegFold).
   const d = PARTS.legs, g = new THREE.Group(), legs = [];
   for (let i = 0; i < 4; i++) {
     const a = i * Math.PI / 2 + Math.PI / 4, c = Math.cos(a), s = Math.sin(a), at = (r, y) => V(c * r, y, s * r);
-    const hinge = at(radius + 0.12, 0.95), foot = at(d.footRadius, -dropTo + 0.16), knee = hinge.clone().lerp(foot, 0.58);
+    const hinge = at(radius + 0.12, 0.95), foot = at(footR ?? d.footRadius, -dropTo + 0.16), knee = hinge.clone().lerp(foot, 0.58);
     const k = new Kit(), kb = new Kit();
     kb.add(new THREE.BoxGeometry(0.34, 0.38, 0.24), M.titanium, xf([c * (radius + 0.06), 0.98, s * (radius + 0.06)], [0, -a, 0]));
     k.rod(hinge, knee, 0.1, 0.085, M.dark, 12); k.rod(knee.clone().lerp(hinge, 0.06), foot, 0.055, 0.055, M.chromeTrim, 10);
@@ -409,6 +411,32 @@ function gridFins(y, radius = 0.9) {
   return k.build(g);
 }
 
+// gb3-wide: Wide Adapter, a ribbed cone from the stage below (radius) to the payload above (radiusTop)
+function adapterMesh(d) {
+  const g = new THREE.Group(), k = new Kit(), R = d.radius, Rt = d.radiusTop, L = d.length;
+  k.add(new THREE.CylinderGeometry(Rt, R, L, 72, 1, true), finishMat(d.finish, L, false), xf([0, L / 2, 0]));
+  for (const [y, r] of [[0.06, R], [L - 0.06, Rt]]) { k.add(new THREE.CylinderGeometry(r + 0.02, r + 0.02, 0.12, 72, 1, true), M.dark, xf([0, y, 0])); boltRing(k, r + 0.025, y, 48, 0.03, M.chromeTrim); }
+  const sl = Math.atan2(R - Rt, L);
+  for (let i = 0; i < 16; i++) { const a = i / 16 * TAU, rm = (R + Rt) / 2 + 0.03; k.add(new THREE.BoxGeometry(0.12, Math.hypot(L, R - Rt) * 0.96, 0.06), M.titanium, xf([Math.cos(a) * rm, L / 2, Math.sin(a) * rm], [0, -a, sl])); }   // stringers along the cone
+  k.add(new THREE.CircleGeometry(R, 48), M.dark, xf([0, 0, 0], [Math.PI / 2, 0, 0]));
+  k.add(new THREE.CircleGeometry(Rt, 48), M.dark, xf([0, L, 0], [-Math.PI / 2, 0, 0]));
+  return k.build(g);
+}
+// gb3-wide: Crew Capsule, a blunt cone (Apollo-like) with a heat-shield rim, docking ring, hatch and four windows
+function capsuleMesh(d) {
+  const g = new THREE.Group(), k = new Kit(), R = d.radius, L = d.length, rt = R * 0.3, pts = [];
+  pts.push(new THREE.Vector2(R * 0.985, 0)); pts.push(new THREE.Vector2(R, 0.18)); pts.push(new THREE.Vector2(rt, L * 0.86)); pts.push(new THREE.Vector2(rt * 0.95, L * 0.9)); pts.push(new THREE.Vector2(0.06, L * 0.93));
+  k.add(new THREE.LatheGeometry(pts, 72), finishMat(d.finish, L, false, 'nose'));
+  k.add(new THREE.CylinderGeometry(R * 0.99, R * 0.96, 0.2, 72, 1, false), M.darkMatte, xf([0, 0.1, 0]));   // heat shield
+  k.add(new THREE.TorusGeometry(rt * 0.82, 0.07, 8, 32), M.titanium, xf([0, L * 0.9, 0], [Math.PI / 2, 0, 0]));   // docking ring
+  const slope = Math.atan2(R - rt, L * 0.86 - 0.18), at = (a, h) => { const r = R - (R - rt) * (h - 0.18) / (L * 0.86 - 0.18) + 0.015; return [Math.cos(a) * r, h, Math.sin(a) * r]; };
+  for (const [a, w, h] of [[0, 0.55, 0.42], [-0.5, 0.42, 0.36], [0.5, 0.42, 0.36], [Math.PI, 0.9, 1.0]]) {   // three windows (front) and the hatch (back), dark glass flush on the cone
+    const p = at(a, a === Math.PI ? 1.3 : 1.55);
+    k.add(new THREE.BoxGeometry(0.04, h, w), a === Math.PI ? M.titanium : M.dark, xf(p, [0, -a, slope]));
+  }
+  k.add(new THREE.CylinderGeometry(R + 0.014, R + 0.014, 0.08, 72, 1, true), M.dark, xf([0, 0.24, 0])); boltRing(k, R + 0.016, 0.24, 40, 0.024, M.chromeTrim);
+  return k.build(g);
+}
 // gb3-moon-rocket: Decoupler, a short dark ring with a bright separation band and two bolt rows (the band is where it splits)
 function decouplerMesh(d) {
   const g = new THREE.Group(), k = new Kit(), R = d.radius || 0.9, L = d.length;
@@ -424,7 +452,7 @@ export function partMesh(id, heat = false) {
   initMaterials();
   const d = PARTS[id];
   if (d.kind === 'tank') return tankMesh(d, heat);
-  if (d.kind === 'nose') return noseMesh(d);
+  if (d.kind === 'nose') return d.capsule ? capsuleMesh(d) : noseMesh(d);   // gb3-wide: Crew Capsule
   if (d.kind === 'mount') return mountMesh(d);
   if (d.kind === 'decoupler') return decouplerMesh(d);   // gb3-moon-rocket
   if (d.kind === 'engine') return engineMesh(d);
@@ -449,10 +477,11 @@ export function rocketMesh(r) {
   const firstTank = L.items.findIndex(it => it.d.kind === 'tank'), lastTank = L.items.map(it => it.d.kind).lastIndexOf('tank'), legs = L.items.some(it => it.s.legs);
   for (const it of L.items) {
     const m = partMesh(it.s.p, it.i === firstTank && !!r.engine); m.position.y = it.y0; g.add(m);
-    if (legs && it.i === lastTank && it.d.length >= 1.5) { const gf = gridFins(it.y1 - 0.6); m.add(gf); gf.position.y = -it.y0; }
+    if (legs && it.i === lastTank && it.d.length >= 1.5) { const gf = gridFins(it.y1 - 0.6, it.r); m.add(gf); gf.position.y = -it.y0; }
     tag(m, { type: 'stack', index: it.i });
-    for (let k = 0; k < (it.s.fins || 0); k++) { const f = finPair(k); f.position.y = it.y0 + 0.35; g.add(f); tag(f, { type: 'fins', index: it.i }); }
-    if (it.s.legs) { const l = legSet(it.y0 - stageFoot(it.i) + PARTS.legs.drop); l.position.y = it.y0; g.add(l); tag(l, { type: 'legs', index: it.i }); }   // gb3-moon-rocket: legs reach their own stage's foot
+    const fk = finScale(it.r);   // gb3-wide: fins built to the tank's size (stats() uses the same scale), legs from the tank's radius
+    for (let k = 0; k < (it.s.fins || 0); k++) { const f = finPair(k); f.scale.setScalar(fk); f.position.y = it.y0 + 0.35 * fk; g.add(f); tag(f, { type: 'fins', index: it.i }); }
+    if (it.s.legs) { const l = legSet(it.y0 - stageFoot(it.i) + PARTS.legs.drop, it.r, legFoot(r)); l.position.y = it.y0; g.add(l); tag(l, { type: 'legs', index: it.i }); }   // gb3-moon-rocket: legs reach their own stage's foot
   }
   g.userData.picks = picks; g.userData.layout = L;
   return g;

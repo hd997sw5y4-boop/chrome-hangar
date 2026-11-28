@@ -43,12 +43,23 @@ export function layout(r) {
   const items = r.stack.map((s, i) => {
     const d = PARTS[s.p];
     if (i > 0 && d.kind === 'mount' && PARTS[s.engine]) { const e = PARTS[s.engine]; engines.push({ id: s.engine, d: e, i, y0: y, y1: y + e.length }); y += e.length; }
-    const it = { i, s, d, y0: y, y1: y + d.length };
+    const it = { i, s, d, y0: y, y1: y + d.length, r: d.radius || 0.9 };   // gb3-wide: each part has its own radius
     y += d.length;
     return it;
   });
   const legs = PARTS.legs;
-  return { engLen, items, engines, top: y, bottom: hasLegs(r) && legs ? -legs.drop : 0, radius: 0.9 };
+  const radius = Math.max(0.9, ...items.map(it => Math.max(it.r, it.d.radiusTop || 0)));   // gb3-wide: widest body part
+  return { engLen, items, engines, top: y, bottom: hasLegs(r) && legs ? -legs.drop : 0, radius };
+}
+// gb3-wide: area of a part's cross-section against the classic 1.8 m body (sim.js / aero.js drag use pi * 0.9^2 as the reference
+// area, so stats() folds the real frontal area into cd and the side area into cn: drag and lift then use the real diameter)
+export const AREA0 = 0.9 * 0.9;
+const areaK = r => (r * r) / AREA0;
+// gb3-wide: landing-leg footprint radius for a rocket: the legs' 2.3 m reach is from the classic 0.9 m tank, wider landers splay further
+export function legFoot(r) {
+  const L = PARTS.legs; if (!L) return 0;
+  const e = activeEnd(r), it = r.stack.findIndex((s, i) => s.legs && i <= e), R = it >= 0 ? (PARTS[r.stack[it].p]?.radius || 0.9) : 0.9;
+  return L.footRadius + Math.max(0, R - 0.9) * 1.25;
 }
 
 // All mass/aero numbers for a rocket at a given fuel fraction (0..1) of a fill level.
@@ -57,24 +68,26 @@ export function stats(r, fill = 1, fuelFrac = 1) {
   const eng = r.engine ? PARTS[r.engine] : null;
   const masses = []; // [m, y, len]
   let fuelCap = 0, cn = 0, cnY = 0, cd = 0.75;
+  const rad = new Map();   // gb3-wide: mass entry -> radius (for the moment of inertia)
   const f0 = fill * fuelFrac, aEnd = activeEnd(r), legsLive = hasLegs(r);
   for (const e of L.engines) masses.push([e.d.dryMass, e.y0 + e.d.length * 0.55, e.d.length]);   // gb3-moon-rocket: upper-stage engines
   for (const it of L.items) {
     const d = it.d, f = it.i <= aEnd ? f0 : fill;   // gb3-moon-rocket: only the burning (bottom) stage drains; stages above stay full
-    masses.push([d.dryMass, (it.y0 + it.y1) / 2, d.length]);
+    const ak = areaK(it.r);   // gb3-wide
+    masses.push([d.dryMass, (it.y0 + it.y1) / 2, d.length, it.r]);
     if (d.fuelMass) {
       if (it.i <= aEnd) fuelCap += d.fuelMass * fill;
-      if (f > 0) masses.push([d.fuelMass * f, it.y0 + d.length * f / 2, d.length * f]);
+      if (f > 0) masses.push([d.fuelMass * f, it.y0 + d.length * f / 2, d.length * f, it.r]);
     }
-    let pc = d.cnAlpha, py = (it.y0 + it.y1) / 2;
+    let pc = d.cnAlpha * ak, py = (it.y0 + it.y1) / 2;   // gb3-wide: side force grows with the part's area
     if (d.kind === 'nose') py = it.y1 - 0.466 * d.length;
     cn += pc; cnY += pc * py;
     cd += d.cd || 0;
     if (s_fins(it.s)) {
-      const fd = PARTS.fins, n = it.s.fins;
-      masses.push([fd.dryMass * n, it.y0 + 0.5, 1.5]);
-      cn += fd.cnAlpha * n; cnY += fd.cnAlpha * n * (it.y0 + 0.35);
-      cd += fd.cd * n;
+      const fd = PARTS.fins, n = it.s.fins, fk = finScale(it.r), fa = fk * fk;   // gb3-wide: fins scale with their tank (area fk^2)
+      masses.push([fd.dryMass * n * fa, it.y0 + 0.5 * fk, 1.5 * fk, it.r]);
+      cn += fd.cnAlpha * n * fa; cnY += fd.cnAlpha * n * fa * (it.y0 + 0.35 * fk);
+      cd += fd.cd * n * fa / areaK(L.radius);
     }
     if (it.s.legs) {
       const ld = PARTS.legs, ly = legsLive ? it.y0 * 0.5 : it.y0 + 0.5;   // stowed on an upper stage until it is the bottom one
@@ -86,11 +99,12 @@ export function stats(r, fill = 1, fuelFrac = 1) {
   if (eng && L.engLen) masses.push([eng.dryMass, eng.length * 0.55, eng.length]);
   const hasNose = r.stack.length && PARTS[r.stack[r.stack.length - 1].p].kind === 'nose';
   if (!hasNose && r.stack.length) cd += 0.25; // blunt top
+  cd *= areaK(L.radius);   // gb3-wide: frontal area of the widest part (1 for the classic 1.8 m body)
   let m = 0, my = 0;
   for (const [mm, yy] of masses) { m += mm; my += mm * yy; }
   const com = m ? my / m : 0;
   let I = 0;
-  for (const [mm, yy, len] of masses) I += mm * (len * len / 12 + 0.2) + mm * (yy - com) ** 2;
+  for (const [mm, yy, len, rr] of masses) I += mm * (len * len / 12 + (rr > 0.9 ? rr * rr / 4 : 0.2)) + mm * (yy - com) ** 2;   // gb3-wide: r^2/4 (= 0.2 at 0.9 m)
   const cop = cn ? cnY / cn : 0;
   const thrust = eng && L.engLen ? eng.thrust : 0;
   const fuel = fuelCap * fuelFrac;   // the burning stage's fuel (all of it when there is no Decoupler)
@@ -103,13 +117,15 @@ export function stats(r, fill = 1, fuelFrac = 1) {
     burnTime: mdot ? fuel / mdot : 0,
     dv: eng && dry > 0 && fuel > 0 ? eng.isp * G0 * Math.log(m / dry) : 0,
     margin: (com - cop), // >0 = CoM above CoP = stable
+    diameter: 2 * L.radius,   // gb3-wide
     parts: partCount(r),
   };
 }
 function s_fins(s) { return s.fins > 0; }
+export const finScale = r => Math.max(1, (r || 0.9) / 0.9);   // gb3-wide: a fin pair on a wide tank is built to that tank's size
 
 export function stability(st) {
-  const m = st.margin / 1.8; // in calibers (diameter 1.8 m)
+  const m = st.margin / (st.diameter || 1.8); // in calibers (gb3-wide: the rocket's own diameter)
   if (m > 0.15) return { word: 'Stable', level: 2 };
   if (m > -0.05) return { word: 'Marginal', level: 1 };
   return { word: 'Will flip', level: 0 };
@@ -130,7 +146,7 @@ export function problems(r) {
     if (k && !PARTS[eng]) { out.push(`Stage ${k + 1} needs an engine under its mount.`); continue; }
     if (!seg.some(s => PARTS[s.p].kind === 'tank')) { out.push(`Stage ${k + 1} needs a fuel tank.`); continue; }
     const h = PARTS[eng]?.fuel === 'hydrogen';
-    if (eng && seg.some(s => PARTS[s.p].kind === 'tank' && (PARTS[s.p].fuel === 'hydrogen') !== h)) out.push(h ? `Stage ${k + 1}: the Hydrogen Upper Engine only burns Hydrogen Tanks.` : `Stage ${k + 1}: Hydrogen Tanks need the Hydrogen Upper Engine.`);
+    if (eng && seg.some(s => PARTS[s.p].kind === 'tank' && PARTS[s.p].fuelMass > 0 && (PARTS[s.p].fuel === 'hydrogen') !== h)) out.push(h ? `Stage ${k + 1}: the Hydrogen Upper Engine only burns Hydrogen Tanks.` : `Stage ${k + 1}: Hydrogen Tanks need the Hydrogen Upper Engine.`);
   }
   st.forEach((s, i) => { if (i > 0 && PARTS[s.p].kind === 'mount' && PARTS[st[i - 1].p].kind !== 'decoupler') out.push('An Engine Mount above the bottom needs a Decoupler right under it.'); });
   if (D.length && D[D.length - 1] === st.length - 1) out.push('A Decoupler cannot be the top of the rocket.');

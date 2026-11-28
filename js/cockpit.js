@@ -12,7 +12,7 @@ const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const EYE_DROP = 1.55;          // eye sits this far below the top of the stack
 const YAW_MAX = 1.75, PITCH_MIN = -1.05, PITCH_MAX = 1.2;
 const G0 = 9.80665;
-const REST_PITCH = -0.14;      // resting head angle: a little down toward the displays
+const REST_PITCH = -0.06;   // gb3-cockpit: was -0.14; the console sits lower now      // resting head angle: a little down toward the displays
 
 // ---------- procedural textures ----------
 function canvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return [c, c.getContext('2d')]; }
@@ -99,7 +99,8 @@ export class Cockpit {
     this.on = false; this.built = false; this.yaw = 0; this.pitch = 0; this.yawT = 0; this.pitchT = 0;
     this.prevVel = new THREE.Vector3(); this.gs = 1; this.moonObj = null; this.moonScan = 0; this.prevMoon = null; this.flashT = 0;
     this.tmp = { q: new THREE.Quaternion(), q2: new THREE.Quaternion(), e: new THREE.Euler(0, 0, 0, 'YXZ'), a: V(0, 0, 0), b: V(0, 0, 0), c: V(0, 0, 0), u: V(0, 1, 0), h: V(0, 0, 1) };
-    this.qX = new THREE.Quaternion().setFromAxisAngle(V(1, 0, 0), Math.PI / 2);   // capsule -Z -> rocket +Y, capsule +Y -> rocket +Z
+    this.qX = new THREE.Quaternion().setFromAxisAngle(V(1, 0, 0), Math.PI / 2);
+    this.qY = new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), Math.PI / 2);   // gb3-capsule: rocket +Z -> +X, the capsule's window side   // capsule -Z -> rocket +Y, capsule +Y -> rocket +Z
     const st = document.createElement('style');
     st.textContent = 'body.ckpt #fStats,body.ckpt #fMeters{display:none}';
     document.head.appendChild(st);
@@ -126,7 +127,8 @@ export class Cockpit {
     document.body.classList.toggle('ckpt', this.on);
   }
   off() { this.setOn(false); }
-  hide() { if (!this.built) return; this.root.visible = false; for (const l of this.lights) l.intensity = 0; this.fm.camInit = false; }
+  showPart() { if (this.hiddenPart) { this.hiddenPart.visible = true; this.hiddenPart = null; } }   // gb3-capsule
+  hide() { this.showPart(); if (!this.built) return; this.root.visible = false; for (const l of this.lights) l.intensity = 0; this.fm.camInit = false; }
 
   // steering reference for flight.shapeSteer: stick up = nose toward the top of the window, right = right.
   steerAxes(fw, rt) {
@@ -158,11 +160,17 @@ export class Cockpit {
     this.M = M;
 
     // pressure vessel: cylinder section behind, nose cone ahead (lathe around the capsule Z axis), window holes cut by alpha
-    const R0 = 1.05, Rtip = 0.43, Z0 = 0.45, Z1 = 1.35, rAt = y => R0 + (Rtip - R0) * Math.pow((y - Z0) / (Z1 - Z0), 0.85);
+    const R0 = 1.05, Rtip = 0.47, Z0 = 0.3, Z1 = 0.98,   // gb3-cockpit: shorter cone, eye closer to the glass (was Rtip 0.43, Z0 0.45, Z1 1.35)
+      rAt = y => R0 + (Rtip - R0) * Math.pow((y - Z0) / (Z1 - Z0), 0.85);
     const toCap = g => g.rotateX(-Math.PI / 2);          // lathe +Y -> capsule -Z, lathe +Z -> capsule +Y (phi 0 = top)
-    root.add(new THREE.Mesh(toCap(new THREE.LatheGeometry([new THREE.Vector2(R0, -1.0), new THREE.Vector2(R0, Z0)], 64)), M.lining));
+    // gb3-cockpit: side windows (left / right) cut in the cylinder at eye level, for free-look; plain openings, no glass
+    const SIDE = [[Math.PI / 2, -0.42, 0.26, 0.46], [-Math.PI / 2, -0.42, 0.26, 0.46]], CY0 = -1.0;   // [phi, y0, y1, half-width rad] in lathe y
+    const [sc, sx] = canvas(1024, 256); sx.fillStyle = '#fff'; sx.fillRect(0, 0, 1024, 256); sx.fillStyle = '#000';
+    for (const [p, y0, y1, hw] of SIDE) { const px = (((p / (Math.PI * 2)) % 1 + 1) % 1) * 1024, w = hw / (Math.PI * 2) * 1024, top = (1 - (y1 - CY0) / (Z0 - CY0)) * 256, bot = (1 - (y0 - CY0) / (Z0 - CY0)) * 256; sx.beginPath(); sx.roundRect(px - w, top, w * 2, bot - top, 18); sx.fill(); }
+    const cylMat = M.lining.clone(); cylMat.alphaMap = new THREE.CanvasTexture(sc); cylMat.alphaTest = 0.5;
+    root.add(new THREE.Mesh(toCap(new THREE.LatheGeometry([new THREE.Vector2(R0, CY0), new THREE.Vector2(R0, Z0)], 64)), cylMat));
     const coneN = 12, conePts = []; for (let i = 0; i <= coneN; i++) { const y = Z0 + (Z1 - Z0) * i / coneN; conePts.push(new THREE.Vector2(rAt(y), y)); }
-    const WINS = [[0.72, 0.62, 1.12, 0.2], [-0.72, 0.62, 1.12, 0.2], [1.62, 0.55, 1.0, 0.24], [-1.62, 0.55, 1.0, 0.24]];   // [phi, y0, y1, half-width rad]
+    const WINS = [[0.62, 0.36, 0.9, 0.34], [-0.62, 0.36, 0.9, 0.34], [1.68, 0.34, 0.86, 0.36], [-1.68, 0.34, 0.86, 0.36]];   // gb3-cockpit: bigger (was hw 0.2-0.24, ~0.45 tall)   // [phi, y0, y1, half-width rad]
     const [ac, ax] = canvas(2048, 512); ax.fillStyle = '#fff'; ax.fillRect(0, 0, 2048, 512); ax.fillStyle = '#000';
     for (const [p, y0, y1, hw] of WINS) {
       const u = ((p / (Math.PI * 2)) % 1 + 1) % 1, v0 = (y0 - Z0) / (Z1 - Z0), v1 = (y1 - Z0) / (Z1 - Z0);
@@ -175,47 +183,31 @@ export class Cockpit {
     root.add(new THREE.Mesh(toCap(new THREE.LatheGeometry(conePts, 96)), coneMat));
     // back bulkhead
     const back = new THREE.Mesh(new THREE.CircleGeometry(R0, 48), M.lining); back.position.z = 1.0; back.rotation.y = Math.PI; back.material = M.lining.clone(); back.material.side = THREE.FrontSide; root.add(back);
-    // window frames, gaskets and glass on the cone
-    const cap = (phi, y, inset) => { const r = rAt(y) - inset; return V(r * Math.sin(phi), r * Math.cos(phi), -y); };
-    for (const [p, y0, y1, hw] of WINS) {
-      const pts = [], N = 64, cr = 0.32;
+    // window frames on the cone and the cylinder (gb3-cockpit)
+    // gb3-cockpit: one thin merged frame for every opening (was a 19 mm frame tube + rubber gasket + glass pane + bolt ring per window)
+    const frames = [], capR = (phi, y, inset, side) => { const r = (side ? R0 : rAt(y)) - inset; return V(r * Math.sin(phi), r * Math.cos(phi), -y); };
+    for (const [p, y0, y1, hw, side] of [...WINS, ...SIDE.map(w => [...w, true])]) {
+      const pts = [], N = 64;
       for (let i = 0; i < N; i++) {   // superellipse outline in (phi, y): rounded rectangle
         const t = i / N * Math.PI * 2, c = Math.cos(t), s = Math.sin(t), e = 0.35;
         const ux = Math.sign(c) * Math.pow(Math.abs(c), e), uy = Math.sign(s) * Math.pow(Math.abs(s), e);
-        pts.push(cap(p + ux * hw * (1 - cr * 0.02), (y0 + y1) / 2 + uy * (y1 - y0) / 2, 0.012));
+        pts.push(capR(p + ux * hw * 0.994, (y0 + y1) / 2 + uy * (y1 - y0) / 2, 0.008, side));
       }
-      const curve = new THREE.CatmullRomCurve3(pts, true);
-      root.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 128, 0.019, 10, true), M.frame));
-      root.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 128, 0.009, 6, true), M.rubber));
-      const gg = new THREE.PlaneGeometry(1, 1, 12, 12), pa = gg.attributes.position;
-      for (let i = 0; i < pa.count; i++) { const a = pa.getX(i) + 0.5, b = pa.getY(i) + 0.5, v = cap(p + (a - 0.5) * 2.3 * hw, y0 - 0.04 + b * (y1 - y0 + 0.08), -0.015); pa.setXYZ(i, v.x, v.y, v.z); }
-      gg.computeVertexNormals(); const gm = new THREE.Mesh(gg, M.glass); gm.renderOrder = 2; root.add(gm);
-      // bolt ring
-      const bolts = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.006, 0.006, 0.01, 6), M.chrome, 20), o = new THREE.Object3D();
-      for (let i = 0; i < 20; i++) { const P = curve.getPointAt(i / 20), out = cap(p, (y0 + y1) / 2, 0.012); o.position.copy(P).lerp(out, -0.09); o.lookAt(0, 0, 0); o.rotateX(Math.PI / 2); o.updateMatrix(); bolts.setMatrixAt(i, o.matrix); }
-      root.add(bolts);
+      frames.push(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, true), 96, 0.008, 5, true));
     }
+    root.add(new THREE.Mesh(mergeGeometries(frames), M.frame));
     // nose-tip hatch window straight ahead
     const tip = new THREE.Group(); tip.position.z = -Z1; root.add(tip);
-    const tipBulk = new THREE.Mesh(new THREE.RingGeometry(0.27, Rtip + 0.01, 64), M.paint); tip.add(tipBulk);
-    const tipFrame = new THREE.Mesh(new THREE.LatheGeometry([0.27, 0.3, 0.33, 0.34, 0.31, 0.27].map((r, i) => new THREE.Vector2(r, [0, 0.005, 0.02, 0.04, 0.05, 0.05][i])), 64).rotateX(Math.PI / 2), M.frame); tip.add(tipFrame);
-    const tb = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.008, 0.008, 0.012, 6).rotateX(Math.PI / 2), M.chrome, 24), o2 = new THREE.Object3D();
-    for (let i = 0; i < 24; i++) { const a = i / 24 * Math.PI * 2; o2.position.set(Math.cos(a) * 0.37, Math.sin(a) * 0.37, 0.006); o2.updateMatrix(); tb.setMatrixAt(i, o2.matrix); } tip.add(tb);
-    const tg = new THREE.Mesh(new THREE.CircleGeometry(0.28, 48), M.glass); tg.position.z = -0.01; tg.renderOrder = 2; tip.add(tg);
-    // hatch dogs (latches) around the tip
-    for (let i = 0; i < 4; i++) { const a = Math.PI / 4 + i * Math.PI / 2, d = new THREE.Mesh(plate(0.05, 0.025, 0.012, 0.005, 0.003), M.dark); d.position.set(Math.cos(a) * 0.4, Math.sin(a) * 0.4, 0.01); d.rotation.z = a; tip.add(d); }
+    // gb3-cockpit: opening 0.41 m radius (was a 0.28 m pane in a thick bolted frame); thin lathe rim, no glass, no bolts / hatch dogs
+    const tipBulk = new THREE.Mesh(new THREE.RingGeometry(0.41, Rtip + 0.01, 64), M.paint); tip.add(tipBulk);
+    const tipFrame = new THREE.Mesh(new THREE.LatheGeometry([0.41, 0.425, 0.425, 0.41].map((r, i) => new THREE.Vector2(r, [0, 0.004, 0.02, 0.024][i])), 64).rotateX(Math.PI / 2), M.frame); tip.add(tipFrame);
 
     // structural rings and longitudinal stringers
-    for (const z of [0.55, -0.02, -0.45]) { const r = new THREE.Mesh(new THREE.TorusGeometry(R0 - 0.02, 0.022, 8, 96), M.paint); r.position.z = z; root.add(r); }
-    for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2 + 0.26; root.add(rod(V(Math.sin(a) * (R0 - 0.03), Math.cos(a) * (R0 - 0.03), 0.95), V(Math.sin(a) * (R0 - 0.03), Math.cos(a) * (R0 - 0.03), -0.45), 0.012, M.paint, 6)); }
-    // grab handles near the windows
-    for (const s of [-1, 1]) {
-      const c = new THREE.CatmullRomCurve3([V(s * 0.55, 0.78, -0.3), V(s * 0.62, 0.72, -0.36), V(s * 0.68, 0.62, -0.45), V(s * 0.72, 0.52, -0.52)]);
-      root.add(new THREE.Mesh(new THREE.TubeGeometry(c, 24, 0.012, 8), M.chrome));
-    }
+    // gb3-cockpit: only the aft ring is kept; the mid / fwd rings, 12 stringers and the window grab handles crossed the new openings
+    { const r = new THREE.Mesh(new THREE.TorusGeometry(R0 - 0.02, 0.022, 8, 96), M.paint); r.position.z = 0.55; root.add(r); }
 
     // main console: three faceted panels on an arc below eye level, each with a display, bezel and soft keys
-    const eye = V(0, 0, 0), RC = 0.58, EL = -0.43;
+    const eye = V(0, 0, 0), RC = 0.58, EL = -0.6;   // gb3-cockpit: console lowered (was EL -0.43) so its top edge clears the nose window
     const facet = (az, el, w, h, labels, d = RC) => {
       const grp = new THREE.Group(); grp.position.set(Math.sin(az) * Math.cos(el) * d, Math.sin(el) * d, -Math.cos(az) * Math.cos(el) * d); grp.lookAt(eye); root.add(grp);
       const m = new THREE.Mesh(plate(w, h, 0.03), new THREE.MeshStandardMaterial({ map: panelTexture(w, h, labels), roughness: 0.6, metalness: 0.35, roughnessMap: rough }));
@@ -235,7 +227,7 @@ export class Cockpit {
     const fR = facet(0.6, EL, fw, fh, [['ENG', 0.12, 0.95, 0.03], ['PWR', 0.88, 0.95, 0.03]]);
     screenOn(fL, SW, SW, inst.pfd.tex); screenOn(fC, SW, SW, inst.sys.tex); screenOn(fR, SW, SW, inst.eng.tex);
     // knee panel under the centre display: Moon range gauge, stage lamps, rotary selectors, guarded switches
-    const fK = facet(0, -0.98, 0.62, 0.22, [['MOON RNG', 0.17, 0.12, 0.03], ['STAGE', 0.5, 0.88, 0.03], ['PYRO ARM', 0.83, 0.88, 0.028], ['DISP', 0.83, 0.15, 0.028]], 0.58);
+    const fK = facet(0, -1.12, 0.62, 0.22, [['MOON RNG', 0.17, 0.12, 0.03], ['STAGE', 0.5, 0.88, 0.03], ['PYRO ARM', 0.83, 0.88, 0.028], ['DISP', 0.83, 0.15, 0.028]], 0.58);
     const moonBz = new THREE.Mesh(new THREE.TorusGeometry(0.055, 0.01, 10, 48), M.frame); moonBz.position.set(-0.2, 0.01, 0.004); fK.add(moonBz);
     this.moonScreen = new THREE.Mesh(new THREE.CircleGeometry(0.052, 48), new THREE.MeshStandardMaterial({ color: 0, roughness: 0.15, emissive: 0xffffff, emissiveMap: inst.moon.tex, emissiveIntensity: 1.2 }));
     this.moonScreen.position.set(-0.2, 0.01, 0.006); fK.add(this.moonScreen);
@@ -278,7 +270,7 @@ export class Cockpit {
     }
     // under-panel struts to the floor ring
     for (const s of [-1, 1]) { root.add(rod(V(s * 0.25, -0.5, -0.45), V(s * 0.75, -0.72, -0.2), 0.018, M.frame)); root.add(rod(V(s * 0.25, -0.5, -0.45), V(s * 0.2, -0.98, 0.0), 0.016, M.frame)); }
-    root.add(rod(V(-0.46, yG - 0.06, -0.3), V(-0.95, 0.15, -0.25), 0.015, M.frame)); root.add(rod(V(0.46, yG - 0.06, -0.3), V(0.95, 0.15, -0.25), 0.015, M.frame));
+    // gb3-cockpit: the two glareshield-to-wall braces were removed (they cut across the side windows)
 
     // seat: headrest wings, side frames, five-point harness and buckle
     const seat = new THREE.Group(); root.add(seat);
@@ -388,16 +380,28 @@ export class Cockpit {
     return { d, rate: this.moonRate };
   }
 
+  // gb3-capsule: eye height of the Crew Capsule when it is the top part (cached per stack; staging shortens the stack)
+  capsuleEye(r) {
+    const k = r?.stack; if (!k) return null;
+    if (this.capK === k && this.capN === k.length) return this.cap;
+    this.capK = k; this.capN = k.length;
+    const L = layout(r), it = L.items[L.items.length - 1];
+    return (this.cap = it?.d?.capsule ? { eye: it.y0 + Math.min(1.2, 0.38 * (it.y1 - it.y0)), i: it.i } : null);
+  }
+
   // ---- per frame, after the flight camera has been placed: take the camera into the capsule ----
   frame(dt) {
     if (!this.on) return;
     const fm = this.fm, f = fm.f, g = fm.group;
     if (!f || !g || f.phase === 'crashed') { this.off(); return; }
     const T = this.tmp, rs = fm.rs, c = this.w.camera;
-    T.u.copy(rs.u); T.q.copy(g.quaternion); T.h.set(0, 0, 1).applyQuaternion(T.q);
+    // gb3-capsule: with a Crew Capsule on top the eye sits at its window height and faces its windows (+X); otherwise as before
+    const cap = this.capsuleEye(f.rocket);
+    T.u.copy(rs.u); T.q.copy(g.quaternion); T.h.set(cap ? 1 : 0, 0, cap ? 0 : 1).applyQuaternion(T.q);
+    if (cap) { const pk = g.userData.picks?.find(p => p.t.type === 'stack' && p.t.index === cap.i); if (pk && pk.obj !== this.hiddenPart) { this.showPart(); pk.obj.visible = false; this.hiddenPart = pk.obj; } }   // the capsule's outer shell (docking ring, window frames) would sit in the view
     const root = this.root; root.visible = true;
-    root.quaternion.copy(T.q).multiply(this.qX);
-    root.position.copy(rs.o).addScaledVector(T.u, fm.st0.top - EYE_DROP);
+    root.quaternion.copy(T.q); if (cap) root.quaternion.multiply(this.qY); root.quaternion.multiply(this.qX);
+    root.position.copy(rs.o).addScaledVector(T.u, cap ? cap.eye : fm.st0.top - EYE_DROP);
     root.updateMatrixWorld(true);
     // head-look, eased; a slight head lean toward the look direction
     const a = 1 - Math.exp(-dt * 14); this.yaw += (this.yawT - this.yaw) * a; this.pitch += (this.pitchT - this.pitch) * a;

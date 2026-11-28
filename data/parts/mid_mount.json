@@ -1,0 +1,16 @@
+{
+ "id": "mid_mount",
+ "name": "Mid Engine Mount",
+ "section": "propulsion",
+ "kind": "mount",
+ "attach": "stack",
+ "length": 1.2,
+ "radius": 2.0,
+ "dryMass": 700,
+ "fuelMass": 0,
+ "cnAlpha": 0.1,
+ "cd": 0.0,
+ "finish": "dark",
+ "blurb": "4 m engine mount for a lander stage. Goes on a Mid Decoupler (or at the bottom of a 4 m rocket).",
+ "unlockStars": 7
+}

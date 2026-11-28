@@ -144,7 +144,8 @@ export function doorObstacles(game) {
 export function padObstacles(w) {
   const P = SPOTS.pad, c = w?.pad?.center, list = [C(c?.x ?? P.x, c?.z ?? P.z, 4.6)];
   const tw = w?.pad?.tower;
-  if (tw) { tw.updateWorldMatrix?.(true, false); const e = tw.matrixWorld?.elements; if (e) list.push(C(e[12], e[14], 5.2)); }
+  if (tw?.visible !== false) { tw?.updateWorldMatrix?.(true, false); const e = tw?.matrixWorld?.elements; if (e) list.push(C(e[12], e[14], 5.2)); }   // gb3-stand: hidden tower
+  list.push(...(w?.launchStand?.obstacles() || []));   // gb3-stand: Launch Stand mount + tower
   return list;
 }
 

@@ -1,11 +1,13 @@
 // Build mode: first-person hangar, parts tray, snap-to-mount with ghost preview, delete, undo/redo,
 // a build stand that raises/lowers/turns, checkout panel with CoM gem and CoD ring.
 import * as THREE from 'three';
-import { PARTS, PART_IDS, layout, stats, stability, problems, candidates, applyPlace, applyRemove, cloneRocket, partCount } from './rocket.js';
+import { PARTS, PART_IDS, layout, stats, stability, problems, candidates, applyPlace, applyRemove, cloneRocket, partCount, finScale, legFoot } from './rocket.js';
 import { stageStats } from './staging.js';   // gb3-moon-rocket: per-stage dV / TWR in the checkout
 import { rocketMesh, partMesh, finPair, legSet, ghostify, disposeTree, initMaterials } from './parts3d.js';
 import { HANGAR, IS_TOUCH } from './env.js';
 import { DECK } from './stand.js';
+import { launchStandFor } from './launchstand.js';   // gb3-stand
+import { TRENCH } from './pad.js';   // gb3-stand
 import { groundAt, rampEdges } from './ground.js';
 import { walk as collideWalk, playerFrame, R_PLAYER, insideHangar } from './collide.js';
 import { Tray } from './tray.js';
@@ -145,6 +147,7 @@ export class BuildMode {
     const g = this.rocketGroup = rocketMesh(this.g.rocket);
     const L = g.userData.layout;
     g.position.y = DECK - L.bottom; this.w.stand.add(g);
+    this.standSite();   // gb3-stand: tall stacks move to the outdoor Launch Stand
     this.fitClamps();
     if (placedAt) { // the new part drops in softly
       const pk = g.userData.picks.filter(p => p.t.type === placedAt.type && p.t.index === placedAt.index).pop();
@@ -186,12 +189,14 @@ export class BuildMode {
   drawDiagram(st) {
     const cv = $('ckDiagram'), g = cv.getContext('2d'), W = cv.width, H = cv.height, r = this.g.rocket, L = layout(r);
     g.clearRect(0, 0, W, H);
-    const h = Math.max(6, L.top - L.bottom), s = (H - 16) / h, x0 = 34, y = v => H - 8 - (v - L.bottom) * s, rw = 0.9 * s;
+    const h = Math.max(6, L.top - L.bottom), s = Math.min((H - 16) / h, 22 / Math.max(0.9, L.radius)), x0 = 34, y = v => H - 8 - (v - L.bottom) * s, rw = L.radius * s;   // gb3-wide: per-part widths
     g.fillStyle = '#cfd6dd';
     for (const it of L.items) {
+      const rw = it.r * s, rt = (it.d.radiusTop || it.r) * s;   // gb3-wide
+      if (it.d.radiusTop) { g.fillStyle = '#cfd6dd'; g.beginPath(); g.moveTo(x0 - rw, y(it.y0)); g.lineTo(x0 - rt, y(it.y1)); g.lineTo(x0 + rt, y(it.y1)); g.lineTo(x0 + rw, y(it.y0)); g.fill(); continue; }
       if (it.d.kind === 'nose') { g.beginPath(); g.moveTo(x0 - rw, y(it.y0)); g.quadraticCurveTo(x0 - rw, y(it.y1), x0, y(it.y1)); g.quadraticCurveTo(x0 + rw, y(it.y1), x0 + rw, y(it.y0)); g.fill(); }
       else { g.fillStyle = it.d.kind === 'mount' || it.d.kind === 'decoupler' ? '#555c63' : '#cfd6dd'; g.fillRect(x0 - rw, y(it.y1), rw * 2, (it.y1 - it.y0) * s - 1); g.fillStyle = '#cfd6dd'; }
-      if (it.s.fins) { g.fillStyle = '#9aa6b2'; g.beginPath(); g.moveTo(x0 - rw, y(it.y0 + 1.4)); g.lineTo(x0 - rw - 1.25 * s, y(it.y0 - 0.2)); g.lineTo(x0 - rw, y(it.y0 - 0.35)); g.moveTo(x0 + rw, y(it.y0 + 1.4)); g.lineTo(x0 + rw + 1.25 * s, y(it.y0 - 0.2)); g.lineTo(x0 + rw, y(it.y0 - 0.35)); g.fill(); g.fillStyle = '#cfd6dd'; }
+      if (it.s.fins) { const k = finScale(it.r), fl = (a, b) => g.lineTo(x0 + a * (rw + 1.25 * s * k * b), y(it.y0 - 0.2 * k)); g.fillStyle = '#9aa6b2'; g.beginPath(); for (const sg of [-1, 1]) { g.moveTo(x0 + sg * rw, y(it.y0 + 1.4 * k)); fl(sg, 1); g.lineTo(x0 + sg * rw, y(it.y0 - 0.35 * k)); } g.fill(); g.fillStyle = '#cfd6dd'; }   // gb3-wide: fins at the tank's scale
       if (it.s.legs) { g.strokeStyle = '#555c63'; g.lineWidth = 2; g.beginPath(); g.moveTo(x0 - rw, y(it.y0 + 0.9)); g.lineTo(x0 - 2.3 * s, y(L.bottom)); g.moveTo(x0 + rw, y(it.y0 + 0.9)); g.lineTo(x0 + 2.3 * s, y(L.bottom)); g.stroke(); }
     }
     if (L.engLen) {
@@ -215,6 +220,22 @@ export class BuildMode {
     if (!r.stack.length && !r.engine) { a.openClamps(); return; }
     const eng = r.engine && PARTS[r.engine];
     a.fitClamps((eng && (eng.radius || eng.bellRadius)) || 0.9);
+  }
+
+  // ---------- gb3-stand: hangar stand or the outdoor Launch Stand at the pad ----------
+  standSite() {
+    const ls = launchStandFor(this.w), was = ls.active, s = ls.sync(this.g.rocket), home = s ? ls.seat : this.w.stand;
+    for (const o of [this.rocketGroup, this.markers, this.cg]) if (o && o.parent !== home) home.add(o);
+    if (s) { ls.seat.visible = true; ls.seat.rotation.y = this.standYaw || 0; }
+    if (!!s === was) return;
+    const P = this.player;   // walk the player over: the hangar floor, or the pad apron facing the stand
+    if (!s) Object.assign(P, { x: 2.5, z: 9.5, yaw: 0.22, pitch: 0.08 });
+    else { const a = 0.95 - TRENCH.ang, d = THREE.MathUtils.clamp(0.6 * s.tipY, 24, 70), c = this.w.pad?.center || { x: 0, z: -115 }, x = c.x + Math.sin(a) * d, z = c.z + Math.cos(a) * d; Object.assign(P, { x, z, yaw: Math.atan2(x - c.x, z - c.z), pitch: Math.min(1.1, Math.atan2(s.tipY * 0.4, d)) }); }   // off to the side so the tower shows
+    this.eyeG = null; this.applyCam();
+  }
+  toggleSite() {
+    const m = launchStandFor(this.w).toggle(this.g.rocket); this.rebuild();
+    this.g.toast?.(m === 'stand' ? 'Building on the outdoor Launch Stand (O: back to the hangar)' : 'Building in the hangar (O: outdoor Launch Stand)');
   }
 
   // ---------- stand ----------
@@ -264,7 +285,7 @@ export class BuildMode {
     else if (c.type === 'engine') y = L.engLen ? L.engLen * 0.5 : -0.4;
     else { y = L.items[c.index].y0 + (c.type === 'fins' ? 0.7 : 0.4); side = true; }
     const p = new THREE.Vector3(0, y, 0);
-    if (side) { const cl = g.worldToLocal(this.w.camera.position.clone()); cl.y = 0; cl.normalize().multiplyScalar(1.15); p.x = cl.x; p.z = cl.z; }
+    if (side) { const cl = g.worldToLocal(this.w.camera.position.clone()); cl.y = 0; cl.normalize().multiplyScalar((L.items[c.index]?.r || 0.9) + 0.25); p.x = cl.x; p.z = cl.z; }
     return { local: p, world: g.localToWorld(p.clone()) };
   }
   aim() {
@@ -316,8 +337,8 @@ export class BuildMode {
     if (!c) return;
     const L = layout(this.g.rocket), d = PARTS[this.sel];
     let o;
-    if (c.type === 'fins') { o = finPair(this.g.rocket.stack[c.index].fins || 0); o.position.y = L.items[c.index].y0 + 0.35; }
-    else if (c.type === 'legs') { o = legSet(L.items[c.index].y0 + PARTS.legs.drop); o.position.y = L.items[c.index].y0; }
+    if (c.type === 'fins') { const k = finScale(L.items[c.index].r); o = finPair(this.g.rocket.stack[c.index].fins || 0); o.scale.setScalar(k); o.position.y = L.items[c.index].y0 + 0.35 * k; }   // gb3-wide
+    else if (c.type === 'legs') { o = legSet(L.items[c.index].y0 + PARTS.legs.drop, L.items[c.index].r, legFoot(applyPlace(this.g.rocket, 'legs', c))); o.position.y = L.items[c.index].y0; }
     else {
       o = partMesh(this.sel);
       if (c.type === 'engine' && c.index > 0) { const e = L.engines.find(x => x.i === c.index); o.position.y = e ? e.y1 - d.length : L.items[c.index].y0 - d.length; }   // gb3-moon-rocket
@@ -390,6 +411,7 @@ export class BuildMode {
     this.standTarget = 0; this.standH = 0;
     this.standYaw += turn * 1.4 * dt;
     this.w.stand.position.y = 0; this.w.stand.rotation.y = this.standYaw;
+    if (inp.hit('KeyO')) this.toggleSite(); const lsS = this.w.launchStand?.seat; if (lsS) lsS.rotation.y = this.standYaw;   // gb3-stand: O = hangar / Launch Stand
     if (this.settle) { const s = this.settle; s.t += dt * 4; const e = Math.max(0, 1 - s.t); s.obj.position.y = s.y + 0.5 * e * e; if (s.t >= 1) { s.obj.position.y = s.y; this.settle = null; } }
     this.w.standGlow.material.color.setHSL(0.53, 0.9, 0.55 + 0.15 * Math.sin(performance.now() / 600));
     this.gem.rotation.y += dt * 1.5;

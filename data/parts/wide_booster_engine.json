@@ -1,0 +1,28 @@
+{
+ "id": "wide_booster_engine",
+ "name": "Wide Booster Engine (5 bells)",
+ "section": "propulsion",
+ "kind": "engine",
+ "attach": "engine",
+ "engines": 5,
+ "bellRadius": 1.6,
+ "bellGap": 0.1,
+ "length": 5.8,
+ "radius": 5.0,
+ "dryMass": 45000,
+ "thrust": 34000000,
+ "isp": 265,
+ "minThrottle": 0.6,
+ "gimbalDeg": 5,
+ "heat": {
+  "safeThrottle": 1.0,
+  "risePerSec": 0,
+  "coolPerSec": 6,
+  "baseTemp": 700,
+  "spanTemp": 2500,
+  "limitTemp": 3600
+ },
+ "color": "#ffb347",
+ "blurb": "Five big kerosene bells for a 10 m first stage: 6.8 MN each at sea level (34 MN together), about 265 s of Isp, 9 t per engine. Goes under a Wide Engine Mount.",
+ "unlockStars": 7
+}

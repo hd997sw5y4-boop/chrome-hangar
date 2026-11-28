@@ -1,0 +1,17 @@
+{
+ "id": "wide_tank_hydro",
+ "name": "Wide Hydrogen Tank",
+ "section": "structure",
+ "kind": "tank",
+ "attach": "stack",
+ "fuel": "hydrogen",
+ "length": 9.3,
+ "radius": 5.0,
+ "dryMass": 10000,
+ "fuelMass": 182000,
+ "cnAlpha": 1.6,
+ "cd": 0.0,
+ "finish": "mirror",
+ "blurb": "10 m wide, 9.3 m tall: 182 t of liquid hydrogen and oxygen on 10 t (about 250 kg per cubic metre: hydrogen is light, so the tanks are big). Only the Wide Hydrogen Engine burns it.",
+ "unlockStars": 7
+}

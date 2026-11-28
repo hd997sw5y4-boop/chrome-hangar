@@ -1,0 +1,16 @@
+{
+ "id": "wide_mount",
+ "name": "Wide Engine Mount",
+ "section": "propulsion",
+ "kind": "mount",
+ "attach": "stack",
+ "length": 2.5,
+ "radius": 5.0,
+ "dryMass": 10000,
+ "fuelMass": 0,
+ "cnAlpha": 0.1,
+ "cd": 0.0,
+ "finish": "dark",
+ "blurb": "10 m thrust structure: the ring the engines of a wide stage hang from. Bottom of the stack, or right on a Wide Decoupler for the next stage.",
+ "unlockStars": 7
+}
