@@ -121,7 +121,8 @@ export class MoonFlight {
     if (!f.e.on && wasOn) f.events.push({ type: f.e.failed ? 'overheat' : 'cutoff' });
     if (f.e.failed) { failFlight(f, 'overheat'); return true; }
     if (st.fuelCap > 0) f.fuelFrac = Math.max(0, f.fuelFrac - mdot * h / st.fuelCap);
-    const acc = V.mul(this.att, thrust / st.mass);
+    const push = (f.e.on && thrust > 0) ? thrust : 0;
+    const acc = V.mul(this.att, push / st.mass);
     const drag = rho > 1e-10 ? (r, v) => { const vr = V.sub(v, V.cross(SPIN_E, r)), sp = V.len(vr); return V.mul(vr, -0.5 * rho * sp * AREF * st.cd / st.mass); } : null;
     const was = s.body;
     O.thrustStep(this.sky, s, h, acc, drag);

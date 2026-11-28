@@ -28,6 +28,7 @@ export function weakEngines(n) {
 }
 
 // Advances one engine; returns {thrust, mdot}. fuelLeft gates it.
+// Cut, dry tanks or a failed engine: thrust and fuel flow are zero on this same step — no spool-down push.
 export function engineStep(e, d, dt, fuelLeft, rho = 1.225) {
   const h = d.heat;
   const want = e.cmd >= d.minThrottle - 1e-6 && fuelLeft > 0 && !e.failed;
@@ -38,21 +39,23 @@ export function engineStep(e, d, dt, fuelLeft, rho = 1.225) {
     const target = Math.min(1, Math.max(d.minThrottle, e.cmd));
     e.thr += Math.sign(target - e.thr) * Math.min(Math.abs(target - e.thr), dt * 1.6);
     e.thr = Math.max(d.minThrottle, e.thr);
-  } else e.thr = Math.max(0, e.thr - dt * 4);
-  const eff = e.on ? e.thr * e.spool : 0;
+  } else { e.thr = 0; e.spool = 0; }
+  const running = e.on && e.thr > 0 && fuelLeft > 0 && !e.failed;
+  const eff = running ? e.thr * e.spool : 0;
   // heat: rules, not dice. Builds above the safe throttle, cools below it.
-  if (e.on && h.safeThrottle < 1 && e.thr > h.safeThrottle + 1e-6) e.heat += h.risePerSec * (e.thr - h.safeThrottle) / (1 - h.safeThrottle) * dt;
+  if (running && h.safeThrottle < 1 && e.thr > h.safeThrottle + 1e-6) e.heat += h.risePerSec * (e.thr - h.safeThrottle) / (1 - h.safeThrottle) * dt;
   else e.heat = Math.max(0, e.heat - h.coolPerSec * dt);
   e.peakHeat = Math.max(e.peakHeat, e.heat);
-  const t0 = e.on ? h.baseTemp + h.spanTemp * eff : 20 + (e.temp - 20) * Math.exp(-dt / 2.5);
-  e.temp = e.on ? t0 + (h.limitTemp - t0) * Math.min(1, e.heat / 100) : t0;
-  if (e.heat >= 100 && !e.failed) { e.failed = true; e.on = false; e.reason = 'overheat'; }
+  const t0 = running ? h.baseTemp + h.spanTemp * eff : 20 + (e.temp - 20) * Math.exp(-dt / 2.5);
+  e.temp = running ? t0 + (h.limitTemp - t0) * Math.min(1, e.heat / 100) : t0;
+  if (e.heat >= 100 && !e.failed) { e.failed = true; e.on = false; e.reason = 'overheat'; e.thr = 0; e.spool = 0; }
   const n = d.engines || 1;
   if (n > 1) { const w = weakEngines(n); while (e.out < w.length && e.heat >= w[e.out].th) e.out++; }
   const live = 1 - e.out / n;
   const vacBoost = 1 + 0.1 * (1 - rho / 1.225);
-  const thrust = d.thrust * eff * vacBoost * live;
-  return { thrust, mdot: e.on ? d.thrust * eff * live / (d.isp * G0) : 0 };
+  const liveOn = e.on && e.thr > 0 && fuelLeft > 0 && !e.failed;
+  const thrust = liveOn ? d.thrust * e.thr * e.spool * vacBoost * live : 0;
+  return { thrust, mdot: liveOn ? d.thrust * e.thr * e.spool * live / (d.isp * G0) : 0 };
 }
 
 // ---------- wind ----------
@@ -142,12 +145,14 @@ export function flightStep(f, dt = DT) {
   if (st.fuelCap > 0) f.fuelFrac = Math.max(0, f.fuelFrac - mdot * dt / st.fuelCap);
   const m = st.mass, up = f.up;
 
-  // gimbal: hold-upright assist (PD) or direct steering
+  // gimbal: hold-upright assist (PD) or direct steering. Both only exist as a thrust vector, so they
+  // are gated on a live engine — assist must not add force, or hold a climb, after cutoff or burnout.
   let g = v3();
   const gmax = Math.tan((f.eng?.gimbalDeg || 0) * Math.PI / 180);
   const S = v3(f.steer.x, 0, f.steer.z);
   const lever = st.com - f.engLen;
-  if (thrust > 1 && lever > 0.1) {
+  const push = (f.e.on && thrust > 0) ? thrust : 0;
+  if (push > 1 && lever > 0.1) {
     if (f.assist) {
       const target = norm(add(v3(0, 1, 0), S, Math.tan(22 * Math.PI / 180)));
       const err = cross(up, target);
@@ -162,11 +167,12 @@ export function flightStep(f, dt = DT) {
   }
   f.gimbal = g;
   const tdir = norm(add(up, g));
-  let F = mul(tdir, thrust);
+  let F = mul(tdir, push);
   let T = cross(mul(up, f.engLen - st.com), F);
   F = add(F, v3(0, -m * gee, 0));
 
-  // aerodynamics
+  // aerodynamics (drag and side-force damping from airspeed / angle of attack — not a climb force;
+  // with the engine off, while still going up, these only add downward drag, so ay <= -gee)
   f.windNow = windAt(f.wind, f.windDir, f.t, h, f.windFloor);   // applied through the aero forces below (fixed step, so framerate independent)
   const va = add(f.vel, f.windNow, -1);
   const V = len(va);
@@ -216,7 +222,7 @@ export function flightStep(f, dt = DT) {
   }
 
   if (f.phase === 'pad') {
-    if (thrust > m * gee * 1.002) { f.phase = 'flying'; f.events.push({ type: 'liftoff' }); }
+    if (f.e.on && push > m * gee * 1.002) { f.phase = 'flying'; f.events.push({ type: 'liftoff' }); }
     else {
       if (f.e.on && f.e.cmd >= 0.99) { f.heavyT += dt; if (f.heavyT > 3) fail(f, 'tooHeavy', { twr: thrust / (m * gee) }); }
       else f.heavyT = 0;
@@ -227,7 +233,7 @@ export function flightStep(f, dt = DT) {
 
   // a landed rocket stays planted until the engine beats its weight, so Free Mode can touch down and lift off again
   if (grounded) {
-    if (thrust > m * G0 * 1.002) { f.phase = 'flying'; f.events.push({ type: 'liftoff' }); }
+    if (f.e.on && push > m * G0 * 1.002) { f.phase = 'flying'; f.events.push({ type: 'liftoff' }); }
     else {
       f.vel = v3(); f.w = v3();
       f.alt = Math.max(0, f.origin.y + Math.min(0, st.bottom) * f.up.y);
