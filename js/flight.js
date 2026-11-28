@@ -17,6 +17,7 @@ import { LandingKit } from './landing.js';
 import { SlowMo } from './slowmo.js';
 import { ShardPool, WreckSettle } from './wreck.js';
 import { FlightRecorder, ReplayPlayer } from './replay.js';
+import { Cockpit } from './cockpit.js';
 
 const $ = id => document.getElementById(id);
 // Flight views (keys 1-8, C cycles). Index order is what the picker and the saved setting use.
@@ -33,10 +34,11 @@ export class FlightMode {
     this.prev = pose(); this.cur = pose(); this.rs = pose();
     this.steerS = { x: 0, y: 0 }; this.emitAcc = {}; this.hudCache = null; this.crashFlash = null;
     this.tmp = { a: new THREE.Vector3(), b: new THREE.Vector3(), c: new THREE.Vector3(), d: new THREE.Vector3(), q: new THREE.Quaternion(), q2: new THREE.Quaternion(), heat: new THREE.Vector4(), v2: new THREE.Vector2(), up: new THREE.Vector3(0, 1, 0) };
+    this.cockpit = new Cockpit(game, this);   // cockpit view (C / L3), see cockpit.js
     // view picker
     const pk = $('camPicker');
     pk.innerHTML = CAMS.map((n, i) => `<button data-cam="${i}"><b>${i + 1}</b>${n}</button>`).join('');
-    pk.querySelectorAll('button').forEach(b => b.onclick = () => { this.setCam(+b.dataset.cam); pk.classList.add('hidden'); });
+    pk.querySelectorAll('button[data-cam]').forEach(b => b.onclick = () => { this.setCam(+b.dataset.cam); pk.classList.add('hidden'); });
     $('btnViews').onclick = () => { pk.classList.toggle('hidden'); this.g.audio.tap(); };
     $('btnLaunch').onclick = () => this.launch();
     $('btnCam').onclick = () => this.nextCam();
@@ -64,7 +66,7 @@ export class FlightMode {
   nextSky() { const k = Object.keys(SKIES), i = (k.indexOf(this.g.settings.timeOfDay) + 1) % k.length; this.g.setTimeOfDay(k[i]); this.g.audio.tap(); }
   nextCam(step = 1) { this.setCam((this.cam + step + CAMS.length) % CAMS.length); }
   setCam(i, quiet = false) {
-    this.cam = i; this.camInit = false; this.dir = { i: 0, t: 0 };
+    this.cockpit?.off(); this.cam = i; this.camInit = false; this.dir = { i: 0, t: 0 };
     $('btnCam').textContent = 'View: ' + CAMS[i];
     $('camPicker').querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.cam === i));
     if (!quiet) { this.g.audio.tap(); const el = $('camName'); el.textContent = `${i + 1} · ${CAMS[i]}`; el.classList.remove('show'); void el.offsetWidth; el.classList.add('show'); }
@@ -97,7 +99,7 @@ export class FlightMode {
     this.syncPose(); this.syncButtons(); this.setCam(this.cam, true); this.zoomT = this.zoom = 1;
     if (this.g.mission && !this.g.training?.active) this.g.prompt(IS_TOUCH ? 'Tap <b>Launch</b>. Throttle on the right, steer with the left stick.' : 'Press <b>Space</b> to launch. Shift / R throttle up, F down, WASD steer, C camera.');
   }
-  exit() { this.w.post.setDOF(false); this.w.post.setBlur(0); this.w.post.setHeat(new THREE.Vector4(0, 0, 0, 0)); this.w.setAltitude(0); this.w.followSun(SPOTS.pad); this.w.camera.near = 0.1; this.w.camera.far = 60000; this.w.camera.updateProjectionMatrix(); this.clear(); $('camPicker').classList.add('hidden'); this.w.camera.up.set(0, 1, 0); this.guideLine.visible = false; this.hpUI.detach(); this.g.prompt(null); $('landGuide').classList.add('hidden'); this.g.audio.setEngine(0); this.padRel?.reset(null); this.fr.hide(); this.goals.exit(); this.kit.hide(); this.slow.reset(); this.g.fxScale = 1; this.endReplay(); }
+  exit() { this.cockpit.off(); this.w.post.setDOF(false); this.w.post.setBlur(0); this.w.post.setHeat(new THREE.Vector4(0, 0, 0, 0)); this.w.setAltitude(0); this.w.followSun(SPOTS.pad); this.w.camera.near = 0.1; this.w.camera.far = 60000; this.w.camera.updateProjectionMatrix(); this.clear(); $('camPicker').classList.add('hidden'); this.w.camera.up.set(0, 1, 0); this.guideLine.visible = false; this.hpUI.detach(); this.g.prompt(null); $('landGuide').classList.add('hidden'); this.g.audio.setEngine(0); this.padRel?.reset(null); this.fr.hide(); this.goals.exit(); this.kit.hide(); this.slow.reset(); this.g.fxScale = 1; this.endReplay(); }
   st0Top() { return stats(this.g.rocket, this.g.fill).top; }
   clear() { clearTimeout(this.cdTimer); this.shards?.clear(); this.wreckFx?.clear(); if (this.wreck) { this.wreck.removeFromParent(); disposeTree(this.wreck); this.wreck = null; } if (this.crashFlash) { this.crashFlash.light.removeFromParent(); this.crashFlash = null; } if (this.group) { this.group.removeFromParent(); disposeTree(this.group); this.group = null; } }
   back() {
@@ -137,21 +139,22 @@ export class FlightMode {
     const m = Math.hypot(x, y), k = m > 1e-4 ? Math.pow(Math.min(1, m), 1.35) / m : 0, S = this.steerS, a = 1 - Math.exp(-dt / 0.06);
     S.x += (x * k - S.x) * a; S.y += (y * k - S.y) * a;
     if (Math.abs(S.x) < 1e-3 && Math.abs(S.y) < 1e-3 && !m) S.x = S.y = 0;
-    const T = this.tmp, fw = T.a; this.w.camera.getWorldDirection(fw); fw.y = 0; fw.normalize();
-    const rx = -fw.z, rz = fw.x;
-    const st = this.f.steer; st.x = rx * S.x - fw.x * S.y; st.z = rz * S.x - fw.z * S.y;
+    const T = this.tmp, fw = T.a, rt = T.b;
+    if (!this.cockpit?.steerAxes(fw, rt)) { this.w.camera.getWorldDirection(fw); fw.y = 0; fw.normalize(); rt.set(-fw.z, 0, fw.x); }
+    const st = this.f.steer; st.x = rt.x * S.x - fw.x * S.y; st.z = rt.z * S.x - fw.z * S.y;
   }
 
   update(dt, blocked) {
     const inp = this.g.input, f = this.f, eng = f.eng;
-    if (this.rp.on) { this.rp.update(dt, inp); this.shards.update(dt); this.wreckFx.update(dt); return; }   // replay owns the camera; the sim is over
+    if (this.rp.on) { this.cockpit.off(); this.rp.update(dt, inp); this.shards.update(dt); this.wreckFx.update(dt); return; }   // replay owns the camera; the sim is over
     if (this.fr.open) this.fr.poll(inp, dt);
     // slow-mo beat: any key / button / tap eases it out early; ts scales sim + effects time (the sim still takes fixed DT steps)
     if (this.slow.active && (inp.pressed.size || inp.taps.length || inp.mouse.clicked)) this.slow.skip();
     const ts = this.slow.update(dt), sdt = dt * ts; this.g.fxScale = ts;
     if (!blocked) {
       if (inp.hit('Space') || inp.hit('Pad0')) this.launch();
-      if (inp.hit('KeyC') || inp.hit('Pad3') || inp.hit('Pad15')) this.nextCam(1);
+      this.cockpit.input(inp);   // C / L3 cockpit, Q / R3 recenter, look
+      if (inp.hit('Pad3') || inp.hit('Pad15')) this.nextCam(1);
       if (inp.hit('Pad14')) this.nextCam(-1);
       if (this.goals.on && f.phase === 'pad' && this.countdown == null && (inp.hit('KeyN') || inp.hit('Pad13'))) { this.goals.cycle(); this.g.audio.tap(); }
       this.kit.input(inp);   // L / D-pad down = legs, K / R1 = chute (flying only)
@@ -508,6 +511,7 @@ export class FlightMode {
       const s = this.shake * Math.min(1, c.fov / 50), T = performance.now() / 1000, nz = (a, b) => Math.sin(T * a) * 0.6 + Math.sin(T * b + 1.7) * 0.4;
       c.position.x += nz(23, 37) * s * 0.35; c.position.y += nz(29, 41) * s * 0.35; c.rotateX(nz(11, 19) * s * 0.012); c.rotateY(nz(13, 17) * s * 0.012); c.rotateZ(nz(7, 31) * s * 0.008);
     }
+    this.cockpit.frame(dt);   // cockpit view takes the camera into the capsule (no-op when off)
     this.w.followSun(this.tmp.c.set(rs.p.x, Math.min(rs.p.y, 2000), rs.p.z)); this.w.setAltitude(f.alt);
   }
 }
