@@ -57,7 +57,14 @@ export class PadRelease {
     const key = p.toArray().map(v => v.toFixed(2)).join();
     if (key !== this.lastKey) {
       this.lastKey = key;
-      this.hoses.forEach((h, i) => { const off = V(0, 0, (i - 0.5) * 0.22), a = this.mastPort.clone().add(off), b = p.clone().addScaledVector(this.mastDir, 0.08).add(off), m = a.clone().lerp(b, 0.5); m.y -= 0.9 + e * 0.4; h.geometry.dispose(); h.geometry = new THREE.TubeGeometry(new THREE.CatmullRomCurve3([a, m, b]), 20, 0.07 - i * 0.015, 8); });
+      this.hoses.forEach((h, i) => {
+        const off = V(0, 0, (i - 0.5) * 0.22), a = this.mastPort.clone().add(off), b = p.clone().addScaledVector(this.mastDir, 0.08).add(off), m = a.clone().lerp(b, 0.5); m.y -= 0.9 + e * 0.4;
+        const tube = new THREE.TubeGeometry(new THREE.CatmullRomCurve3([a, m, b]), 20, 0.07 - i * 0.015, 8);
+        if (h.userData.refit) {   // same topology every time: copy the new points into the existing GPU buffers (no dispose + reallocate on every frame of the release)
+          for (const k of ['position', 'normal']) { const at = h.geometry.attributes[k]; at.array.set(tube.attributes[k].array); at.needsUpdate = true; }
+          h.geometry.computeBoundingSphere(); tube.dispose();
+        } else { h.geometry.dispose(); h.geometry = tube; h.userData.refit = true; }
+      });
     }
   }
   update(dt, f) {
