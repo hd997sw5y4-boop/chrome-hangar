@@ -46,7 +46,7 @@ export class RocketHealth {
     if (!rocket.stack.some(s => s.legs)) this.legs = null;
     this.top = L.top; this.bottom = L.bottom; this.engLen = L.engLen; this.n = this.stack.length;
     this.warns.length = 0; this.lost.length = 0; this.cool = {}; this.t = 0; this.pv = null; this.gs = 1; this.gLoad = 0; this.aero = 0; this.fluxK = 0;
-    this.phase = 'pad'; this.crashed = false; this.landedDone = false; this.failed = false;
+    this.phase = 'pad'; this.crashed = false; this.broken = []; this.tier = 0; this.impact = 0; this.landedDone = false; this.failed = false;
     this.fuelLow = false; this.outSeen = 0; this.engFailSeen = false;
     return this;
   }
@@ -156,11 +156,34 @@ export class RocketHealth {
     }
   }
 
+  // Crash: an in-air break-up (or a very hard hit, 45 m/s and up) loses everything as before. A ground impact below that breaks
+  // the parts on the end that hit first, more of them the faster it was: tier 1 (< 15 m/s) the legs / engine / fins / nose at that
+  // end, tier 2 (< 45 m/s) everything on that half of the stack. What broke is kept in this.broken for the results screen.
   onCrash(f) {
     this.crashed = true;
-    for (const p of this.parts) this.lose(p, 'crash');
-    const k = f.failure?.kind;
-    this.warn('crash', k === 'overheat' ? 'ENGINE OVERHEAT: VEHICLE LOST' : k === 'breakup' || k === 'flipped' ? 'AERO BREAK-UP: VEHICLE LOST' : 'VEHICLE LOST', LV.bad, 99);
+    const k = f.failure?.kind, s = f.landSpeed || 0, ground = s > 0 && f.alt < 5;
+    this.impact = ground ? s : 0;
+    this.tier = !ground || s >= 45 ? 3 : s >= 15 ? 2 : 1;
+    this.broken = [];
+    if (this.tier === 3) { for (const p of this.parts) this.lose(p, 'crash'); }
+    else {
+      const sp = Math.max(1e-6, Math.hypot(f.vel.x, f.vel.y, f.vel.z)), a = (f.vel.x * f.up.x + f.vel.y * f.up.y + f.vel.z * f.up.z) / sp;
+      const end = a < -0.4 ? 'tail' : a > 0.4 ? 'nose' : 'side', mid = (this.top + this.engLen) / 2, t2 = this.tier === 2;
+      const lowFins = Math.min(...this.parts.filter(p => p.kind === 'fins').map(p => p.i));
+      const top = this.stack[this.stack.length - 1];
+      for (const p of this.parts) {
+        if (p.lost) continue;
+        const yc = (p.y0 + p.y1) / 2;
+        const hit = end === 'tail' ? (p.kind === 'legs' || p.kind === 'engine' || (p.kind === 'fins' && (t2 ? yc < mid : p.i === lowFins)) || (p.kind === 'mount' && (t2 || s > 9)) || (t2 && yc < mid))
+          : end === 'nose' ? (p === top || (t2 && yc > mid) || (s > 9 && p.kind === 'fins' && yc > mid))
+          : (p.kind === 'legs' || p.kind === 'fins' || (s > 9 && p === top) || (t2 && (p.kind === 'engine' || p.kind === 'nose')));
+        if (hit) { this.lose(p, 'impact'); if (!(p.kind === 'engine' && p.nz > 0)) this.broken.push(p.kind === 'engine' && p.n > 1 ? 'Engine cluster' : p.name); }
+        else { p.hp = Math.max(5, p.hp - s * (t2 ? 3 : 2)); p.scar += s; }
+      }
+      this.impactEnd = end;
+    }
+    if (this.tier === 3) this.warn('crash', k === 'overheat' ? 'ENGINE OVERHEAT: VEHICLE LOST' : k === 'breakup' || k === 'flipped' && !ground ? 'AERO BREAK-UP: VEHICLE LOST' : 'VEHICLE LOST', LV.bad, 99);
+    else this.warn('crash', `IMPACT ${s.toFixed(0)} m/s: ${this.broken.length ? this.broken.map(n => n.toUpperCase()).slice(0, 2).join(' + ') + ' BROKE' : 'VEHICLE LOST'}`, LV.bad, 99);
   }
 
   flightWarnings(f) {

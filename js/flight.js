@@ -15,6 +15,7 @@ import { FlightResults } from './flightresults.js';
 import { Goals } from './goals.js';
 import { LandingKit } from './landing.js';
 import { SlowMo } from './slowmo.js';
+import { ShardPool, WreckSettle } from './wreck.js';
 
 const $ = id => document.getElementById(id);
 // Flight views (keys 1-8, C cycles). Index order is what the picker and the saved setting use.
@@ -49,7 +50,7 @@ export class FlightMode {
     const line = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 1, 0)]);
     this.guideLine = new THREE.Line(line, new THREE.LineDashedMaterial({ color: 0x7fe7ff, dashSize: 3, gapSize: 2, transparent: true, opacity: 0.8 }));
     this.guideLine.frustumCulled = false; this.guideLine.visible = false; this.w.scene.add(this.guideLine);
-    this.health = new RocketHealth(); this.hpUI = new HealthPanel(game); this.fr = new FlightResults(game); this.goals = new Goals(game); this.kit = new LandingKit(game); this.slow = new SlowMo();
+    this.health = new RocketHealth(); this.hpUI = new HealthPanel(game); this.fr = new FlightResults(game); this.goals = new Goals(game); this.kit = new LandingKit(game); this.slow = new SlowMo(); this.shards = new ShardPool(game.world.scene); this.wreckFx = new WreckSettle();
     this.syncButtons();
   }
   syncButtons() {
@@ -97,7 +98,7 @@ export class FlightMode {
   }
   exit() { this.w.post.setDOF(false); this.w.post.setBlur(0); this.w.post.setHeat(new THREE.Vector4(0, 0, 0, 0)); this.w.setAltitude(0); this.w.followSun(SPOTS.pad); this.w.camera.near = 0.1; this.w.camera.far = 60000; this.w.camera.updateProjectionMatrix(); this.clear(); $('camPicker').classList.add('hidden'); this.w.camera.up.set(0, 1, 0); this.guideLine.visible = false; this.hpUI.detach(); this.g.prompt(null); $('landGuide').classList.add('hidden'); this.g.audio.setEngine(0); this.padRel?.reset(null); this.fr.hide(); this.goals.exit(); this.kit.hide(); this.slow.reset(); this.g.fxScale = 1; }
   st0Top() { return stats(this.g.rocket, this.g.fill).top; }
-  clear() { clearTimeout(this.cdTimer); if (this.crashFlash) { this.crashFlash.light.removeFromParent(); this.crashFlash = null; } if (this.group) { this.group.removeFromParent(); disposeTree(this.group); this.group = null; } }
+  clear() { clearTimeout(this.cdTimer); this.shards?.clear(); this.wreckFx?.clear(); if (this.wreck) { this.wreck.removeFromParent(); disposeTree(this.wreck); this.wreck = null; } if (this.crashFlash) { this.crashFlash.light.removeFromParent(); this.crashFlash = null; } if (this.group) { this.group.removeFromParent(); disposeTree(this.group); this.group = null; } }
   back() {
     this.g.audio.tap();
     if (this.f.phase === 'flying' && !this.ended) {
@@ -197,7 +198,8 @@ export class FlightMode {
     const m = this.g.mission;
     if (m?.type === 'altitude' && !this.reached && f.alt >= m.goalAltitude) { this.reached = { fuel: f.fuelFrac }; this.g.toast('Tower cleared: 1,000 m!'); this.g.audio.star(0); this.g.audio.star(1); }
     if (m && f.alt > RANGE_TOP && !this.ended) this.endFlight('range');
-    if (this.crashFlash) { const c = this.crashFlash; c.t += dt / 0.33; c.light.intensity = 40000 * Math.max(0, 1 - c.t); }
+    if (this.crashFlash) { const c = this.crashFlash; c.t += sdt / 0.33; c.light.intensity = 40000 * (c.k ?? 1) * Math.max(0, 1 - c.t); }
+    this.shards.update(sdt); this.wreckFx.update(sdt);
     if (this.goals.frame(f, dt)) { this.g.toast('Goal complete: ' + this.goals.goal.text); this.g.audio.star(0); this.g.audio.star(1); }
     this.syncPose(sdt);
     this.kit.update(sdt, f, this.rs, this.st0.top, this.group);
@@ -237,20 +239,38 @@ export class FlightMode {
     const f = this.f; if (this.ended || f.phase !== 'flying') return;
     if (this.slow.trigger(this.tmp.d.set(at.x, at.y, at.z), f.vel, this.w.camera)) this.g.audio.tone(70, 0.9, 'sine', 0.18, 0, 0, 0.5);
   }
+  // Crash, scaled by impact speed: the flash, smoke, shake and shard count all grow with it. An in-air break-up or a hit at 45 m/s and
+  // up still blows the whole stack apart; a slower ground impact only breaks off the parts the health model says broke (pooled
+  // debris = the rocket's own meshes + the shard pool), and what is left tips over and settles as a wreck.
   crash(kind) {
-    const f = this.f;
+    const f = this.f, H = this.health, tier = H.tier || 3, s = H.impact || f.speed, k = THREE.MathUtils.clamp(s / 40, 0.25, 1.5);
     if (this.group) {
-      const o = new THREE.Vector3(f.pos.x, f.pos.y, f.pos.z);
+      const o = new THREE.Vector3(f.pos.x, f.pos.y, f.pos.z), vel = new THREE.Vector3(f.vel.x, f.vel.y, f.vel.z);
       this.flame.group.visible = false;
-      const flash = this.flame.light; this.w.scene.add(flash); flash.position.copy(o); flash.intensity = 40000; flash.distance = 400; flash.color.setHex(0xffa04a); flash.visible = true; this.crashFlash = { light: flash, t: 0 };   // the flame's own light: reusing it keeps the scene's light count (and shader set) unchanged
-      this.g.debris.explode(this.group, new THREE.Vector3(f.vel.x, f.vel.y, f.vel.z), o);
-      this.group.removeFromParent(); this.group = null;
-      for (let i = 0; i < 120 * (this.g.smoke.max / 1000 + 0.3); i++) { const a = i * 2.399, r = (i % 7) / 7; this.g.smoke.emit(o.x + Math.cos(a) * r, Math.max(1, o.y + (i % 5) - 2), o.z + Math.sin(a) * r, Math.cos(a) * (6 + i % 9), 3 + (i % 6), Math.sin(a) * (6 + i % 9), 4 + (i % 4), 4 + (i % 3), i < 50 ? 1 : 0.2, 1.6); }
-      this.shake = 1.5;
+      const flash = this.flame.light; this.w.scene.add(flash); flash.position.copy(o); flash.intensity = 40000 * k; flash.distance = 220 + 180 * k; flash.color.setHex(0xffa04a); flash.visible = true; this.crashFlash = { light: flash, t: 0, k };   // the flame's own light: reusing it keeps the scene's light count (and shader set) unchanged
+      if (tier === 3) { this.g.debris.explode(this.group, vel, o); this.group.removeFromParent(); }
+      else {
+        const hitAt = H.impactEnd === 'nose' ? new THREE.Vector3().copy(this.rs.o).addScaledVector(this.rs.u, this.st0.top) : new THREE.Vector3().copy(this.rs.o);
+        hitAt.y = Math.max(0.3, hitAt.y); o.copy(hitAt);
+        const tmp = new THREE.Group(); this.w.scene.add(tmp);
+        for (const p of H.lost) {
+          if (p.lost !== 'impact') continue;
+          const type = p.kind === 'engine' || p.kind === 'fins' || p.kind === 'legs' ? p.kind : 'stack', idx = p.kind === 'engine' ? 0 : p.i;
+          for (const pk of this.group.userData.picks) if (pk.t.type === type && pk.t.index === idx && pk.obj.parent && pk.obj.parent !== tmp) tmp.attach(pk.obj);
+        }
+        this.g.debris.explode(tmp, vel.clone().multiplyScalar(-0.25), hitAt); tmp.removeFromParent();
+        this.wreck = this.group; this.wreckFx.start(this.wreck, f.vel.x, f.vel.z);
+      }
+      this.group = null;
+      this.shards.burst(o, vel, s, 8 + 40 * Math.min(1, s / 45));
+      const n = Math.round(120 * (this.g.smoke.max / 1000 + 0.3) * Math.min(1, 0.3 + k * 0.7));
+      for (let i = 0; i < n; i++) { const a = i * 2.399, r = (i % 7) / 7; this.g.smoke.emit(o.x + Math.cos(a) * r, Math.max(1, o.y + (i % 5) - 2), o.z + Math.sin(a) * r, Math.cos(a) * (6 + i % 9) * k, 3 + (i % 6), Math.sin(a) * (6 + i % 9) * k, 4 + (i % 4), 4 + (i % 3), i < 50 * k ? 1 : 0.2, 1.6); }
+      this.shake = 0.5 + k;
     }
-    this.g.audio.boom(1); this.g.audio.setEngine(0);
+    this.g.audio.boom(Math.min(1, 0.45 + k * 0.55)); this.g.audio.setEngine(0);
     this.endFlight('crash', kind);
   }
+  brokeText() { const H = this.health; return H.tier === 3 ? 'Whole vehicle lost' : H.broken?.length ? 'Broke: ' + H.broken.join(', ') : ''; }
   endFlight(how, kind) {
     if (this.ended) return; this.ended = true; this.endT = 0; this.resultsShown = false;
     // During training, keep teaching look / zoom / views even if the flight ends early.
@@ -263,6 +283,7 @@ export class FlightMode {
         : fail ? { title: fail.title, reason: fail.reason, hint: fail.hint }
         : how === 'range' ? { title: 'Left the test range', reason: `Past ${RANGE_TOP / 1000} km, above where the space station flies.` }
         : { title: 'Flight ended', reason: 'You called it early.' };
+      if (how === 'crash') this.freeEnd.broke = this.brokeText();
       this.freeEnd.how = how; this.freeEnd.goal = this.goals.finish(f, how); if (how === 'abort' || how === 'range') this.endT = 2.6;
       return;
     }
@@ -272,7 +293,7 @@ export class FlightMode {
     let ok = false, title = '', reason = '', hint = '', stars = null;
     const fail = failureText(kind, f, st0);
     if (how === 'landed') { title = 'Landed'; reason = `Touched down at ${fmt(f.landSpeed, 1)} m/s, ${fmt(f.landDist || 0, 0)} m from the pad centre.`; ok = true; }
-    else if (how === 'crash') { title = fail.title; reason = fail.reason; hint = fail.hint; }
+    else if (how === 'crash') { title = fail.title; reason = fail.reason + (this.brokeText() ? ' ' + this.brokeText() + '.' : ''); hint = fail.hint; }
     else if (how === 'range') { title = 'Left the test range'; reason = `Past ${RANGE_TOP / 1000} km, above where the space station flies. Orbit comes in a later update; this flight counts as a clean climb.`; ok = true; }
     else { title = 'Flight ended'; reason = 'You called it early. Your rocket is still on the stand.'; }
     if (m?.type === 'altitude') {

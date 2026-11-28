@@ -207,3 +207,4 @@ body.intro #hud,body.intro #menu,body.intro #buildUI,body.intro #testUI,body.int
   #fResults .row{bottom:-10px;margin:6px -16px -10px;padding:6px 16px 8px}#fResults .row button{min-height:36px;padding:4px 10px}
 }
 #frStars small b.soft{color:#7dffa8;font-weight:700}
+#frBroke{margin:-2px 0 6px;color:#ff9a7a;font-size:13px;font-weight:600}
