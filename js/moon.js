@@ -17,6 +17,7 @@ import { TimeWarp, warpCap } from './timewarp.js';
 import { SpaceView } from './spaceview.js';
 import { engineStep, airDensity, failFlight, DT, ATMO_TOP } from './sim.js';
 import { stats } from './rocket.js';
+import { rcsSpaceBusy, rcsSpaceAcc, rcsSpaceFine } from './rcs-moon.js';   // GB5-RCS
 import { SPOTS } from './env.js';
 
 const { V } = O;
@@ -96,7 +97,7 @@ export class MoonFlight {
     const s = this.s, R = O.radiusOf(s.body), alt = V.len(s.r) - R, burning = !!f.eng && f.e.cmd >= f.eng.minThrottle - 1e-6 && f.fuelFrac > 0 && !f.e.failed;
     if (this.warp.clamp(warpCap({ thrust: burning, body: s.body, alt }))) this.uiT = 1;
     const total = sdt * this.warp.k;
-    if (burning || (s.body === 'E' && alt < ATMO_TOP)) {   // drag only exists below ATMO_TOP; above it the exact Kepler coast
+    if (burning || (s.body === 'E' && alt < ATMO_TOP) || (rcsSpaceBusy(f) && this.warp.k <= 10)) {   // GB5-RCS: RCS translation needs powered steps (<= 10x warp)   // drag only exists below ATMO_TOP; above it the exact Kepler coast
       this.acc += total; let n = 0;
       while (this.acc >= DT && n++ < 1500) { this.acc -= DT; if (this.powered(DT)) break; }
     } else {
@@ -122,7 +123,7 @@ export class MoonFlight {
     if (f.e.failed) { failFlight(f, 'overheat'); return true; }
     if (st.fuelCap > 0) f.fuelFrac = Math.max(0, f.fuelFrac - mdot * h / st.fuelCap);
     const push = (f.e.on && thrust > 0) ? thrust : 0;
-    const acc = V.mul(this.att, push / st.mass);
+    const acc = this.warp.k <= 10 ? rcsSpaceAcc(f, st, h, V.mul(this.att, push / st.mass), this.att, this.B || O.padBasis(this.sky, s.t), O, V) : V.mul(this.att, push / st.mass);   // GB5-RCS: + RCS push (no aero / heat on the Moon)
     const drag = rho > 1e-10 ? (r, v) => { const vr = V.sub(v, V.cross(SPIN_E, r)), sp = V.len(vr); return V.mul(vr, -0.5 * rho * sp * AREF * st.cd / st.mass); } : null;
     const was = s.body;
     O.thrustStep(this.sky, s, h, acc, drag);
@@ -192,7 +193,7 @@ export class MoonFlight {
   input(dt) {
     const f = this.f, s = this.s, B = this.B || O.padBasis(this.sky, s.t);
     const sl = Math.hypot(f.steer.x, f.steer.z);
-    if (sl > 0.02) { this.point = 'hold'; const d = O.localToVec(B, { x: f.steer.x, y: 0, z: f.steer.z }); this.att = V.norm(V.add(this.att, d, 0.9 * dt)); return; }
+    if (sl > 0.02) { this.point = 'hold'; const d = O.localToVec(B, { x: f.steer.x, y: 0, z: f.steer.z }); this.att = V.norm(V.add(this.att, d, (0.9 + rcsSpaceFine(f, f.st, dt, sl)) * dt)); return; }   // GB5-RCS: fine attitude on top
     const tgt = this.target(); if (!tgt) return;
     // slew at up to ~30 deg/s of real time; snap when coasting fast-forward
     const c = Math.max(-1, Math.min(1, V.dot(this.att, tgt))), ang = Math.acos(c), maxA = this.warp.k > 10 && !f.e.on ? 9 : 0.52 * dt;
