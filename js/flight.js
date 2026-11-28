@@ -20,7 +20,7 @@ import { FlightRecorder, ReplayPlayer } from './replay.js';
 import { Cockpit } from './cockpit.js';
 
 const $ = id => document.getElementById(id);
-// Flight views (keys 1-8, C cycles). Index order is what the picker and the saved setting use.
+// Flight views (keys 1-8, V cycles). Index order is what the picker and the saved setting use.
 export const CAMS = ['Free orbit', 'Chase', 'Viewing stand', 'Pad cam', 'Onboard', 'Engine close-up', 'Director', 'Top-down map'];
 const DIRECTOR = [[2, 6], [8, 5], [3, 5], [5, 4], [1, 6], [9, 6]]; // [view, seconds]; 8 = drone flyby, 9 = slow drone orbit
 const RANGE_TOP = 400000;   // 400 km: the planet pass shows the whole Earth well before this
@@ -97,7 +97,7 @@ export class FlightMode {
     $('mThr').querySelector('em').style.bottom = (eng.minThrottle * 100) + '%';
     $('thrTouch').querySelector('em').style.bottom = (eng.minThrottle * 100) + '%';
     this.syncPose(); this.syncButtons(); this.setCam(this.cam, true); this.zoomT = this.zoom = 1;
-    if (this.g.mission && !this.g.training?.active) this.g.prompt(IS_TOUCH ? 'Tap <b>Launch</b>. Throttle on the right, steer with the left stick.' : 'Press <b>Space</b> to launch. Shift / R throttle up, F down, WASD steer, C camera.');
+    if (this.g.mission && !this.g.training?.active) this.g.prompt(IS_TOUCH ? 'Tap <b>Launch</b>. Throttle on the right, steer with the left stick.' : 'Press <b>Space</b> to launch. Shift / R throttle up, F down, WASD steer, C cockpit, V cycle camera.');
   }
   exit() { this.cockpit.off(); this.w.post.setDOF(false); this.w.post.setBlur(0); this.w.post.setHeat(new THREE.Vector4(0, 0, 0, 0)); this.w.setAltitude(0); this.w.followSun(SPOTS.pad); this.w.camera.near = 0.1; this.w.camera.far = 60000; this.w.camera.updateProjectionMatrix(); this.clear(); $('camPicker').classList.add('hidden'); this.w.camera.up.set(0, 1, 0); this.guideLine.visible = false; this.hpUI.detach(); this.g.prompt(null); $('landGuide').classList.add('hidden'); this.g.audio.setEngine(0); this.padRel?.reset(null); this.fr.hide(); this.goals.exit(); this.kit.hide(); this.slow.reset(); this.g.fxScale = 1; this.endReplay(); }
   st0Top() { return stats(this.g.rocket, this.g.fill).top; }
@@ -159,7 +159,8 @@ export class FlightMode {
       if (this.goals.on && f.phase === 'pad' && this.countdown == null && (inp.hit('KeyN') || inp.hit('Pad13'))) { this.goals.cycle(); this.g.audio.tap(); }
       this.kit.input(inp);   // L / D-pad down = legs, K / R1 = chute (flying only)
       if (inp.hit('KeyT')) this.nextSky();
-      if (inp.hit('KeyV') || inp.hit('Pad12')) $('camPicker').classList.toggle('hidden');
+      if (inp.hit('KeyV')) this.nextCam(1);
+      if (inp.hit('Pad12')) $('camPicker').classList.toggle('hidden');
       for (let i = 1; i <= CAMS.length; i++) if (inp.hit('Digit' + i) || inp.hit('Numpad' + i)) this.setCam(i - 1);
       // zoom: wheel / pinch (input.zoom), gamepad L2 = in, L1 = out
       let z = inp.zoom; if (inp.pad) z += ((inp.pad.b[4] || 0) - (inp.pad.b[6] || 0)) * 2.5 * dt;
