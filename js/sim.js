@@ -12,7 +12,14 @@ const len = a => Math.hypot(a.x, a.y, a.z);
 const norm = a => { const l = len(a) || 1; return mul(a, 1 / l); };
 export const vec = { v3, add, mul, dot, cross, len, norm };
 
-export const airDensity = h => 1.225 * Math.exp(-Math.max(0, h) / 8500);
+// Air density (kg/m^3) at height h (m). The one helper for drag, fins and aero: exponential up to ATMO_FADE, eased to exactly 0 at
+// ATMO_TOP (100 km, the Karman line), so there is no drag, side force or damping in vacuum and an orbit above it never decays.
+export const ATMO_FADE = 80e3, ATMO_TOP = 100e3;
+export const airDensity = h => {
+  const a = Math.max(0, h); if (a >= ATMO_TOP) return 0;
+  const k = a <= ATMO_FADE ? 0 : (a - ATMO_FADE) / (ATMO_TOP - ATMO_FADE);
+  return 1.225 * Math.exp(-a / 8500) * (1 - k * k * (3 - 2 * k));
+};
 
 // ---------- engine ----------
 export function newEngine() { return { on: false, thr: 0, cmd: 0, heat: 0, temp: 20, failed: false, spool: 0, peakHeat: 0, out: 0 }; }

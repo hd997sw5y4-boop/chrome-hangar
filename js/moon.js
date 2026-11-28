@@ -15,7 +15,7 @@ import * as THREE from 'three';
 import * as O from './orbit.js';
 import { TimeWarp, warpCap } from './timewarp.js';
 import { SpaceView } from './spaceview.js';
-import { engineStep, airDensity, failFlight, DT } from './sim.js';
+import { engineStep, airDensity, failFlight, DT, ATMO_TOP } from './sim.js';
 import { stats } from './rocket.js';
 import { SPOTS } from './env.js';
 
@@ -96,7 +96,7 @@ export class MoonFlight {
     const s = this.s, R = O.radiusOf(s.body), alt = V.len(s.r) - R, burning = !!f.eng && f.e.cmd >= f.eng.minThrottle - 1e-6 && f.fuelFrac > 0 && !f.e.failed;
     if (this.warp.clamp(warpCap({ thrust: burning, body: s.body, alt }))) this.uiT = 1;
     const total = sdt * this.warp.k;
-    if (burning || (s.body === 'E' && alt < 150e3)) {
+    if (burning || (s.body === 'E' && alt < ATMO_TOP)) {   // drag only exists below ATMO_TOP; above it the exact Kepler coast
       this.acc += total; let n = 0;
       while (this.acc >= DT && n++ < 1500) { this.acc -= DT; if (this.powered(DT)) break; }
     } else {
