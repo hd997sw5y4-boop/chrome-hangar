@@ -196,12 +196,14 @@ export class Post {
     if (g) {
       g.uTime.value += dt;
       // sun position on screen for shafts and dirt
-      const sp = new THREE.Vector3().copy(w.sunDir || new THREE.Vector3(0, 1, 0)).multiplyScalar(5000).add(cam.position).project(cam);
-      const facing = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion).dot(w.sunDir || new THREE.Vector3(0, 1, 0));
-      g.uSun.value.set(sp.x * 0.5 + 0.5, sp.y * 0.5 + 0.5, w.indoor ? 0 : THREE.MathUtils.smoothstep(facing, 0.2, 0.75) * (sp.z < 1 ? 1 : 0));
+      _sp.copy(w.sunDir || _sunUp).multiplyScalar(5000).add(cam.position).project(cam);
+      _fwd.set(0, 0, -1).applyQuaternion(cam.quaternion);
+      const facing = _fwd.dot(w.sunDir || _sunUp);
+      g.uSun.value.set(_sp.x * 0.5 + 0.5, _sp.y * 0.5 + 0.5, w.indoor ? 0 : THREE.MathUtils.smoothstep(facing, 0.2, 0.75) * (_sp.z < 1 ? 1 : 0));
       g.uShaft.value = w.indoor ? 0 : (w.sky?.soft ? 0.25 : 0.55) * (1 - THREE.MathUtils.smoothstep(w.alt || 0, 3000, 30000));
     }
     if (this.ao) this.ao.enabled = (w.alt || 0) < 3000;
     this.composer.render(dt);
   }
 }
+const _sp = new THREE.Vector3(), _fwd = new THREE.Vector3(), _sunUp = new THREE.Vector3(0, 1, 0);
