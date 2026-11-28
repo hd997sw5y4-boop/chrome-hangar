@@ -18,6 +18,7 @@ import { ShardPool, WreckSettle } from './wreck.js';
 import { FlightRecorder, ReplayPlayer } from './replay.js';
 import { MoonFlight } from './moon.js';
 import { Cockpit } from './cockpit.js';
+import * as FL from './freelook.js';
 import { applyKeys, applyAbs, cut as cutThr, toggle as toggleEng, snapshot, engineState } from './throttle.js';
 
 const $ = id => document.getElementById(id);
@@ -31,6 +32,7 @@ export class FlightMode {
   constructor(game) {
     this.g = game; this.w = game.world; this.cam = THREE.MathUtils.clamp(game.settings.flightCam ?? 1, 0, CAMS.length - 1); this.orbit = { yaw: 0.6, pitch: 0.15 };
     this.zoomT = 1; this.zoom = 1; this.dir = { i: 0, t: 0 }; this.camPos = new THREE.Vector3(); this.camLook = new THREE.Vector3(); this.chaseYaw = 0.6;
+    this.chaseFwd = null; this.chaseRight = null; this.camUpV = { x: 0, y: 1, z: 0 };
     // render pose: the sim steps at a fixed 120 Hz, so what is drawn (and what the camera follows) is blended between the last two steps
     const pose = () => ({ o: new THREE.Vector3(), p: new THREE.Vector3(), u: new THREE.Vector3(0, 1, 0) });
     this.prev = pose(); this.cur = pose(); this.rs = pose();
@@ -506,8 +508,21 @@ export class FlightMode {
     } else if (view === 1) {                                                // damped chase behind the flight path
       const hs = Math.hypot(vel.x, vel.z);
       if (hs > 4) { const want = Math.atan2(-vel.x, -vel.z); let d = want - this.chaseYaw; d = Math.atan2(Math.sin(d), Math.cos(d)); this.chaseYaw += d * (1 - Math.exp(-dt * 1.2)); }
-      this.chaseYaw -= 0; const pitch = THREE.MathUtils.clamp(0.12 + this.orbit.pitch * 0.5 - THREE.MathUtils.clamp(vel.y / 300, -0.3, 0.35), -0.4, 1.2);
-      const p = orbitPos(R0 * 1.15, this.chaseYaw + (this.orbit.yaw - 0.6), pitch); p.y = Math.max(1.5, p.y);
+      // 3D heading so "behind" is below the rocket when it goes straight up; world-Y lookAt would flip there.
+      const spd = vel.length(), wantF = spd > 4 ? { x: vel.x, y: vel.y, z: vel.z } : { x: up.x, y: up.y, z: up.z };
+      const aF = 1 - Math.exp(-dt * 1.2);
+      this.chaseFwd = this.chaseFwd ? FL.norm(FL.add(FL.mul(this.chaseFwd, 1 - aF), wantF, aF)) : { ...wantF };
+      const side0 = FL.cross({ x: 0, y: 1, z: 0 }, { x: up.x, y: up.y, z: up.z }), fallback = FL.len(side0) > 0.05 ? side0 : { x: 1, y: 0, z: 0 };
+      const fr = FL.chaseFrame(this.chaseFwd, { x: 0, y: 1, z: 0 }, this.chaseRight, fallback);
+      this.chaseRight = fr.r;
+      const fy = Math.abs(this.chaseFwd.y), pitchAdj = fy < 0.92 ? THREE.MathUtils.clamp(vel.y / 300, -0.3, 0.35) : 0;
+      // when vertical, drop the 0.12 bias and the vel.y trim so the default pose is directly behind (below) looking along the heading; allow a look down to -90° only then
+      const pitch = fy >= 0.92 ? THREE.MathUtils.clamp(this.orbit.pitch * 0.5, -Math.PI / 2, 1.2) : THREE.MathUtils.clamp(0.12 + this.orbit.pitch * 0.5 - pitchAdj, -0.4, 1.2);
+      const o = FL.chaseOffset(fr, this.orbit.yaw - 0.6, pitch, R0 * 1.15);
+      const p = tgt.clone().add(new THREE.Vector3(o.x, o.y, o.z));
+      if (tgt.y < R0 * 1.15 + 2) p.y = Math.max(1.5, p.y);
+      const au = FL.aimUp(p, tgt, { x: 0, y: 1, z: 0 }, fr.u, this.camUpV);
+      this.camUpV = au; c.up.set(au.x, au.y, au.z);
       c.fov = THREE.MathUtils.clamp(60 + Math.min(15, vel.length() / 30), 55, 75); place(p, tgt, 3.5);
     } else if (view === 2 && this.w.outdoor?.standCam) {                    // long-lens tracking from in front of the stands
       c.position.copy(this.w.outdoor.standCam); this.camPos.copy(c.position);
