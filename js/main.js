@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { loadParts, PARTS, PART_IDS, emptyRocket, starterRocket, stockRocket, cloneRocket, stats, partCount } from './rocket.js';
 import { World, PRESETS, SKIES, defaultQuality, IS_TOUCH, IS_IOS } from './env.js';
+import { AA_MODES, defaultAA } from './post.js';
 import { Audio } from './audio.js';
 import { Input } from './input.js';
 import { Smoke, Debris, Sparks } from './fx.js';
@@ -24,6 +25,7 @@ const DEFAULTS = () => ({ invertY: false, sens: 1, master: 0.8, music: 0.45, sfx
 class Game {
   constructor() {
     this.settings = { ...DEFAULTS(), ...LS.get('settings', {}) };
+    if (!AA_MODES[this.settings.aa]) this.settings.aa = defaultAA(this.settings.quality);
     this.progress = LS.get('progress', { stars: {}, best: {} });
     this.saves = LS.get('saves', []);
     this.rocket = LS.get('rocket', null) || stockRocket();
@@ -78,6 +80,7 @@ class Game {
       this.setMode('build');
       this.showMenu(true);
     }
+    window.__chGfx = () => this.world.gfxInfo();
     this.loop();
     if (this.settings.quality === 'ultra') this.world.loadHDRIs('2k').catch(() => {});
   }
@@ -90,7 +93,7 @@ class Game {
     const s = this.settings;
     this.input.sens = s.sens; this.input.invertY = s.invertY;
     this.audio.setVolumes(s);
-    this.world.applyQuality(s.quality, innerWidth, innerHeight);
+    this.world.applyQuality(s.quality, innerWidth, innerHeight, s.aa || defaultAA(s.quality));
     const n = PRESETS[s.quality].particles; if (this.smoke.max !== n) { this.smoke.build(n); this.world.scene.add(this.smoke.points); this.world.smokeFX = this.smoke; }
     LS.set('settings', s);
   }
@@ -257,14 +260,16 @@ class Game {
       ${sl('sens', 'Look sensitivity', 0.3, 2.5, 0.05)}${ck('invertY', 'Invert look up/down')}${ck('assist', 'Hold-upright assist')}${ck('guide', 'Landing guide')}${ck('healthPanel', 'Rocket health panel (P)')}
       <div class="setRow"><span>Time of day</span><select id="selSky">${Object.entries(SKIES).map(([k, p]) => `<option value="${k}" ${k === s.timeOfDay ? 'selected' : ''}>${p.label}</option>`).join('')}</select></div>
       <div class="setRow"><span>Graphics</span><select id="selQ">${Object.entries(PRESETS).map(([k, p]) => `<option value="${k}" ${k === s.quality ? 'selected' : ''}>${p.label}</option>`).join('')}</select></div>
+      <div class="setRow"><span>Anti-aliasing</span><select id="selAA">${Object.entries(AA_MODES).map(([k, p]) => `<option value="${k}" ${k === (s.aa || defaultAA(s.quality)) ? 'selected' : ''}>${p.label}</option>`).join('')}</select></div>
       <div class="row"><button id="resetDefaults">Reset to defaults</button><button id="resetProgress">Reset mission progress</button></div>`;
     this.openPanel('Settings', html);
     const pb = $('panelBody');
     pb.querySelectorAll('input[type=range]').forEach(i => i.oninput = () => { s[i.dataset.k] = +i.value; this.applySettingsLight(); });
     pb.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { s[b.dataset.t] = !s[b.dataset.t]; this.applySettingsLight(); this.audio.tap(); this.showSettings(); });
-    $('selQ').onchange = e => { s.quality = e.target.value; this.applySettings(); };
+    $('selQ').onchange = e => { s.quality = e.target.value; s.aa = defaultAA(s.quality); this.applySettings(); this.showSettings(); };
+    $('selAA').onchange = e => { s.aa = e.target.value; this.applySettings(); };
     $('selSky').onchange = e => this.setTimeOfDay(e.target.value);
-    $('resetDefaults').onclick = () => { this.settings = DEFAULTS(); this.applySettings(); this.flight.syncButtons(); this.showSettings(); };
+    $('resetDefaults').onclick = () => { this.settings = DEFAULTS(); this.settings.aa = defaultAA(this.settings.quality); this.applySettings(); this.flight.syncButtons(); this.showSettings(); };
     $('resetProgress').onclick = () => { if (confirm('Reset all mission stars?')) { this.progress = { stars: {}, best: {} }; this.saveState(); this.build.makeTray(); this.toast('Progress reset'); } };
   }
   setTimeOfDay(k) {

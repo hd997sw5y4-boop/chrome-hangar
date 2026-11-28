@@ -49,7 +49,7 @@ let s0 = 3; const rnd = () => (s0 = (s0 * 16807) % 2147483647) / 2147483647;
 
 export class World {
   constructor(canvas, quality = 'high') {
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: false });
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: false });
     const r = this.renderer;
     r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 1.0;
     r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFShadowMap;
@@ -155,7 +155,7 @@ export class World {
     for (const l of this.bays || []) l.visible = v;
   }
 
-  applyQuality(q, w, h) {
+  applyQuality(q, w, h, aa) {
     const p = PRESETS[q] || PRESETS.high;
     this.quality = q; this.preset = p;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, p.pr));
@@ -170,7 +170,7 @@ export class World {
     this.setIndoor(this.indoor ?? true);
     this.scene.traverse(o => { if (o.material) [].concat(o.material).forEach(m => m.needsUpdate = true); });
     this.resize(w, h);
-    this.post.setup(q, w, h);
+    this.post.setup(q, w, h, aa);
     if (p.hdri !== (this.hdriSize || '1k') && this.envs.hangar) this.loadHDRIs(p.hdri, this.skyKey).catch(() => {});
   }
   resize(w, h) {
@@ -178,6 +178,19 @@ export class World {
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
     this.post?.resize(w, h);
+  }
+  // headless / settings diagnostics: AA config plus last-frame draw stats
+  gfxInfo() {
+    const r = this.renderer, post = this.post?.info?.() || {};
+    let casters = 0;
+    this.scene.traverse(o => { if ((o.isMesh || o.isInstancedMesh) && o.castShadow && o.visible !== false) casters++; });
+    return {
+      quality: this.quality, indoor: !!this.indoor, alt: this.alt || 0,
+      ...post,
+      draws: r.info.render.calls, triangles: r.info.render.triangles,
+      points: r.info.render.points, lines: r.info.render.lines,
+      casters, programs: r.info.programs?.length ?? 0,
+    };
   }
   render() {
     const r = this.renderer, cam = this.camera, now = performance.now(), dt = Math.min(0.1, (now - this._rt) / 1000); this._rt = now;

@@ -1,8 +1,9 @@
-// Post-processing pipeline (three.js addons): scene pass (world + planet into one 4x MSAA HDR buffer with a float
-// depth texture -> GTAO from that same depth, so there is no second whole-scene normal render -> NaN guard)
-// -> depth of field -> HDR bloom -> filmic tone map -> grade (vignette, lens dirt, sun shafts, heat shimmer,
-// chase-cam motion blur, a fixed sub-LSB dither instead of animated grain, so edges never crawl) -> SMAA on High/Ultra.
-// Phone / Medium keep bloom + grade on MSAA; low renders straight to screen.
+// Post-processing pipeline (three.js addons): scene pass (world + planet into an HDR buffer with a float
+// depth texture, 4x MSAA when the AA mode asks for it -> GTAO from that same depth, so there is no second
+// whole-scene normal render -> NaN guard) -> depth of field -> HDR bloom -> SMAA (linear, before tone map)
+// -> filmic tone map -> grade (vignette, lens dirt, sun shafts, heat shimmer, chase-cam motion blur, a fixed
+// sub-LSB dither instead of animated grain, so edges never crawl) -> FXAA (after tone map, when selected).
+// AA modes: off, fxaa, smaa, msaa-smaa. Low can run a short scene+AA chain with no bloom/grade.
 import * as THREE from 'three';
 import { EffectComposer } from '../vendor/three/addons/postprocessing/EffectComposer.js';
 import { Pass } from '../vendor/three/addons/postprocessing/Pass.js';
@@ -11,6 +12,7 @@ import { FullScreenQuad } from '../vendor/three/addons/postprocessing/Pass.js';
 import { UnrealBloomPass } from '../vendor/three/addons/postprocessing/UnrealBloomPass.js';
 import { GTAOPass } from '../vendor/three/addons/postprocessing/GTAOPass.js';
 import { SMAAPass } from '../vendor/three/addons/postprocessing/SMAAPass.js';
+import { FXAAPass } from '../vendor/three/addons/postprocessing/FXAAPass.js';
 import { OutputPass } from '../vendor/three/addons/postprocessing/OutputPass.js';
 import { BokehPass } from '../vendor/three/addons/postprocessing/BokehPass.js';
 
@@ -19,10 +21,10 @@ import { BokehPass } from '../vendor/three/addons/postprocessing/BokehPass.js';
 // clean image into the composer chain. Rendering happens into the multisampled buffer and depth is only sampled
 // from the resolved texture, so there is never a framebuffer/texture feedback loop.
 class ScenePass extends Pass {
-  constructor(world, W, H, ao) {
+  constructor(world, W, H, ao, samples = 0) {
     super(); this.w = world; this.needsSwap = true;
     const depth = new THREE.DepthTexture(W, H); depth.type = THREE.FloatType;
-    this.rt = new THREE.WebGLRenderTarget(W, H, { type: THREE.HalfFloatType, samples: 4, depthTexture: depth });
+    this.rt = new THREE.WebGLRenderTarget(W, H, { type: THREE.HalfFloatType, samples, depthTexture: depth });
     this.ao = ao ? new GTAOPass(world.scene, world.camera, W, H, { depthTexture: depth }) : null;
     this.clean = new FullScreenQuad(new THREE.ShaderMaterial(CleanShader));
   }
@@ -101,20 +103,35 @@ const CleanShader = {
   fragmentShader: 'uniform sampler2D tDiffuse; varying vec2 vUv; void main(){ vec4 c = texture2D(tDiffuse, vUv); bvec4 bad = isnan(c); if (bad.x || bad.y || bad.z || any(isinf(c.rgb))) c = vec4(0.0, 0.0, 0.0, 1.0); gl_FragColor = vec4(min(c.rgb, vec3(30.0)), 1.0); }',
 };
 
+export const AA_MODES = {
+  off: { label: 'Off' },
+  fxaa: { label: 'FXAA' },
+  smaa: { label: 'SMAA' },
+  'msaa-smaa': { label: 'MSAA + SMAA' },
+};
+// Cheap AA on Low/Phone, SMAA on Medium, MSAA+SMAA on High/Ultra.
+export const defaultAA = q => (q === 'high' || q === 'ultra') ? 'msaa-smaa' : q === 'medium' ? 'smaa' : 'fxaa';
+
 export class Post {
-  constructor(world) { this.w = world; this.enabled = false; this.dof = { on: false, focus: 30 }; }
-  setup(q, w, h) {
+  constructor(world) { this.w = world; this.enabled = false; this.dof = { on: false, focus: 30 }; this.aa = 'off'; }
+  setup(q, w, h, aa) {
     const r = this.w.renderer;
     this.dispose();
     this.tier = q === 'low' ? 0 : (q === 'phone' || q === 'medium') ? 1 : 2;
-    this.enabled = this.tier > 0;
+    this.aa = AA_MODES[aa] ? aa : defaultAA(q);
     r.toneMapping = THREE.ACESFilmicToneMapping;
+    // Low with AA off draws straight to the canvas (no composer). Every other combo needs the chain
+    // so FXAA/SMAA have a texture, and so canvas MSAA is not relied on (the renderer is created without it).
+    this.enabled = this.tier > 0 || this.aa !== 'off';
     if (!this.enabled) return;
     const pr = r.getPixelRatio(), W = Math.max(1, w * pr | 0), H = Math.max(1, h * pr | 0);
+    const useMSAA = this.aa === 'msaa-smaa' && r.capabilities.isWebGL2;
+    const useSMAA = this.aa === 'smaa' || this.aa === 'msaa-smaa';
+    const useFXAA = this.aa === 'fxaa';
     // the chain after the scene pass is full-screen only, so it needs no MSAA or depth of its own
     const rt = new THREE.WebGLRenderTarget(W, H, { type: THREE.HalfFloatType, depthBuffer: false });
     const C = this.composer = new EffectComposer(r, rt); C.setPixelRatio(pr);
-    const scene = this.scenePass = new ScenePass(this.w, W, H, this.tier === 2);
+    const scene = this.scenePass = new ScenePass(this.w, W, H, this.tier === 2, useMSAA ? 4 : 0);
     C.addPass(scene); C.setSize(w, h);
     if (this.tier === 2) {
       const ao = this.ao = scene.ao;
@@ -124,33 +141,66 @@ export class Post {
       const bk = this.bokeh = new BokehPass(this.w.scene, this.w.camera, { focus: 30, aperture: 0.00012, maxblur: 0.008 });
       bk.enabled = false; C.addPass(bk);
     }
-    const bloom = this.bloom = new UnrealBloomPass(new THREE.Vector2(W, H).multiplyScalar(this.tier === 2 ? 0.5 : 0.35), this.tier === 2 ? 0.28 : 0.24, 0.5, 4.0);   // only real light sources (flames, lamps, sun glints) cross the threshold
-    // energy-conserving threshold: only the light ABOVE the threshold blooms, capped, so chrome glints glow without a white-out
-    bloom.materialHighPassFilter.fragmentShader = `uniform sampler2D tDiffuse; uniform float luminosityThreshold; varying vec2 vUv;
-      void main(){ vec3 c = texture2D(tDiffuse, vUv).rgb; float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
-        float k = max(0.0, l - luminosityThreshold) / max(l, 1e-4); gl_FragColor = vec4(min(c * k, vec3(6.0)), 1.0); }`;
-    bloom.materialHighPassFilter.needsUpdate = true;
-    C.addPass(bloom);
+    if (this.tier > 0) {
+      const bloom = this.bloom = new UnrealBloomPass(new THREE.Vector2(W, H).multiplyScalar(this.tier === 2 ? 0.5 : 0.35), this.tier === 2 ? 0.28 : 0.24, 0.5, 4.0);   // only real light sources (flames, lamps, sun glints) cross the threshold
+      // energy-conserving threshold: only the light ABOVE the threshold blooms, capped, so chrome glints glow without a white-out
+      bloom.materialHighPassFilter.fragmentShader = `uniform sampler2D tDiffuse; uniform float luminosityThreshold; varying vec2 vUv;
+        void main(){ vec3 c = texture2D(tDiffuse, vUv).rgb; float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+          float k = max(0.0, l - luminosityThreshold) / max(l, 1e-4); gl_FragColor = vec4(min(c * k, vec3(6.0)), 1.0); }`;
+      bloom.materialHighPassFilter.needsUpdate = true;
+      C.addPass(bloom);
+    }
+    // SMAA in this three.js build (r187) works in linear-sRGB and must run before OutputPass. The old
+    // chain put it after tone map + grade, so the High/Ultra SMAA pass was effectively misconfigured.
+    if (useSMAA) C.addPass(this.smaa = new SMAAPass());
     C.addPass(new OutputPass());
-    const g = this.grade = new ShaderPass(GradeShader); g.uniforms.tDirt.value = dirtTex(); g.uniforms.uRes.value.set(W, H);
-    if (this.tier === 1) g.uniforms.uShaftN.value = 12;
-    C.addPass(g);
-    if (q === 'high' || q === 'ultra') C.addPass(new SMAAPass(W, H));   // catches the thin specular edges MSAA misses
+    if (this.tier > 0) {
+      const g = this.grade = new ShaderPass(GradeShader); g.uniforms.tDirt.value = dirtTex(); g.uniforms.uRes.value.set(W, H);
+      if (this.tier === 1) g.uniforms.uShaftN.value = 12;
+      C.addPass(g);
+    }
+    // FXAA needs the sRGB image OutputPass produces
+    if (useFXAA) C.addPass(this.fxaa = new FXAAPass());
   }
-  resize(w, h) { if (this.composer) { const pr = this.w.renderer.getPixelRatio(); this.composer.setPixelRatio(pr); this.composer.setSize(w, h); this.grade.uniforms.uRes.value.set(w * pr, h * pr); } }
-  dispose() { if (this.composer) { this.composer.passes.forEach(p => p.dispose?.()); this.composer.renderTarget1.dispose(); this.composer.renderTarget2.dispose(); this.composer = null; this.ao = this.bokeh = this.scenePass = null; } }
+  resize(w, h) {
+    if (!this.composer) return;
+    const pr = this.w.renderer.getPixelRatio();
+    this.composer.setPixelRatio(pr);
+    this.composer.setSize(w, h);
+    if (this.grade) this.grade.uniforms.uRes.value.set(w * pr, h * pr);
+  }
+  dispose() {
+    if (this.composer) {
+      this.composer.passes.forEach(p => p.dispose?.());
+      this.composer.renderTarget1.dispose(); this.composer.renderTarget2.dispose();
+      this.composer = null; this.ao = this.bokeh = this.scenePass = this.grade = this.bloom = this.smaa = this.fxaa = null;
+    }
+  }
   // per-frame inputs from the modes
   setDOF(on, focus = 30, aperture = 0.00012) { this.dof.on = on; if (this.bokeh) { this.bokeh.enabled = on; this.bokeh.uniforms.focus.value = focus; this.bokeh.uniforms.aperture.value = aperture; } }
   setBlur(k) { if (this.grade) this.grade.uniforms.uBlur.value = k; }
   setHeat(v4, dir) { if (this.grade) { this.grade.uniforms.uHeat.value.copy(v4); if (dir) this.grade.uniforms.uHeatDir.value.copy(dir); } }
+  info() {
+    const r = this.w.renderer, gl = r.getContext();
+    return {
+      aa: this.aa, tier: this.tier, enabled: this.enabled, webgl2: !!r.capabilities.isWebGL2,
+      pixelRatio: r.getPixelRatio(),
+      canvasAA: !!(gl.getContextAttributes?.().antialias),
+      sceneSamples: this.scenePass?.rt?.samples ?? 0,
+      composerSamples: this.composer?.renderTarget1?.samples ?? 0,
+      passes: (this.composer?.passes || []).map(p => ({ name: p.constructor.name, enabled: p.enabled !== false })),
+    };
+  }
   render(dt) {
-    const g = this.grade.uniforms, w = this.w, cam = w.camera;
-    g.uTime.value += dt;
-    // sun position on screen for shafts and dirt
-    const sp = new THREE.Vector3().copy(w.sunDir || new THREE.Vector3(0, 1, 0)).multiplyScalar(5000).add(cam.position).project(cam);
-    const facing = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion).dot(w.sunDir || new THREE.Vector3(0, 1, 0));
-    g.uSun.value.set(sp.x * 0.5 + 0.5, sp.y * 0.5 + 0.5, w.indoor ? 0 : THREE.MathUtils.smoothstep(facing, 0.2, 0.75) * (sp.z < 1 ? 1 : 0));
-    g.uShaft.value = w.indoor ? 0 : (w.sky?.soft ? 0.25 : 0.55) * (1 - THREE.MathUtils.smoothstep(w.alt || 0, 3000, 30000));
+    const g = this.grade?.uniforms, w = this.w, cam = w.camera;
+    if (g) {
+      g.uTime.value += dt;
+      // sun position on screen for shafts and dirt
+      const sp = new THREE.Vector3().copy(w.sunDir || new THREE.Vector3(0, 1, 0)).multiplyScalar(5000).add(cam.position).project(cam);
+      const facing = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion).dot(w.sunDir || new THREE.Vector3(0, 1, 0));
+      g.uSun.value.set(sp.x * 0.5 + 0.5, sp.y * 0.5 + 0.5, w.indoor ? 0 : THREE.MathUtils.smoothstep(facing, 0.2, 0.75) * (sp.z < 1 ? 1 : 0));
+      g.uShaft.value = w.indoor ? 0 : (w.sky?.soft ? 0.25 : 0.55) * (1 - THREE.MathUtils.smoothstep(w.alt || 0, 3000, 30000));
+    }
     if (this.ao) this.ao.enabled = (w.alt || 0) < 3000;
     this.composer.render(dt);
   }
