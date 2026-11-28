@@ -19,6 +19,7 @@ import { Interactive } from './interactive.js';
 import { Hands } from './interact2.js';
 import { Robots } from './robots.js';
 import { Cart } from './cart.js';
+import { BaseLOD } from './baselod.js';
 
 const $ = id => document.getElementById(id);
 const LS = { get: (k, d) => { try { const v = localStorage.getItem('ch_' + k); return v == null ? d : JSON.parse(v); } catch (_) { return d; } }, set: (k, v) => { try { localStorage.setItem('ch_' + k, JSON.stringify(v)); } catch (_) {} } };
@@ -74,6 +75,7 @@ class Game {
     const cartReady = Promise.race([this.cart.load().catch(e => console.warn('cart', e?.message || e)), new Promise(r => setTimeout(r, 8000))]);
     await Promise.all([this.makeThumbs(), cartReady]);
     this.build.makeTray();
+    this.world.baseLod = new BaseLOD(this);   // flight-only altitude detail for the base (baselod.js)
     this.wireUI();
     step(100, 'Warming the view…');
     if (shouldPlayIntro()) {

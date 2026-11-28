@@ -272,6 +272,7 @@ export class World {
       this.captureLocal('in', new THREE.Vector3(0, 5, 0), [this.stand, this.hangar.getObjectByName('robots')]);
       if (this.indoor) this.scene.environment = this.localIn.rt.texture;
     }
+    this.baseLod?.update(dt);   // after the props / terrain toggles above: it may override them for far-off units
     this.pickEnv();
     this._updateShadows();
     if (this.post.enabled) this.post.render(dt);
@@ -398,17 +399,17 @@ export class World {
     hole.moveTo(...c(-TRENCH.half, -TRENCH.w)); hole.lineTo(...c(TRENCH.half, -TRENCH.w)); hole.lineTo(...c(TRENCH.half, TRENCH.w)); hole.lineTo(...c(-TRENCH.half, TRENCH.w)); hole.closePath(); sh.holes.push(hole);
     const ag = new THREE.ShapeGeometry(sh, 2); ag.rotateX(-Math.PI / 2);
     { const q = ag.attributes.position, uv = ag.attributes.uv; for (let i = 0; i < q.count; i++) uv.setXY(i, (q.getX(i) + 70) / 180, (q.getZ(i) + 205) / 220); }
-    const apron = new THREE.Mesh(ag, apronMat); apron.position.y = -0.02; apron.receiveShadow = true; this.scene.add(apron);
+    const apron = new THREE.Mesh(ag, apronMat); apron.name = 'apron'; apron.position.y = -0.02; apron.receiveShadow = true; this.scene.add(apron);
     // expansion-joint grid painted over the slab (one draw)
     const pts = [];
     const seg = (a, b) => { for (let t = 0; t < 1 - 1e-6; t += 0.05) { const p0 = a.clone().lerp(b, t), p1 = a.clone().lerp(b, t + 0.05), m = p0.clone().add(p1).multiplyScalar(0.5); if ((Math.abs(m.x - P.x) > 25 || Math.abs(m.z - P.z) > 25) && (Math.abs(m.x) > hx || Math.abs(m.z) > hz)) pts.push(p0, p1); } };   // not across the pad deck or under the hangar
     for (let x = -70; x <= 110; x += 12) seg(new THREE.Vector3(x, -0.005, -205), new THREE.Vector3(x, -0.005, 15));
     for (let z = -205; z <= 15; z += 12) seg(new THREE.Vector3(-70, -0.005, z), new THREE.Vector3(110, -0.005, z));
-    this.scene.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0x55534f, transparent: true, opacity: 0.45 })));
+    const joints = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0x55534f, transparent: true, opacity: 0.45 })); joints.name = 'apronJoints'; this.scene.add(joints);
   }
 
   buildTestStand() {
-    const p = SPOTS.test, g = new THREE.Group(); g.position.copy(p); this.scene.add(g);
+    const p = SPOTS.test, g = new THREE.Group(); g.name = 'testStand'; g.position.copy(p); this.scene.add(g);
     const concrete = new THREE.MeshStandardMaterial({ color: 0xb0aea8, roughness: 0.85 });
     applyPBR(concrete, 'concrete_floor_worn_001', [2, 2], { normalScale: 0.8 }).catch(() => {});
     // two piers with a flame trench between
@@ -428,7 +429,7 @@ export class World {
   }
 
   buildPad() {
-    const p = SPOTS.pad, g = new THREE.Group(); g.position.copy(p); this.scene.add(g);
+    const p = SPOTS.pad, g = new THREE.Group(); g.name = 'padSite'; g.position.copy(p); this.scene.add(g);
     this.pad = buildPadComplex(this, p, this.quality === 'phone' || this.quality === 'low');
     // landing guide ring on the ground (target)
     this.padRing = new THREE.Mesh(new THREE.RingGeometry(9.6, 10, 64), new THREE.MeshBasicMaterial({ color: 0x7fe7ff, transparent: true, opacity: 0.5 }));
