@@ -78,6 +78,7 @@ export function newFlight(rocket, opts = {}) {
     apex: 0, topSpeed: 0, alt: 0, vs: 0, speed: 0, q: 0, aoa: 0, tilt: 0, landSpeed: 0,
     heavyT: 0, failure: null, events: [], samples: [], sampleT: 0, flippedHint: false, windHint: false,
     reached: null, gimbal: v3(), maxQ: 0,
+    flightT: 0, downrange: 0,   // seconds since liftoff, and the furthest the rocket has been from the pad centre (m), for the results screen
   };
   // body origin (nozzle exit) rests so the lowest point touches the pad top
   f.origin = v3(f.padPos.x, f.padPos.y - L.bottom, f.padPos.z);
@@ -186,6 +187,7 @@ export function flightStep(f, dt = DT) {
     }
   }
 
+  f.flightT += dt;
   // integrate (semi-implicit Euler)
   f.vel = add(f.vel, F, dt / m);
   f.pos = add(f.pos, f.vel, dt);
@@ -200,6 +202,7 @@ export function flightStep(f, dt = DT) {
   f.vs = f.vel.y; f.speed = len(f.vel);
   f.tilt = Math.acos(Math.max(-1, Math.min(1, f.up.y))) * 180 / Math.PI;
   f.apex = Math.max(f.apex, f.alt); f.topSpeed = Math.max(f.topSpeed, f.speed);
+  f.downrange = Math.max(f.downrange, Math.hypot(f.origin.x - f.padPos.x, f.origin.z - f.padPos.z));
   f.sampleT += dt; if (f.sampleT >= 0.25) { f.sampleT = 0; f.samples.push(f.alt); }
   if (f.tilt > 60 && st.margin < 0) f.flippedHint = true;
   if (f.tilt > 35 && !f.assist && f.speed < 40 && f.wind) f.windHint = true;

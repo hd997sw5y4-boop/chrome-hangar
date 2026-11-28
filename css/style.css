@@ -176,3 +176,14 @@ body.touch #camPicker{grid-template-columns:repeat(4,minmax(96px,1fr));bottom:ca
 .introSkip{position:absolute;right:calc(18px + var(--sr));bottom:calc(16px + var(--sb));color:rgba(255,240,220,.55);font-size:12px;letter-spacing:.08em}
 body.intro #hud,body.intro #menu,body.intro #buildUI,body.intro #testUI,body.intro #flightUI,body.intro #stickL,body.intro #crosshair{display:none!important}
 @media (max-height:500px){.introTitle{font-size:32px;letter-spacing:.18em}.introTag{font-size:11px}#intro{padding-bottom:calc(8vh + var(--sb))}}
+/* flight results screen (Free Mode) */
+#fResults .card{width:min(560px,100%)}
+#frBanner{display:inline-block;margin:0 0 6px;padding:3px 12px;border-radius:999px;font-size:13px;font-weight:700;letter-spacing:.06em;color:#1b1500;background:#ffd34d;box-shadow:0 0 18px rgba(255,211,77,.45)}
+#frStars{font-size:34px;letter-spacing:6px;color:#555}#frStars span{transition:color .25s,text-shadow .25s}#frStars .lit{color:#ffd34d;text-shadow:0 0 14px rgba(255,211,77,.6)}
+#frStars small{display:block;font-size:12px;letter-spacing:0;color:var(--dim)}
+#frHint{background:rgba(127,231,255,.1);border-left:3px solid var(--accent);padding:8px 12px;border-radius:8px}
+#frStats{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:10px 0}#frStats div{background:rgba(255,255,255,.05);border-radius:10px;padding:6px 10px;border:1px solid transparent}
+#frStats label{display:block;font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em}#frStats b{font-size:20px;font-variant-numeric:tabular-nums}#frStats b i{font-style:normal;color:var(--dim);font-size:12px;font-weight:400}
+#frStats small{display:block;font-size:11px;color:var(--dim)}#frStats em{display:block;font-style:normal;font-size:11px;font-weight:700;color:#ffd34d}
+#frStats div.best{border-color:rgba(255,211,77,.7);background:rgba(255,211,77,.1);box-shadow:0 0 14px rgba(255,211,77,.25)}
+#fResults .row button{flex:1;min-width:140px}#fResults kbd{font:inherit;font-size:11px;color:var(--dim);border:1px solid var(--line);border-radius:5px;padding:0 5px;margin-left:6px}

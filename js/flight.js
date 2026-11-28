@@ -11,6 +11,7 @@ import { attachFlames, flameSize } from './fx.js';
 import { overheatHint } from './testfire.js';
 import { RocketHealth } from './health.js';
 import { HealthPanel } from './healthui.js';
+import { FlightResults } from './flightresults.js';
 
 const $ = id => document.getElementById(id);
 // Flight views (keys 1-8, C cycles). Index order is what the picker and the saved setting use.
@@ -45,7 +46,7 @@ export class FlightMode {
     const line = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 1, 0)]);
     this.guideLine = new THREE.Line(line, new THREE.LineDashedMaterial({ color: 0x7fe7ff, dashSize: 3, gapSize: 2, transparent: true, opacity: 0.8 }));
     this.guideLine.frustumCulled = false; this.guideLine.visible = false; this.w.scene.add(this.guideLine);
-    this.health = new RocketHealth(); this.hpUI = new HealthPanel(game);
+    this.health = new RocketHealth(); this.hpUI = new HealthPanel(game); this.fr = new FlightResults(game);
     this.syncButtons();
   }
   syncButtons() {
@@ -83,7 +84,7 @@ export class FlightMode {
     // build the smoke depth pre-pass target and its shader now (first smoke would otherwise allocate it on the ignition frame)
     this.g.smoke.emit(SPOTS.pad.x, 0.3, SPOTS.pad.z, 0, 0, 0, 0.01, 0.12, 0, 0, 0);
     this.flash = 0; this.armT = 0; this.w.captureLocal('out', new THREE.Vector3(SPOTS.pad.x, 8, SPOTS.pad.z), [this.group]);
-    this.thr = Math.min(1, eng.heat.safeThrottle); this.touchThr = null; this.hotWarned = false; this.countdown = null; this.acc = 0; this.ended = false; this.endT = 0; this.reached = null; this.shake = 0; this.camInit = false; this.armed = false;
+    this.thr = Math.min(1, eng.heat.safeThrottle); this.touchThr = null; this.hotWarned = false; this.countdown = null; this.acc = 0; this.ended = false; this.endT = 0; this.freeEnd = null; this.fr.hide(); this.reached = null; this.shake = 0; this.camInit = false; this.armed = false;
     $('btnLaunch').classList.remove('hidden'); $('countdown').classList.add('hidden');
     this.st0 = stats(this.g.rocket, this.g.fill);
     $('mThr').querySelector('em').style.bottom = (eng.minThrottle * 100) + '%';
@@ -91,14 +92,14 @@ export class FlightMode {
     this.syncPose(); this.syncButtons(); this.setCam(this.cam, true); this.zoomT = this.zoom = 1;
     if (this.g.mission && !this.g.training?.active) this.g.prompt(IS_TOUCH ? 'Tap <b>Launch</b>. Throttle on the right, steer with the left stick.' : 'Press <b>Space</b> to launch. Shift / R throttle up, F down, WASD steer, C camera.');
   }
-  exit() { this.w.post.setDOF(false); this.w.post.setBlur(0); this.w.post.setHeat(new THREE.Vector4(0, 0, 0, 0)); this.w.setAltitude(0); this.w.followSun(SPOTS.pad); this.w.camera.near = 0.1; this.w.camera.far = 60000; this.w.camera.updateProjectionMatrix(); this.clear(); $('camPicker').classList.add('hidden'); this.w.camera.up.set(0, 1, 0); this.guideLine.visible = false; this.hpUI.detach(); this.g.prompt(null); $('landGuide').classList.add('hidden'); this.g.audio.setEngine(0); this.padRel?.reset(null); }
+  exit() { this.w.post.setDOF(false); this.w.post.setBlur(0); this.w.post.setHeat(new THREE.Vector4(0, 0, 0, 0)); this.w.setAltitude(0); this.w.followSun(SPOTS.pad); this.w.camera.near = 0.1; this.w.camera.far = 60000; this.w.camera.updateProjectionMatrix(); this.clear(); $('camPicker').classList.add('hidden'); this.w.camera.up.set(0, 1, 0); this.guideLine.visible = false; this.hpUI.detach(); this.g.prompt(null); $('landGuide').classList.add('hidden'); this.g.audio.setEngine(0); this.padRel?.reset(null); this.fr.hide(); }
   st0Top() { return stats(this.g.rocket, this.g.fill).top; }
   clear() { clearTimeout(this.cdTimer); if (this.crashFlash) { this.crashFlash.light.removeFromParent(); this.crashFlash = null; } if (this.group) { this.group.removeFromParent(); disposeTree(this.group); this.group = null; } }
   back() {
     this.g.audio.tap();
     if (this.f.phase === 'flying' && !this.ended) {
       this.endFlight('abort');
-      if (!this.g.mission) { this.g.setMode('build'); return; }
+      if (!this.g.mission && !this.freeEnd) { this.g.setMode('build'); return; }   // (Free Mode shows the results screen first, which has Back to hangar)
     } else this.g.setMode('build');
   }
   launch() {
@@ -137,6 +138,7 @@ export class FlightMode {
 
   update(dt, blocked) {
     const inp = this.g.input, f = this.f, eng = f.eng;
+    if (this.fr.open) this.fr.poll(inp, dt);
     if (!blocked) {
       if (inp.hit('Space') || inp.hit('Pad0')) this.launch();
       if (inp.hit('KeyC') || inp.hit('Pad3') || inp.hit('Pad15')) this.nextCam(1);
@@ -193,7 +195,7 @@ export class FlightMode {
     this.camera(dt);
     this.hpUI.update(dt, this.g.audio);
     if (this.g.training?.active) this.g.training.onFlightFrame();
-    if (this.ended) { this.endT += dt; if (this.endT > 2.6 && !this.g.resultsOpen && !this.resultsShown) { this.resultsShown = true; if (this.g.mission && this.result) this.g.showResults(this.result); } }
+    if (this.ended) { this.endT += dt; if (this.endT > 2.6 && !this.g.resultsOpen && !this.resultsShown) { this.resultsShown = true; if (this.g.mission && this.result) this.g.showResults(this.result); else if (this.freeEnd) this.fr.show(f, this.freeEnd.how, this.freeEnd); } }
   }
   onEvent(ev) {
     const a = this.g.audio;
@@ -236,10 +238,18 @@ export class FlightMode {
     if (this.g.training?.active) { this.f.e.cmd = 0; this.armed = false; this.resultsShown = true; return; }
     const f = this.f, m = this.g.mission, st0 = this.st0;
     f.e.cmd = 0; this.armed = false;
-    if (!m) { this.resultsShown = true; return; } // free mode: fly or watch the wreck, no results card
+    if (!m) {   // Free Mode: the flight results screen (shown by update() after the end-of-flight beat)
+      const fail = how === 'crash' ? failureText(kind, f, st0) : null, sp = (v, d = 0) => v.toLocaleString(undefined, { maximumFractionDigits: d, minimumFractionDigits: d });
+      this.freeEnd = how === 'landed' ? { title: 'Landed', reason: `Touched down at ${sp(f.landSpeed, 1)} m/s, ${sp(f.landDist || 0)} m from the pad centre.` }
+        : fail ? { title: fail.title, reason: fail.reason, hint: fail.hint }
+        : how === 'range' ? { title: 'Left the test range', reason: `Past ${RANGE_TOP / 1000} km, above where the space station flies.` }
+        : { title: 'Flight ended', reason: 'You called it early.' };
+      this.freeEnd.how = how; if (how === 'abort' || how === 'range') this.endT = 2.6;
+      return;
+    }
     const fmt = (v, d = 0) => v.toLocaleString(undefined, { maximumFractionDigits: d, minimumFractionDigits: d });
     const rows = [['Max altitude', fmt(f.apex) + ' m'], ['Top speed', fmt(f.topSpeed) + ' m/s'], ['Fuel left', Math.round(f.fuelFrac * 100) + '%'],
-      ['Landing speed', how === 'landed' || how === 'crash' ? fmt(f.landSpeed, 1) + ' m/s' : '—'], ['Flight time', fmt(f.t, 1) + ' s'], ['Max dynamic pressure', fmt(f.maxQ / 1000, 1) + ' kPa']];
+      ['Landing speed', how === 'landed' || how === 'crash' ? fmt(f.landSpeed, 1) + ' m/s' : '—'], ['Downrange', fmt(f.downrange) + ' m'], ['Flight time', fmt(f.flightT, 1) + ' s'], ['Max dynamic pressure', fmt(f.maxQ / 1000, 1) + ' kPa']];
     let ok = false, title = '', reason = '', hint = '', stars = null;
     const fail = failureText(kind, f, st0);
     if (how === 'landed') { title = 'Landed'; reason = `Touched down at ${fmt(f.landSpeed, 1)} m/s, ${fmt(f.landDist || 0, 0)} m from the pad centre.`; ok = true; }
