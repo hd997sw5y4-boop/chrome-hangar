@@ -371,6 +371,23 @@ class Game {
     cv.addEventListener('webglcontextrestored', () => { try { this.applySettings(); this.toast('Graphics restored'); } catch (err) { console.warn('restore', err?.message || err); } });
   }
 
+  // Menu / panel navigation without a mouse: arrows (menu), D-pad up/down (menu and panels) move the focus, X / Enter-style
+  // activation is the browser's (Enter, Space) or Pad0 here, D-pad left/right nudges a focused slider, Circle closes a panel.
+  uiNav(inp) {
+    if (this.resultsOpen || !(this.menuOpen || this.panelOpen)) return;
+    const root = this.panelOpen ? $('panelBody') : $('menu'), act = document.activeElement;
+    const items = [...root.querySelectorAll('button, select, input')].filter(e => !e.disabled && e.offsetParent !== null);
+    if (this.panelOpen) items.unshift($('panelClose'));
+    let d = (inp.hit('Pad13') ? 1 : 0) - (inp.hit('Pad12') ? 1 : 0);
+    if (!this.panelOpen) d += (inp.hit('ArrowDown') ? 1 : 0) - (inp.hit('ArrowUp') ? 1 : 0);
+    inp.pressed.delete('Pad12'); inp.pressed.delete('Pad13');
+    if (d && items.length) { const i = items.indexOf(act); items[(i < 0 ? (d > 0 ? 0 : items.length - 1) : (i + d + items.length) % items.length)].focus({ preventScroll: false }); this.audio.hover(); }
+    if (inp.hit('Pad0') && act && act.tagName === 'BUTTON' && (root.contains(act) || act === $('panelClose'))) { inp.pressed.delete('Pad0'); act.click(); }   // eat the press so it cannot also place / launch
+    const lr = (inp.hit('Pad15') ? 1 : 0) - (inp.hit('Pad14') ? 1 : 0);
+    if (lr && act?.type === 'range') { const st = +act.step || 1; act.value = Math.min(+act.max, Math.max(+act.min, +act.value + lr * st * 2)); act.dispatchEvent(new Event('input', { bubbles: true })); }
+    if (inp.hit('Pad1') && this.panelOpen) { inp.pressed.delete('Pad1'); this.closePanel(); }
+  }
+
   loop() {
     const frame = () => {
       const cap = this.settings.fps | 0;
@@ -384,9 +401,6 @@ class Game {
       const inp = this.input;
       if (this.intro && !this.intro.done) {
         if (inp.hit('Escape') || inp.hit('Pad9') || inp.hit('Space') || inp.hit('Enter')) this.intro.skip();
-      } else if (this.menuOpen && !this.panelOpen && (inp.hit('ArrowDown') || inp.hit('ArrowUp'))) {   // arrow keys walk the menu buttons
-        const bs = [...$('menu').querySelectorAll('button')], i = bs.indexOf(document.activeElement), d = inp.hit('ArrowDown') ? 1 : -1;
-        bs[(i < 0 ? (d > 0 ? 0 : bs.length - 1) : (i + d + bs.length) % bs.length)].focus({ preventScroll: true });
       } else if ((inp.hit('Escape') || inp.hit('Pad9')) && !this.interact?.eatEscape()) {
         if (this.panelOpen) this.closePanel();
         else if (this.intro && this.mode === 'loading') this.continueGame();
@@ -394,6 +408,7 @@ class Game {
       }
       if (this.intro && !this.intro.done) this.intro.update(dt);
       else {
+        this.uiNav(inp);
         const paused = this.menuOpen || this.panelOpen;
         const driving = this.cart?.frame(dt, paused);
         const held = this.interact?.frame(dt, paused || driving) || driving;
