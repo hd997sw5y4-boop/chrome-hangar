@@ -36,6 +36,18 @@ const glowVS = `attribute float size; attribute float bright; uniform float scal
   void main(){ vB = bright; vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_PointSize = clamp(size * scale / -mv.z, 0.0, 600.0); gl_Position = projectionMatrix * mv; }`;
 const glowFS = `uniform vec3 uCol; uniform float uK; varying float vB; void main(){ vec2 d = gl_PointCoord - 0.5; float r = length(d) * 2.0; float a = exp(-r * r * 5.0) * (1.0 - r); if (a <= 0.0) discard; gl_FragColor = vec4(uCol * a * vB * uK, 1.0); }`;
 
+// The plume draws are hidden while the engine is off, but the flame's PointLight and the meshes stay in the scene.
+// Toggling the whole group used to add/remove a light at ignition, which changes three.js's light count and
+// recompiles every lit shader in the scene (the launch hitch), and the plume shaders first compiled on the ignition
+// frame. Now the light is always counted and the plume is drawn (black, power 0) for the first few frames after the
+// flame is built, so all of that compiles while the rocket is still sitting on the pad.
+const PREWARM_FRAMES = 3;
+function showPlume(fl, on) {
+  const v = on || fl.hold > 0; if (fl.hold > 0) fl.hold--;
+  if (v === fl.shown) return; fl.shown = v;
+  for (const c of fl.group.children) if (!c.isLight) c.visible = v;
+}
+
 export class Flame {
   constructor(color = '#ffb347') {
     this.group = new THREE.Group(); this.group.userData.noAO = true;
@@ -57,11 +69,13 @@ export class Flame {
       uniforms: { scale: { value: 800 }, uCol: { value: new THREE.Color(1.0, 0.86, 0.62) }, uK: { value: 3.5 } } }));
     this.glows.frustumCulled = false; this.group.add(this.glows);
     this.light = new THREE.PointLight(0xff9a4a, 0, 260, 1.5); this.light.position.y = -3; this.group.add(this.light);
-    this.group.visible = false; this.power = 0;
+    this.power = 0; this.hold = PREWARM_FRAMES; this.shown = true;
   }
   setScale(viewH) { this.glows.material.uniforms.scale.value = viewH; }
+  setShown(on) { showPlume(this, on); }
   update(t, power, radius, len, rho = 1.2, thrust = 115000) {
-    this.group.visible = power > 0.01; this.power = power;
+    this.setShown(power > 0.01); this.power = power;
+    if (!this.shown) { this.light.intensity = 0; return; }   // engine off and prewarm over: no per-frame buffer work
     const thin = 1 - Math.min(1, rho / 1.225), expand = 1.35 + thin * 3.5, diam = Math.max(0, 1 - thin * 1.6);
     const L = len * (0.92 + 0.08 * Math.sin(t * 37)) * (1 + thin * 0.8);
     const sp = radius * 2.2 * (1 + thin);   // diamond spacing ~ 2 nozzle diameters, longer as pressure drops
@@ -125,13 +139,16 @@ export class ClusterFlame {
       uniforms: { scale: { value: 800 }, uCol: { value: new THREE.Color(1.0, 0.86, 0.62) }, uK: { value: 3.5 } } }));
     this.glows.material.userData.own = true; this.glows.frustumCulled = false; this.group.add(this.glows);
     this.light = new THREE.PointLight(0xff9a4a, 0, 260, 1.5); this.light.position.y = -3; this.group.add(this.light);
-    this.group.visible = false; this.power = 0; this.off = new Uint8Array(n);   // off[i] = 1: that bell has shut down
+    this.power = 0; this.off = new Uint8Array(n);   // off[i] = 1: that bell has shut down
+    this.hold = PREWARM_FRAMES; this.shown = true;
     this._o = new THREE.Object3D();
   }
   setOut(i, out = true) { if (i >= 0 && i < this.off.length) this.off[i] = out ? 1 : 0; }
   setScale(viewH) { this.glows.material.uniforms.scale.value = viewH; }
+  setShown(on) { showPlume(this, on); }
   update(t, power, radius, len, rho = 1.2, thrust = 115000) {
-    this.group.visible = power > 0.01; this.power = power;
+    this.setShown(power > 0.01); this.power = power;
+    if (!this.shown) { this.light.intensity = 0; return; }   // engine off and prewarm over: no per-frame buffer work
     const thin = 1 - Math.min(1, rho / 1.225), expand = 1.35 + thin * 3.5, diam = Math.max(0, 1 - thin * 1.6);
     const L = len * (0.92 + 0.08 * Math.sin(t * 37)) * (1 + thin * 0.8);
     const nz = this.nozzles, n = nz.length;
@@ -186,7 +203,7 @@ export class Smoke {
   constructor(max) { this.build(max); this.live = 0; }
   build(max) {
     if (this.points) { this.points.removeFromParent(); this.points.geometry.dispose(); }
-    this.max = max; this.n = 0; this.cursor = 0; this.live = 0;
+    this.max = max; this.n = 0; this.cursor = 0; this.live = 0; this.fresh = true;
     this.p = new Float32Array(max * 3); this.v = new Float32Array(max * 3); this.age = new Float32Array(max).fill(1e9); this.life = new Float32Array(max);
     this.size = new Float32Array(max); this.heat = new Float32Array(max); this.grow = new Float32Array(max); this.kind = new Float32Array(max);
     const geo = new THREE.BufferGeometry();
@@ -245,14 +262,24 @@ export class Smoke {
     u.uRes.value.set(w, h); u.uNear.value = camera.near; u.uFar.value = camera.far;
   }
   emit(x, y, z, vx, vy, vz, size, life, heat = 0, grow = 1, kind = 0) {
-    const i = this.cursor; this.cursor = (this.cursor + 1) % this.max;
+    // take the next free slot; if the ring is full, take the most-aged of the next few so a young, fully visible
+    // puff is never the one that vanishes (that was the visible "pop" when the pool filled up)
+    let i = this.cursor, best = -1;
+    for (let n = 0, j = i; n < 12; n++, j = j + 1 === this.max ? 0 : j + 1) {
+      const r = this.age[j] / this.life[j];
+      if (!(r < 1)) { i = j; best = Infinity; break; }
+      if (r > best) { best = r; i = j; }
+    }
+    this.cursor = i + 1 === this.max ? 0 : i + 1;
     this.p[i * 3] = x; this.p[i * 3 + 1] = y; this.p[i * 3 + 2] = z;
     this.v[i * 3] = vx; this.v[i * 3 + 1] = vy; this.v[i * 3 + 2] = vz;
-    this.age[i] = 0; this.life[i] = life; this.size[i] = size; this.heat[i] = heat; this.grow[i] = grow; this.kind[i] = kind;
+    this.age[i] = 0; this.life[i] = life; this.size[i] = size; this.heat[i] = heat; this.grow[i] = grow; this.kind[i] = kind; this.fresh = true;
   }
   light(pos, intensity, sky, sun) { const u = this.mat.uniforms; u.uFlame.value.copy(pos); u.uFlameI.value = intensity; if (sky) u.uSky.value.copy(sky); if (sun) u.uSun.value.copy(sun); }
   update(dt, wind, viewH) {
     this.mat.uniforms.scale.value = viewH * 0.85;
+    if (!this.live && !this.fresh) return;   // nothing alive and nothing new: skip the loop and the five buffer uploads
+    this.fresh = false;
     const S = this.aSize.array, A = this.aAlpha.array, H = this.aHeat.array, R = this.aRot.array;
     let live = 0;
     for (let i = 0; i < this.max; i++) {
@@ -270,13 +297,13 @@ export class Smoke {
     this.live = live;
     this.points.geometry.attributes.position.needsUpdate = true; this.aSize.needsUpdate = this.aAlpha.needsUpdate = this.aHeat.needsUpdate = this.aRot.needsUpdate = this.aKind.needsUpdate = true;
   }
-  clear() { this.age.fill(1e9); }
+  clear() { this.age.fill(1e9); this.fresh = true; }
 }
 
 // Sparks and burning debris kicked out of the trench at ignition / liftoff: additive streaks with gravity.
 export class Sparks {
   constructor(max = 400) {
-    this.max = max; this.cursor = 0; this.p = new Float32Array(max * 3); this.v = new Float32Array(max * 3); this.age = new Float32Array(max).fill(1e9); this.life = new Float32Array(max);
+    this.max = max; this.cursor = 0; this.live = 0; this.fresh = true; this.p = new Float32Array(max * 3); this.v = new Float32Array(max * 3); this.age = new Float32Array(max).fill(1e9); this.life = new Float32Array(max);
     const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(this.p, 3));
     this.aB = new THREE.BufferAttribute(new Float32Array(max), 1); geo.setAttribute('bright', this.aB);
     this.points = new THREE.Points(geo, new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, uniforms: { scale: { value: 600 } },
@@ -284,18 +311,21 @@ export class Sparks {
       fragmentShader: 'varying float vB; void main(){ vec2 d = gl_PointCoord - 0.5; float a = max(0.0, 1.0 - length(d) * 2.0); if (vB <= 0.0 || a <= 0.0) discard; gl_FragColor = vec4(vec3(1.0, 0.62, 0.25) * vB * a * 12.0, 1.0); }' }));
     this.points.frustumCulled = false; this.points.userData.noAO = true;
   }
-  emit(x, y, z, vx, vy, vz, life) { const i = this.cursor; this.cursor = (this.cursor + 1) % this.max; this.p.set([x, y, z], i * 3); this.v.set([vx, vy, vz], i * 3); this.age[i] = 0; this.life[i] = life; }
+  emit(x, y, z, vx, vy, vz, life) { const i = this.cursor; this.cursor = (this.cursor + 1) % this.max; const j = i * 3; this.p[j] = x; this.p[j + 1] = y; this.p[j + 2] = z; this.v[j] = vx; this.v[j + 1] = vy; this.v[j + 2] = vz; this.age[i] = 0; this.life[i] = life; this.fresh = true; }
   update(dt, viewH) {
     this.points.material.uniforms.scale.value = viewH; const B = this.aB.array;
+    if (!this.live && !this.fresh) return;   // idle: no loop, no upload
+    this.fresh = false; let live = 0;
     for (let i = 0; i < this.max; i++) {
       const a = this.age[i] += dt; if (a > this.life[i]) { B[i] = 0; continue; }
+      live++;
       this.v[i * 3 + 1] -= 9.81 * dt; for (let k = 0; k < 3; k++) this.p[i * 3 + k] += this.v[i * 3 + k] * dt;
       if (this.p[i * 3 + 1] < 0.05) { this.p[i * 3 + 1] = 0.05; this.v[i * 3 + 1] *= -0.35; this.v[i * 3] *= 0.6; this.v[i * 3 + 2] *= 0.6; }
       B[i] = Math.pow(1 - a / this.life[i], 1.5);
     }
-    this.points.geometry.attributes.position.needsUpdate = true; this.aB.needsUpdate = true;
+    this.live = live; this.points.geometry.attributes.position.needsUpdate = true; this.aB.needsUpdate = true;
   }
-  clear() { this.age.fill(1e9); }
+  clear() { this.age.fill(1e9); this.fresh = true; }
 }
 
 // Break-apart: each visible piece becomes a free body with gravity and ground bounce.
