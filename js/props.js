@@ -72,3 +72,21 @@ export function bakeDressing(world) {
     bake(g);
   }
 }
+
+// Shadow budget for the indoor bay light (runs once after loading). Props smaller than ~30 cm and glass stop
+// casting (their shadows are a few pixels; the static dressing is already merged by bakeDressing). Robots, the rocket and the cart are never touched; big and nearby things keep their shadows.
+const _sph = new THREE.Sphere();
+export function trimShadowCasters(world, keep = []) {
+  const skip = new Set(keep.filter(Boolean));
+  const walk = o => {
+    if (skip.has(o) || o === world.stand) return;   // stand: the rocket is built on it
+    if ((o.isMesh || o.isInstancedMesh) && o.castShadow && !o.isSkinnedMesh) {
+      const g = o.geometry; if (!g.boundingSphere) g.computeBoundingSphere();
+      _sph.copy(g.boundingSphere).applyMatrix4(o.matrixWorld);
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      if (_sph.radius < 0.3 || mats.some(m => m.transparent || m.transmission > 0)) o.castShadow = false;
+    }
+    for (const c of o.children) walk(c);
+  };
+  world.hangar.updateMatrixWorld(true); walk(world.hangar);
+}

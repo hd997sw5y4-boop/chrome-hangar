@@ -149,6 +149,7 @@ export class World {
     this.spot.visible = false;   // the old hangar spot threw a hard circular cookie on the floor
     if (this.bayDir) { this.bayDir.visible = v; this.bayDir.castShadow = v && this.shadowSize > 0; }
     this.sun.castShadow = !v && this.shadowSize > 0;
+    for (const m of this._extShell || []) m.castShadow = !v;   // indoors the bay light sits above the roof: the outer skin adds shadow draws but no shadow
     this.sun.visible = !v;   // no unshadowed sunlight leaking through the hangar roof
     if (!v) this.hemi.intensity = this.sky ? this.sky.hemi * (1 - THREE.MathUtils.smoothstep(this.alt || 0, 1500, 40000)) : this.hemi.intensity;
     for (const l of this.bays || []) l.visible = v;
@@ -230,7 +231,7 @@ export class World {
     const bay = this.bayDir = new THREE.DirectionalLight(0xfff3e0, 1.45);
     bay.position.set(4, 36, 6); bay.target.position.set(0, 0, 0);
     bay.shadow.camera.left = -24; bay.shadow.camera.right = 24; bay.shadow.camera.top = 20; bay.shadow.camera.bottom = -20;
-    bay.shadow.camera.near = 4; bay.shadow.camera.far = 70; bay.shadow.bias = -0.0003; bay.shadow.normalBias = 0.04;
+    bay.shadow.camera.near = 4; bay.shadow.camera.far = 45;   // the hangar floor's far corner sits ~42 m down the light bay.shadow.bias = -0.0003; bay.shadow.normalBias = 0.04;
     s.add(bay, bay.target);
     const fill = new THREE.PointLight(0xe8f0ff, 40, 50, 1.1); fill.position.set(-10, 14, -4); s.add(fill);
     this.bays = [[-11, -7], [11, 6], [0, 2]].map(([x, z]) => {
@@ -265,8 +266,9 @@ export class World {
     // exterior shell: painted corrugated cladding, gable roof, big lettering (seen from the apron and the air)
     {
       const ext = new THREE.MeshStandardMaterial({ color: 0xe6e9ec, metalness: 0.35, roughness: 0.45 });
+      this._extShell = [];   // outer cladding + roof: they only shadow for the sun outdoors (setIndoor)
       const o = 0.3, X = H.x + o, Z = H.z + o;
-      const ew = (w, h, x, y, z, ry, rep) => { const t = ext.clone(); applyPBR(t, 'corrugated_iron_02', rep || [w / 4, h / 4], { metal: false, normalScale: 1.3 }).then(mm => mm.color.set(0xeef1f3)).catch(() => {}); const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), t); m.position.set(x, y, z); m.rotation.y = ry; m.castShadow = true; m.receiveShadow = true; g.add(m); return m; };
+      const ew = (w, h, x, y, z, ry, rep) => { const t = ext.clone(); applyPBR(t, 'corrugated_iron_02', rep || [w / 4, h / 4], { metal: false, normalScale: 1.3 }).then(mm => mm.color.set(0xeef1f3)).catch(() => {}); const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), t); m.position.set(x, y, z); m.rotation.y = ry; m.receiveShadow = true; this._extShell.push(m); g.add(m); return m; };
       ew(X * 2, H.h, 0, H.h / 2, Z, 0);
       ew(Z * 2, H.h, -X, H.h / 2, 0, -Math.PI / 2);
       ew(Z * 2, H.h, X, H.h / 2, 0, Math.PI / 2);
@@ -280,11 +282,12 @@ export class World {
         const rm = ext.clone(); applyPBR(rm, 'corrugated_iron_02', [X * 2 / 4, slope / 4], { normalScale: 1.3, rotate: 0 }).then(mm => mm.color.set(0xb9bec4)).catch(() => {});
         const r = new THREE.Mesh(new THREE.PlaneGeometry(X * 2 + 1.2, slope), rm);
         r.position.set(0, H.h + rise / 2, sgn * (Z + 0.6) / 2); r.rotation.x = -Math.PI / 2 + sgn * Math.atan2(rise, Z + 0.6);
-        r.castShadow = true; r.receiveShadow = true; g.add(r);
+        r.receiveShadow = true; this._extShell.push(r); g.add(r);
       }
       const gable = new THREE.Shape(); gable.moveTo(-Z - 0.6, 0); gable.lineTo(Z + 0.6, 0); gable.lineTo(0, rise); gable.closePath();
       for (const sx of [-1, 1]) { const gm = new THREE.Mesh(new THREE.ShapeGeometry(gable), ext); gm.position.set(sx * X, H.h, 0); gm.rotation.y = sx * Math.PI / 2; g.add(gm); }
       const letters = (txt, w, h) => { const t = canvasTex(1024, 160, (c, cw, ch) => { c.clearRect(0, 0, cw, ch); c.fillStyle = '#1f2a36'; c.font = 'bold 118px Arial'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(txt, cw / 2, ch / 2 + 6); }); t.repeat.set(1, 1); return new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: t, transparent: true, roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -2 })); };
+      for (const m of this._extShell) m.castShadow = !(this.indoor ?? true);
       for (const sx of [-1, 1]) { const l = letters('CHROME HANGAR', 26, 4); l.position.set(sx * (X + 0.05), H.h - 6, 0); l.rotation.y = sx * Math.PI / 2; g.add(l); }
       const b = letters('BAY 01', 10, 1.6); b.position.set(0, H.doorH + 1.3, -Z - 0.05); b.rotation.y = Math.PI; g.add(b);
     }
