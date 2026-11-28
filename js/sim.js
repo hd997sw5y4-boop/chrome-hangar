@@ -1,5 +1,6 @@
 // Flight + engine physics. Fixed-step, deterministic, single rigid body (plan: no joints).
 import { PARTS, stats, layout, hasLegs, G0 } from './rocket.js';
+import { extraForces } from './rcs.js';   // GB5-RCS
 
 export const DT = 1 / 120;
 const AREF = Math.PI * 0.9 * 0.9;
@@ -227,6 +228,9 @@ export function flightStep(f, dt = DT) {
       F = add(F, Fc); T = add(T, cross(mul(up, st.top - st.com), Fc)); T = add(T, mul(f.w, -st.I * 1.5 * k));
     }
   }
+  // GB5-RCS / GB5-AERO / GB5-HEAT: RCS thrusters, fin aero (0 in vacuum) and re-entry heat (rcs.js). Separate added force + torque;
+  // the monoprop burned so far lightens the rocket (mr <= 0, spread over m + mr). A burn-up crashes through failFlight.
+  { const x = extraForces(f, st, rho, va, V, dt, gee, failFlight); F = mul(add(add(F, x.F), v3(0, -x.mr * gee, 0)), m / (m + x.mr)); T = add(T, x.T); if (f.phase === 'crashed') return; }
 
   if (f.phase === 'pad') {
     if (f.e.on && push > m * gee * 1.002) { f.phase = 'flying'; f.events.push({ type: 'liftoff' }); }

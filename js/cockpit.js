@@ -310,6 +310,15 @@ export class Cockpit {
   }
 
   // ---- sim -> display data (plain object, also handy for the phone layout) ----
+  // GB5-RCS / GB5-HEAT: window.CH.rcs / CH.hull (published by rcs-ui.js), falling back to the sim state
+  rcsHull(f) {
+    const W = typeof window !== 'undefined' ? window.CH : null, r = W?.rcs || this.g.rcs, hl = W?.hull || this.g.hull;
+    const rs = f.rcs, hs = f.hull;
+    return {
+      rcsOn: r ? r.on : !!rs?.on, rcsPct: r ? r.pct : rs ? (100 * rs.prop) / rs.cap : 100, rcsFiring: r ? r.firing : !!rs?.active,
+      hullC: hl ? hl.c : (hs ? hs.T : 288.15) - 273.15, hullLevel: hl ? hl.level : hs?.level || 0, hullDmg: hl ? hl.dmg : hs?.dmg || 0,
+    };
+  }
   data(dt) {
     const f = this.fm.f, T = this.tmp, u = T.u, h = T.h, e = f.e, eng = f.eng;
     const pitch = Math.asin(THREE.MathUtils.clamp(u.y, -1, 1)) * 180 / Math.PI;
@@ -342,6 +351,7 @@ export class Cockpit {
     return {
       alt: f.alt, vs: f.vs, speed: f.speed, pitch, roll: this.roll || 0, hdg, assist: f.assist,
       thr: act, thrCmd: cmd, heat: e.heat, temp: e.temp, limitTemp: eng?.heat?.limitTemp || 3000, engOn: on, engFailed: failed, engState,
+      ...this.rcsHull(f),
       thrust, g: this.gs, q: f.q, wind, tanks, fuelFrac, burnLeft: mdot > 0 ? fuel / mdot : null, apex: f.apex,
       phase: f.phase, phaseLabel, moon: moon?.d ?? null, moonRate: moon?.rate ?? null, cautions, master: CAUTIONS.some(n => cautions[n]),
     };
