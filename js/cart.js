@@ -29,7 +29,8 @@ const wrapA = a => Math.atan2(Math.sin(a), Math.cos(a));
 const MODEL_Z = -0.154;
 const COM = V3(0, 0.56, -0.05);
 const M_CART = 520, M_ROBOT = 95, WHEEL_R = 0.285, MOUNT_Y = 0.43, L0 = 0.22, K_SUS = 17000, C_SUS = 2250, MAXC = 0.19;
-const VMAX = 12.5, VREV = 4.5, DRIVE_N = 1500;
+// top speed ~65 mph (29 m/s): the drive force holds up through the mid range (quartic fade) and balances the drag near VMAX
+const VMAX = 31, VREV = 4.5, DRIVE_N = 1500, V_STEER = 12.5, LAT_MAX = 10;
 const INV_I = V3(1 / 580, 1 / 570, 1 / 170);
 const FOOT = { hx: 0.76, z0: -1.96, z1: 1.93 };
 const FOOT_C = (FOOT.z0 + FOOT.z1) / 2, FOOT_HZ = (FOOT.z1 - FOOT.z0) / 2;
@@ -424,9 +425,12 @@ export class Cart {
       this.awake = this.driving ? 1 : Math.max(0, (this.awake || 0) - dt);
       this._self = true; const all = playerFrame(this.g); this._self = false;
       const R = 3.2, obs = all.filter(o => Math.abs(o.x - this.p.x) < R + (o.r || o.hx || 0) && Math.abs(o.z - this.p.z) < R + (o.r || o.hz || 0));
-      const maxS = (this.driving ? 0.62 : 0.62) - 0.42 * clamp(this.v.length() / VMAX, 0, 1);
+      // full lock at walking pace, easing off with speed (as before up to ~12 m/s), then capped so the cornering
+      // pull stays under ~1 g (lateral accel = v^2 * tan(steer) / wheelbase): steady and controllable at 65 mph
+      const sp0 = this.v.length(), maxS = Math.min(0.62 - 0.42 * clamp(sp0 / V_STEER, 0, 1), Math.atan(LAT_MAX * 2.95 / Math.max(1, sp0 * sp0)));
       this.steer += (this.steerIn * maxS - this.steer) * (1 - Math.exp(-(this.steerIn ? 7 : 9) * dt));
-      const n = Math.min(6, Math.ceil(dt / (1 / 120))), h = dt / n;
+      // substeps: at least 120 Hz, and never more than 20 cm of travel per step so fast runs can't tunnel through walls or props
+      const n = Math.min(16, Math.max(Math.ceil(dt / (1 / 120)), Math.ceil(sp0 * dt / 0.2))), h = dt / n;
       this.vPrev.copy(this.v);
       this.impact = 0; this.hullHit = 0; this.roofHit = 0;
       for (let i = 0; i < n; i++) this.substep(h, ctl, obs);
@@ -466,13 +470,13 @@ export class Cart {
       const sd = _t2.crossVectors(n, fd);
       const vc = this.velAt(pc, V3()), vf = vc.dot(fd), vs = vc.dot(sd); wh.vf = vf;
       let Fl = 0;
-      if (!wh.front && ctl.drive > 0) Fl += DRIVE_N * ctl.drive * Math.max(0, 1 - (clamp(vfb / VMAX, 0, 1)) ** 2);
+      if (!wh.front && ctl.drive > 0) Fl += DRIVE_N * ctl.drive * Math.max(0, 1 - (clamp(vfb / VMAX, 0, 1)) ** 4);
       if (!wh.front && ctl.drive < 0) Fl += DRIVE_N * 0.75 * ctl.drive * Math.max(0, 1 - (clamp(-vfb / VREV, 0, 1)) ** 2);
       const sgn = Math.sign(vf), lowV = Math.min(1, Math.abs(vf) / 0.35);
       if (ctl.brake > 0) Fl -= sgn * lowV * 0.85 * Fz * ctl.brake;
       const hb = !wh.front && ctl.hand;
       if (hb) Fl -= sgn * lowV * 0.7 * Fz;
-      Fl -= vf * (ctl.drive ? 6 : 24);
+      Fl -= vf * (ctl.drive ? 3 : 24);
       if (ctl.hold) Fl -= sgn * Math.min(Fz * 0.6, Math.abs(vf) * Fz * 2.5);
       let Fs = -vs * Fz * 6;
       const lim = (hb ? 0.42 : 1.0) * Fz, tot = Math.hypot(Fl, Fs);
@@ -487,7 +491,7 @@ export class Cart {
       nAvg.normalize(); const ax = _d.crossVectors(up, nAvg); T.addScaledVector(ax, 2400);
       _e.copy(this.w3).addScaledVector(up, -this.w3.dot(up)); T.addScaledVector(_e, -220);
     }
-    F.addScaledVector(this.v, -0.7 * this.v.length());
+    F.addScaledVector(this.v, -0.35 * this.v.length());   // air drag (with the rolling drag above, it settles the top speed near 65 mph)
     this.v.addScaledVector(F, h / this.m); this.w3.add(this.invIw(T.multiplyScalar(h)));
     this.w3.multiplyScalar(1 - 0.15 * h);
     this.p.addScaledVector(this.v, h);
@@ -604,12 +608,12 @@ export class Cart {
       A.tone(70, 0.3, 'sine', 0.22 * k, 0.15, 0, 0.5);
       this.shake = Math.max(this.shake, Math.min(0.45, v * 0.045));
       _qi.copy(this.q).invert(); const ln = V3(this.impactN.x, 0, this.impactN.z).applyQuaternion(_qi); this.jolt(v, ln.x, ln.z);
-      if (v > 7.5 && this.passenger) this.throwRider();
+      if (v > 12 && this.passenger) this.throwRider();   // scaled with the higher top speed: ordinary knocks keep him seated
     }
     if (this.hullHit > 2.2 && this.crashCd <= 0) {
       const k = clamp(this.hullHit / 8, 0.1, 1); this.crashCd = 0.15; S.play(['thud_0'], 0.4 + 0.5 * k, 0.75, 0.2); S.play(['plate_m_0', 'plate_m_1'], 0.3 * k, 0.9, 0.2);
       this.shake = Math.max(this.shake, Math.min(0.35, this.hullHit * 0.04)); this.jolt(this.hullHit * 0.5, 0, 0);
-      if ((this.roofHit > 1.5 || this.hullHit > 7) && this.passenger) this.throwRider();
+      if ((this.roofHit > 1.5 || this.hullHit > 11) && this.passenger) this.throwRider();
     }
     // landing thump from the suspension bottoming out
     const bottomed = this.wheels.some(w => w.comp > MAXC);
@@ -658,7 +662,7 @@ export class Cart {
       const a = yaw + O.yaw, pitch = O.pitch - 0.3; look = _cb.set(pos.x + Math.sin(a) * Math.cos(pitch) * 10, pos.y - Math.sin(pitch) * 10, pos.z + Math.cos(a) * Math.cos(pitch) * 10);
       this.camPos.copy(pos);
     } else {
-      const target = _ca.set(this.p.x, this.p.y + 0.85, this.p.z), a = yaw + O.yaw, d = O.dist + sp * 0.12;
+      const target = _ca.set(this.p.x, this.p.y + 0.85, this.p.z), a = yaw + O.yaw, d = O.dist + Math.min(sp, 30) * 0.08;
       const want = _cb.set(target.x - Math.sin(a) * Math.cos(O.pitch) * d, target.y + Math.sin(O.pitch) * d + 0.5, target.z - Math.cos(a) * Math.cos(O.pitch) * d);
       // keep the camera inside the hangar walls / closed doors and above the ground
       const walls = hangarWalls().concat(doorObstacles(this.g)); let k = 1;
@@ -675,7 +679,7 @@ export class Cart {
     cam.position.copy(this.camPos);
     if (this.shake > 0.002) cam.position.add(_cc.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(this.shake));
     cam.lookAt(look);
-    const fov = 68 + clamp(sp, 0, 14) * 0.45; if (Math.abs(cam.fov - fov) > 0.05) { cam.fov += (fov - cam.fov) * (1 - Math.exp(-3 * dt)); cam.updateProjectionMatrix(); }
+    const fov = 68 + clamp(sp, 0, 30) * 0.3; if (Math.abs(cam.fov - fov) > 0.05) { cam.fov += (fov - cam.fov) * (1 - Math.exp(-3 * dt)); cam.updateProjectionMatrix(); }
     (this.camShow ||= V3()).copy(cam.position); this.camQ.copy(cam.quaternion);
   }
 }
