@@ -18,13 +18,14 @@ import { SpaceView } from './spaceview.js';
 import { engineStep, airDensity, failFlight, DT, ATMO_TOP } from './sim.js';
 import { stats } from './rocket.js';
 import { rcsSpaceBusy, rcsSpaceAcc, rcsSpaceFine } from './rcs-moon.js';   // GB5-RCS
+import { stageStats } from './staging.js';   // gb3-moon-rocket
 import { SPOTS } from './env.js';
 
 const { V } = O;
 const AREF = Math.PI * 0.9 * 0.9;
 const UP_E = 70e3, DOWN_E = 65e3, UP_M = 15e3, DOWN_M = 12e3, SIDE_M = 250;
 const POINTS = [['hold', 'Hold'], ['pro', 'Prograde'], ['retro', 'Retrograde'], ['radOut', 'Radial out'], ['radIn', 'Radial in'], ['normal', 'Normal'], ['anti', 'Anti-normal']];
-export const NEED = { leo: 9.4, tli: 3.15, land: 0.9 };   // km/s: pad to 200 km orbit, trans-lunar injection, capture + landing
+export const NEED = { leo: 9.4, tli: 3.15, land: 2.6 };   // km/s: pad to 200 km orbit, trans-lunar injection, capture (~0.8) + powered descent (~1.8)
 const SPIN_E = [0, 0, O.W_E];
 const km = m => Math.round(m / 1000).toLocaleString();
 const dur = s => { if (!isFinite(s)) return '—'; s = Math.max(0, s); const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60); return d ? `${d} d ${h} h` : h ? `${h} h ${m} min` : `${m} min ${Math.floor(s % 60)} s`; };
@@ -69,12 +70,14 @@ export class MoonFlight {
   exit() { this.on = false; this.view.hideAll(); this.hud.classList.add('hidden'); this.pad.classList.add('hidden'); }
   // ---------- pad panel: what the trip needs vs. what this rocket has ----------
   padInfo() {
-    const f = this.f, st = stats(f.rocket, f.fill, 1), vac = st.dv * 1.1 / 1000, all = NEED.leo + NEED.tli + NEED.land, fromOrbit = NEED.tli + NEED.land;
+    const f = this.f, st = stats(f.rocket, f.fill, 1), all = NEED.leo + NEED.tli + NEED.land, fromOrbit = NEED.tli + NEED.land;
+    const stg = stageStats(f.rocket, f.fill), vac = stg.reduce((a, x) => a + x.dvVac, 0) / 1000;   // every stage, in space
     $('mpNeed').innerHTML = `From the pad the Moon takes about <b>${all.toFixed(1)} km/s</b> of Δv: ${NEED.leo} to reach orbit, ${NEED.tli} to head for the Moon, ${NEED.land} to slow down and land. From a 200 km orbit: about <b>${fromOrbit.toFixed(1)} km/s</b>.`;
     const ok = vac >= all, okOrbit = vac >= fromOrbit;
     $('mpLine').innerHTML = `Moon: needs <b>${all.toFixed(1)}</b> km/s · this rocket <b class="${ok ? 'good' : okOrbit ? 'warn' : 'badc'}">${vac.toFixed(1)}</b>`;
     $('mpHave').innerHTML = `This rocket: <b class="${ok ? 'good' : okOrbit ? 'warn' : 'badc'}">${vac.toFixed(1)} km/s</b> in space (${(st.dv / 1000).toFixed(1)} at sea level), ${st.parts} parts. ` +
-      (ok ? 'Enough on paper; fly a gravity turn east.' : okOrbit ? 'Not enough from the pad (one-stage rockets top out near 6-7 km/s), but enough from the practice orbit.' : `Not enough even from orbit: add tanks (CarbonTank is the lightest per tonne of fuel) and use an efficient engine (Vesper, Spark or Flicker, which also throttle low enough to land). It needs ${fromOrbit.toFixed(1)} km/s.`);
+      (stg.length > 1 ? `${stg.length} stages. ` : '') +
+      (ok ? 'Enough on paper: fly a gravity turn to orbit, or press Autopilot.' : okOrbit ? 'Not enough from the pad (one-stage rockets top out near 6-7 km/s; stage it with Decouplers, or load the prebuilt Moon Rocket), but enough from the practice orbit.' : `Not enough even from orbit: add tanks (CarbonTank is the lightest per tonne of fuel) and use an efficient engine (Vesper, Spark or Flicker, which also throttle low enough to land). It needs ${fromOrbit.toFixed(1)} km/s.`);
   }
   startOrbit() {
     const f = this.f, fm = this.fm; if (!this.on || f.phase !== 'pad' || fm.countdown != null) return;
@@ -202,7 +205,7 @@ export class MoonFlight {
   }
   target() {
     const s = this.s, r = V.norm(s.r), v = V.norm(s.v), n = V.norm(V.cross(s.r, s.v));
-    return { hold: null, pro: v, retro: V.mul(v, -1), radOut: r, radIn: V.mul(r, -1), normal: n, anti: V.mul(n, -1) }[this.point];
+    return { hold: null, pro: v, retro: V.mul(v, -1), radOut: r, radIn: V.mul(r, -1), normal: n, anti: V.mul(n, -1), ap: this.apDir || null }[this.point];   // ap: autopilot.js
   }
   cyclePoint() { if (this.mode !== 'space') return; const i = POINTS.findIndex(p => p[0] === this.point); this.point = POINTS[(i + 1) % POINTS.length][0]; this.uiT = 1; this.fm.g.audio.tap(); }
   capNow() { const s = this.s; if (!s || this.mode !== 'space') return 1; const f = this.f; return warpCap({ thrust: f.e.on || (f.eng && f.e.cmd >= f.eng.minThrottle - 1e-6 && f.fuelFrac > 0), body: s.body, alt: V.len(s.r) - O.radiusOf(s.body) }); }
@@ -296,7 +299,7 @@ export class MoonFlight {
   }
   readouts() {
     const f = this.f, s = this.s;
-    const pointName = (POINTS.find(p => p[0] === this.point) || POINTS[0])[1];
+    const pointName = this.point === 'ap' ? 'Autopilot' : (POINTS.find(p => p[0] === this.point) || POINTS[0])[1];
     $('mhPoint').textContent = 'Point: ' + pointName + ' (Q)'; $('mhWarp').textContent = 'Warp ' + this.warp.k.toLocaleString() + '×';
     this.hud.querySelector('.row').classList.toggle('hidden', this.mode !== 'space');
     const st = stats(f.rocket, f.fill, f.fuelFrac), dvLeft = st.dv * 1.1;

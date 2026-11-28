@@ -1,0 +1,16 @@
+{
+ "id": "tank_saturn",
+ "name": "Saturn Booster Tank",
+ "section": "structure",
+ "kind": "tank",
+ "attach": "stack",
+ "length": 10.0,
+ "radius": 0.9,
+ "dryMass": 1000,
+ "fuelMass": 24000,
+ "cnAlpha": 1.6,
+ "cd": 0.0,
+ "finish": "brushed",
+ "blurb": "First-stage tank packed with dense kerosene and oxygen: 24 t of fuel on 1 t of thin aluminium-lithium. Heavy: one Saturn Booster Engine lifts a stack of them.",
+ "unlockStars": 7
+}

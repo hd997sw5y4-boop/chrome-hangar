@@ -2,6 +2,7 @@
 // a build stand that raises/lowers/turns, checkout panel with CoM gem and CoD ring.
 import * as THREE from 'three';
 import { PARTS, PART_IDS, layout, stats, stability, problems, candidates, applyPlace, applyRemove, cloneRocket, partCount } from './rocket.js';
+import { stageStats } from './staging.js';   // gb3-moon-rocket: per-stage dV / TWR in the checkout
 import { rocketMesh, partMesh, finPair, legSet, ghostify, disposeTree, initMaterials } from './parts3d.js';
 import { HANGAR, IS_TOUCH } from './env.js';
 import { DECK } from './stand.js';
@@ -167,7 +168,7 @@ export class BuildMode {
       ['Balance', `<span class="${stabC}">${stab.level === 2 ? '◆ above ○' : stab.level === 1 ? '◆ ≈ ○' : '◆ below ○'} ${stab.word}</span>`],
       ['Engine', eng ? `${eng.name}${eng.engines > 1 ? ' · ' + eng.engines + ' nozzles' : ''} · min ${Math.round(eng.minThrottle * 100)}%` : '—'],
       ['Parts', partCount(r)],
-    ].map(([a, b]) => `<div><span>${a}</span><b>${b}</b></div>`).join('');
+    ].map(([a, b]) => `<div><span>${a}</span><b>${b}</b></div>`).join('') + this.stageRows(r);
     $('ckProblems').textContent = probs[0] || (stab.level === 0 ? 'The gem sits below the ring, so it will flip. Add fins to the lowest tank.' : '');
     $('fillBtns').querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.f === this.g.fill));
     this.drawDiagram(st);
@@ -176,6 +177,12 @@ export class BuildMode {
     this.gem.position.set(2.6, off + st.com, 0); this.ringM.position.set(2.6, off + st.cop, 0);
     this.cg.visible = r.stack.length > 0;
   }
+  // gb3-moon-rocket: one row per stage (only for staged rockets): its engine, vacuum dV and TWR at its ignition
+  stageRows(r) {
+    const S = stageStats(r, this.g.fill); if (S.length < 2) return '';
+    const tot = S.reduce((a, x) => a + x.dvVac, 0);
+    return S.map((x, i) => `<div><span>Stage ${i + 1}</span><b>${x.engine} · ${Math.round(x.dvVac)} m/s · TWR ${(i ? x.twrVac : x.twr).toFixed(2)}</b></div>`).join('') + `<div><span>Total Δv (vacuum)</span><b>${(tot / 1000).toFixed(1)} km/s</b></div>`;
+  }
   drawDiagram(st) {
     const cv = $('ckDiagram'), g = cv.getContext('2d'), W = cv.width, H = cv.height, r = this.g.rocket, L = layout(r);
     g.clearRect(0, 0, W, H);
@@ -183,7 +190,7 @@ export class BuildMode {
     g.fillStyle = '#cfd6dd';
     for (const it of L.items) {
       if (it.d.kind === 'nose') { g.beginPath(); g.moveTo(x0 - rw, y(it.y0)); g.quadraticCurveTo(x0 - rw, y(it.y1), x0, y(it.y1)); g.quadraticCurveTo(x0 + rw, y(it.y1), x0 + rw, y(it.y0)); g.fill(); }
-      else { g.fillStyle = it.d.kind === 'mount' ? '#555c63' : '#cfd6dd'; g.fillRect(x0 - rw, y(it.y1), rw * 2, (it.y1 - it.y0) * s - 1); g.fillStyle = '#cfd6dd'; }
+      else { g.fillStyle = it.d.kind === 'mount' || it.d.kind === 'decoupler' ? '#555c63' : '#cfd6dd'; g.fillRect(x0 - rw, y(it.y1), rw * 2, (it.y1 - it.y0) * s - 1); g.fillStyle = '#cfd6dd'; }
       if (it.s.fins) { g.fillStyle = '#9aa6b2'; g.beginPath(); g.moveTo(x0 - rw, y(it.y0 + 1.4)); g.lineTo(x0 - rw - 1.25 * s, y(it.y0 - 0.2)); g.lineTo(x0 - rw, y(it.y0 - 0.35)); g.moveTo(x0 + rw, y(it.y0 + 1.4)); g.lineTo(x0 + rw + 1.25 * s, y(it.y0 - 0.2)); g.lineTo(x0 + rw, y(it.y0 - 0.35)); g.fill(); g.fillStyle = '#cfd6dd'; }
       if (it.s.legs) { g.strokeStyle = '#555c63'; g.lineWidth = 2; g.beginPath(); g.moveTo(x0 - rw, y(it.y0 + 0.9)); g.lineTo(x0 - 2.3 * s, y(L.bottom)); g.moveTo(x0 + rw, y(it.y0 + 0.9)); g.lineTo(x0 + 2.3 * s, y(L.bottom)); g.stroke(); }
     }
@@ -193,6 +200,8 @@ export class BuildMode {
       if (n === 1) { g.beginPath(); g.moveTo(x0 - br * 0.35 * s, y(L.engLen)); g.lineTo(x0 + br * 0.35 * s, y(L.engLen)); g.lineTo(x0 + br * s, y(0)); g.lineTo(x0 - br * s, y(0)); g.fill(); }
       else { const xs = n === 3 ? [-br, 0, br] : n === 9 ? [-2 * br, -br, 0, br, 2 * br] : [-3 * br, -1.5 * br, 0, 1.5 * br, 3 * br]; for (const dx of xs) { g.beginPath(); g.moveTo(x0 + (dx - br * 0.28) * s, y(L.engLen)); g.lineTo(x0 + (dx + br * 0.28) * s, y(L.engLen)); g.lineTo(x0 + (dx + br) * s, y(0)); g.lineTo(x0 + (dx - br) * s, y(0)); g.fill(); } }
     }
+    g.fillStyle = '#3a3f45';   // gb3-moon-rocket: upper-stage engines under their mounts
+    for (const e of L.engines || []) { const br = e.d.bellRadius || e.d.radius; g.beginPath(); g.moveTo(x0 - br * 0.35 * s, y(e.y1)); g.lineTo(x0 + br * 0.35 * s, y(e.y1)); g.lineTo(x0 + br * s, y(e.y0)); g.lineTo(x0 - br * s, y(e.y0)); g.fill(); }
     if (!r.stack.length) return;
     // gem = centre of mass, ring = centre of drag (shape + word, never colour alone)
     const gy = y(st.com), cy = y(st.cop);
@@ -251,6 +260,7 @@ export class BuildMode {
     const g = this.rocketGroup;
     let y = 0, side = false;
     if (c.type === 'stack') y = c.index >= L.items.length ? L.top : (c.index === 0 && L.items.length ? L.items[0].y0 - 0.4 : L.items[c.index].y0);
+    else if (c.type === 'engine' && c.index > 0) { const e = L.engines.find(x => x.i === c.index); y = e ? (e.y0 + e.y1) / 2 : L.items[c.index].y0 - 0.4; }   // gb3-moon-rocket: upper-stage mount
     else if (c.type === 'engine') y = L.engLen ? L.engLen * 0.5 : -0.4;
     else { y = L.items[c.index].y0 + (c.type === 'fins' ? 0.7 : 0.4); side = true; }
     const p = new THREE.Vector3(0, y, 0);
@@ -310,7 +320,8 @@ export class BuildMode {
     else if (c.type === 'legs') { o = legSet(L.items[c.index].y0 + PARTS.legs.drop); o.position.y = L.items[c.index].y0; }
     else {
       o = partMesh(this.sel);
-      if (c.type === 'engine') o.position.y = L.engLen - d.length;
+      if (c.type === 'engine' && c.index > 0) { const e = L.engines.find(x => x.i === c.index); o.position.y = e ? e.y1 - d.length : L.items[c.index].y0 - d.length; }   // gb3-moon-rocket
+      else if (c.type === 'engine') o.position.y = L.engLen - d.length;
       else if (c.index >= L.items.length) o.position.y = L.top;
       else o.position.y = L.items[c.index].y0 - (c.index === 0 ? d.length : 0);
     }
@@ -332,8 +343,8 @@ export class BuildMode {
     const a = this.aim();
     if (this.sel === 'delete') { if (a.del) this.remove(a.del); else this.g.audio.bad(); return; }
     if (!a.cand) { if (a.reason) { this.g.toast(a.reason); this.g.audio.bad(); } return; }
-    const was = this.g.rocket.engine;
-    const target = a.cand.type === 'stack' ? { type: 'stack', index: a.cand.index } : a.cand.type === 'engine' ? { type: 'engine', index: 0 } : { type: a.cand.type, index: a.cand.index };
+    const was = a.cand.type === 'engine' && a.cand.index > 0 ? this.g.rocket.stack[a.cand.index].engine : this.g.rocket.engine;   // gb3-moon-rocket: upper mounts
+    const target = a.cand.type === 'stack' ? { type: 'stack', index: a.cand.index } : a.cand.type === 'engine' ? { type: 'engine', index: a.cand.index || 0 } : { type: a.cand.type, index: a.cand.index };
     this.setRocket(applyPlace(this.g.rocket, this.sel, a.cand), true, target);
     this.g.audio.snap();
     if (a.cand.type === 'engine' && was) this.g.toast(`Swapped ${PARTS[was].name} → ${PARTS[this.sel].name}`);
@@ -414,7 +425,7 @@ export class BuildMode {
     this.camRay();
     const h = this.ray.intersectObjects(this.rocketGroup.children, true).find(x => x.object.userData.target);
     if (!h) return;
-    if (tapInfo) { const t = h.object.userData.target; const id = t.type === 'stack' ? this.g.rocket.stack[t.index].p : t.type === 'engine' ? this.g.rocket.engine : t.type; this.g.toast(`${PARTS[id].name}: ${PARTS[id].blurb}`, 3000); return; }
+    if (tapInfo) { const t = h.object.userData.target; const id = t.type === 'stack' ? this.g.rocket.stack[t.index].p : t.type === 'engine' ? (t.index > 0 ? this.g.rocket.stack[t.index].engine : this.g.rocket.engine) : t.type; this.g.toast(`${PARTS[id].name}: ${PARTS[id].blurb}`, 3000); return; }
     this.remove(h.object.userData.target);
   }
 

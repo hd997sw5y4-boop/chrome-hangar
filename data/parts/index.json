@@ -21,6 +21,11 @@
   "titan",
   "cluster_tri",
   "cluster_nine",
-  "cluster_heavy"
+  "cluster_heavy",
+  "decoupler",
+  "hydro_upper",
+  "tank_hydro",
+  "tank_saturn",
+  "saturn_engine"
  ]
 }

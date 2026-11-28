@@ -20,6 +20,7 @@ import { Hands } from './interact2.js';
 import { Robots } from './robots.js';
 import { Cart } from './cart.js';
 import { BaseLOD } from './baselod.js';
+import { PREBUILT } from './presets.js';   // gb3-moon-rocket: read-only prebuilt rockets in Saved rockets
 
 const $ = id => document.getElementById(id);
 const LS = { get: (k, d) => { try { const v = localStorage.getItem('ch_' + k); return v == null ? d : JSON.parse(v); } catch (_) { return d; } }, set: (k, v) => { try { localStorage.setItem('ch_' + k, JSON.stringify(v)); } catch (_) {} } };
@@ -274,6 +275,8 @@ class Game {
     const can = this.mode === 'build';
     let html = can ? `<div class="row"><input type="text" id="saveName" maxlength="24" placeholder="Rocket name" value="Rocket ${this.saves.length + 1}"><button id="saveNow" class="go" ${this.saves.length >= 10 ? 'disabled' : ''}>Save current rocket</button></div><p style="color:var(--dim);font-size:12px">${this.saves.length}/10 slots used.</p>` : '';
     html += '<div class="saves">' + (this.saves.map((s, i) => `<div class="save"><img src="${s.photo}" alt=""><div><b>${esc(s.name)}</b></div><div style="font-size:11px;color:var(--dim)">${s.parts} parts</div><div class="row"><button data-load="${i}" ${can ? '' : 'disabled'}>Load</button><button data-del="${i}">Delete</button></div></div>`).join('') || '<p>No saved rockets yet.</p>') + '</div>';
+    // gb3-moon-rocket: Prebuilt (read-only, always there). Load works from anywhere: it switches to Free Mode (the Moon trip lives there).
+    html += '<h3 style="margin:14px 0 6px">Prebuilt</h3><div class="saves">' + PREBUILT.map((p, i) => `<div class="save"><div style="height:64px;display:flex;align-items:center;justify-content:center;font-size:34px">🚀</div><div><b>${esc(p.name)}</b></div><div style="font-size:11px;color:var(--dim)">${esc(p.blurb)}</div><div class="row"><button data-pre="${i}">Load</button></div></div>`).join('') + '</div>';
     this.openPanel('Saved rockets', html);
     const sn = $('saveNow'); if (sn) sn.onclick = () => {
       if (!this.rocket.stack.length) { this.toast('Nothing on the stand to save.'); return; }
@@ -281,6 +284,11 @@ class Game {
       LS.set('saves', this.saves); this.audio.snap(); this.showSaves();
     };
     $('panelBody').querySelectorAll('[data-load]').forEach(b => b.onclick = () => { this.build.setRocket(cloneRocket(this.saves[+b.dataset.load].rocket)); this.closePanel(); this.toast('Loaded ' + this.saves[+b.dataset.load].name); });
+    $('panelBody').querySelectorAll('[data-pre]').forEach(b => b.onclick = () => {
+      const p = PREBUILT[+b.dataset.pre];
+      if (this.mission || this.mode !== 'build' || this.training?.active) this.startFreeMode();
+      this.build.setRocket(p.rocket()); this.closePanel(); this.toast(`Loaded ${p.name} (Free Mode). Launch, then press Autopilot (J) or fly it yourself.`, 4200);
+    });
     $('panelBody').querySelectorAll('[data-del]').forEach(b => b.onclick = () => { this.saves.splice(+b.dataset.del, 1); LS.set('saves', this.saves); this.audio.remove(); this.showSaves(); });
   }
   showSettings() {
@@ -314,11 +322,11 @@ class Game {
   showHelp() {
     const rows = IS_TOUCH ? [
       ['Look', 'Drag anywhere on the screen'], ['Walk', 'Left stick'], ['Pick a part', 'Tap it in the tray'], ['Parts tray', 'Tray button: shows the tray and frames what you are building (drag to orbit, stick to zoom); tap again to go back'], ['Place', 'Tap a glowing ring (or near it)'], ['Remove', 'Pick Delete in the tray, then tap a part'],
-      ['Stand', '⟲ ⟳ turn (the stand is bolted to the floor)'], ['Fly', 'Throttle slider on the right, steer with the left stick, ENGINE ON/OFF cuts or relights (needs fuel)'], ['Flight views', 'Drag to orbit · pinch to zoom · View button cycles · Views ▾ opens the picker']]
+      ['Stand', '⟲ ⟳ turn (the stand is bolted to the floor)'], ['Fly', 'Throttle slider on the right, steer with the left stick, ENGINE ON/OFF cuts or relights (needs fuel), STAGE drops a spent stage, AUTOPILOT flies to the Moon (Free Mode; touching any control takes over)'], ['Flight views', 'Drag to orbit · pinch to zoom · View button cycles · Views ▾ opens the picker']]
       : [['Look / walk', 'Mouse (click to grab the mouse) · WASD'], ['Walk outside', 'Open the bay doors with the wall lever and walk out onto the apron. Lift the gate arm to reach the viewing stand.'], ['Parts tray', 'Tray button, T, Tab or wheel click: frees the cursor and frames what you are building (drag to orbit, wheel or W/S zoom); again to walk on'], ['Pick a part', 'Click it in the tray, or keys 1–9 · Delete tool: 0'], ['Place', 'Aim at a glowing ring and click'], ['Remove', 'Right-click a part, or the Delete tool'],
         ['Undo / redo', 'Z / Y (or Ctrl+Z / Ctrl+Y)'], ['Stand', 'Q / E turn (the stand is bolted to the floor)'], ['Test stand', 'Space or the Fire button, or pull the red lever on the stand · Shift / R and F throttle'],
-        ['Flight', 'Space launch · Shift or R throttle up, Ctrl or F down (about 50%/s), Z full, X cut / relight with fuel · WASD / arrows steer · drag mouse to orbit · wheel zoom · 1–8 pick view (5 is cockpit) · C jumps to cockpit · V cycle camera · H assist · P rocket health panel'], ['RCS', 'N toggle (DualSense Create) · steer turns with RCS on · Tab + WASD translate · I / M up / down · U / O roll · DualSense: hold the touchpad, left stick translates, D-pad up/down and roll'], ['Menu', 'Esc']];
-    const pad = [['DualSense', 'Left stick walk / steer · Right stick look · ✕ place / launch · □ delete tool · ○ undo · △ redo · L1/R1 pick part · R3 or touchpad click tray · D-pad stand · R2 throttle · in flight: R2 absolute throttle, L3 (stick click) cuts the engine, right stick orbit, L2 zoom in, L1 zoom out, △ or D-pad ◀▶ change view (cockpit is in the cycle, same as key 5), D-pad ▲ Views menu, C on the keyboard jumps to cockpit, ○ or B ends the flight · Options menu']];
+        ['Flight', 'Space launch · Shift or R throttle up, Ctrl or F down (about 50%/s), Z full, X cut / relight with fuel · WASD / arrows steer · drag mouse to orbit · wheel zoom · 1–8 pick view (5 is cockpit) · C jumps to cockpit · V cycle camera · H assist · P rocket health panel · Space (once off the pad) drops a stage · J autopilot to the Moon (Free Mode; any control takes over)'], ['RCS', 'N toggle (DualSense Create) · steer turns with RCS on · Tab + WASD translate · I / M up / down · U / O roll · DualSense: hold the touchpad, left stick translates, D-pad up/down and roll'], ['Menu', 'Esc']];
+    const pad = [['DualSense', 'Left stick walk / steer · Right stick look · ✕ place / launch · □ delete tool · ○ undo · △ redo · L1/R1 pick part · R3 or touchpad click tray · D-pad stand · R2 throttle · in flight: R2 absolute throttle, L3 (stick click) cuts the engine, right stick orbit, L2 zoom in, L1 zoom out, △ or D-pad ◀▶ change view (cockpit is in the cycle, same as key 5), D-pad ▲ Views menu, ✕ once off the pad drops a stage, R3 toggles the Moon autopilot (in the cockpit R3 recenters, use J), C on the keyboard jumps to cockpit, ○ or B ends the flight · Options menu']];
     this.openPanel('How to play', `<p>Build a rocket on the stand, read the checkout panel, static-fire it on the test stand, then launch. If it fails, you get one plain "Try this" tip and your rocket is still on the stand.</p><table class="help">${rows.concat(pad).map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('')}</table>
       <p><b>The two markers:</b> the gem ◆ is the center of mass (the balance point), the ring ○ is the center of pressure (where the air pushes). Keep the gem above the ring or the rocket flips. Fins pull the ring down.</p>`);
   }

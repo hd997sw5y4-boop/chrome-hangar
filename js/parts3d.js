@@ -409,12 +409,24 @@ function gridFins(y, radius = 0.9) {
   return k.build(g);
 }
 
+// gb3-moon-rocket: Decoupler, a short dark ring with a bright separation band and two bolt rows (the band is where it splits)
+function decouplerMesh(d) {
+  const g = new THREE.Group(), k = new Kit(), R = d.radius || 0.9, L = d.length;
+  k.add(new THREE.CylinderGeometry(R, R, L * 0.42, 64, 1, true), M.dark, xf([0, L * 0.21, 0]));
+  k.add(new THREE.CylinderGeometry(R, R, L * 0.42, 64, 1, true), M.dark, xf([0, L * 0.79, 0]));
+  k.add(new THREE.CylinderGeometry(R * 0.985, R * 0.985, L * 0.16, 64, 1, true), M.titanium, xf([0, L * 0.5, 0]));
+  boltRing(k, R + 0.01, L * 0.36, 28, 0.026, M.chromeTrim); boltRing(k, R + 0.01, L * 0.64, 28, 0.026, M.chromeTrim);
+  for (const a of [0.3, 1.87, 3.44, 5.01]) k.add(new THREE.BoxGeometry(0.2, L * 0.5, 0.05), M.darkMatte, xf([Math.cos(a) * (R + 0.02), L * 0.5, Math.sin(a) * (R + 0.02)], [0, -a + Math.PI / 2, 0]));   // pushers
+  k.add(new THREE.CircleGeometry(R, 48), M.dark, xf([0, L, 0], [-Math.PI / 2, 0, 0]));
+  return k.build(g);
+}
 export function partMesh(id, heat = false) {
   initMaterials();
   const d = PARTS[id];
   if (d.kind === 'tank') return tankMesh(d, heat);
   if (d.kind === 'nose') return noseMesh(d);
   if (d.kind === 'mount') return mountMesh(d);
+  if (d.kind === 'decoupler') return decouplerMesh(d);   // gb3-moon-rocket
   if (d.kind === 'engine') return engineMesh(d);
   if (d.kind === 'fins') { const g = new THREE.Group(); const p = finPair(0); p.position.y = 0.35; g.add(p); return g; }
   if (d.kind === 'legs') return legSet(1.6);
@@ -431,13 +443,16 @@ export function rocketMesh(r) {
     const e = engineMesh(PARTS[r.engine]); e.position.y = -L.engLen; pivot.add(e);
     tag(e, { type: 'engine', index: 0 }); g.userData.engine = e; g.userData.gimbal = pivot;
   }
+  // gb3-moon-rocket: upper-stage engines hang under their mounts (no gimbal pivot: they only steer once they are the bottom engine)
+  for (const e of L.engines || []) { const m = engineMesh(e.d); m.position.y = e.y0; g.add(m); tag(m, { type: 'engine', index: e.i }); }
+  const stageFoot = i => { let y = 0; for (const e of L.engines || []) if (e.i <= i) y = e.y0; return y; };   // nozzle exit of the stage holding stack[i]
   const firstTank = L.items.findIndex(it => it.d.kind === 'tank'), lastTank = L.items.map(it => it.d.kind).lastIndexOf('tank'), legs = L.items.some(it => it.s.legs);
   for (const it of L.items) {
     const m = partMesh(it.s.p, it.i === firstTank && !!r.engine); m.position.y = it.y0; g.add(m);
     if (legs && it.i === lastTank && it.d.length >= 1.5) { const gf = gridFins(it.y1 - 0.6); m.add(gf); gf.position.y = -it.y0; }
     tag(m, { type: 'stack', index: it.i });
     for (let k = 0; k < (it.s.fins || 0); k++) { const f = finPair(k); f.position.y = it.y0 + 0.35; g.add(f); tag(f, { type: 'fins', index: it.i }); }
-    if (it.s.legs) { const l = legSet(it.y0 + PARTS.legs.drop); l.position.y = it.y0; g.add(l); tag(l, { type: 'legs', index: it.i }); }
+    if (it.s.legs) { const l = legSet(it.y0 - stageFoot(it.i) + PARTS.legs.drop); l.position.y = it.y0; g.add(l); tag(l, { type: 'legs', index: it.i }); }   // gb3-moon-rocket: legs reach their own stage's foot
   }
   g.userData.picks = picks; g.userData.layout = L;
   return g;
