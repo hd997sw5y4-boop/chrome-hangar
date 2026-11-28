@@ -1,5 +1,5 @@
 // Extra hands-on toys on top of the existing hangar interactions: workbench props,
-// a workshop radio, part close-ups, a hand fuel valve, outdoor switches, climb views,
+// a workshop radio, a hand fuel valve, outdoor switches, climb views,
 // a pre-launch walk-around, and a test-stand fire lever with a water spray.
 import * as THREE from 'three';
 import { HANGAR, SPOTS, IS_TOUCH } from './env.js';
@@ -8,7 +8,6 @@ import { loadModel } from './models.js';
 import { hitBox, labelTex } from './interactive.js';
 import { FENCE, VIEW_STAND } from './outdoor.js';
 import { C, setWestYard } from './collide.js';
-import { PARTS } from './rocket.js';
 import { Radio } from './radio.js';
 
 const H = HANGAR, UP = new THREE.Vector3(0, 1, 0);
@@ -17,8 +16,6 @@ const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
 const steel = (c, r = 0.4, m = 0.7) => new THREE.MeshStandardMaterial({ color: c, roughness: r, metalness: m });
 
 const CSS = `
-#ixFact{position:absolute;z-index:32;left:50%;bottom:92px;transform:translateX(-50%);display:none;max-width:min(420px,92vw);padding:12px 16px;border-radius:14px;background:rgba(12,18,26,.78);border:1px solid rgba(127,231,255,.4);color:#e8f8ff;font:14px/1.4 system-ui,sans-serif;backdrop-filter:blur(8px);text-align:left;pointer-events:none}
-#ixFact.on{display:block}#ixFact b{display:block;font-size:15px;margin:2px 0 4px}#ixFact .k{display:block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#7fe7ff;font-weight:700}
 #ixWalk{position:fixed;z-index:28;left:14px;top:86px;display:none;min-width:190px;padding:10px 12px;border-radius:14px;background:rgba(12,18,26,.72);border:1px solid rgba(127,231,255,.35);color:#e8f8ff;font:600 13px/1.35 system-ui,sans-serif;backdrop-filter:blur(6px)}
 #ixWalk.on{display:block}#ixWalk h5{margin:0 0 6px;font:700 12px system-ui;letter-spacing:.04em;text-transform:uppercase;color:#7fe7ff}
 #ixWalk .row{display:flex;align-items:center;gap:8px;padding:3px 0}#ixWalk .box{width:14px;height:14px;border-radius:4px;border:2px solid rgba(127,231,255,.55);flex:none}
@@ -85,13 +82,13 @@ export class Hands {
     this.g = game; this.w = game.world; this.movers = []; this.gateUp = false;
     this.busy = null; this.floods = []; this.beaconOn = false; this.climb = null;
     this.checks = { clamps: false, hose: false, doors: false, robot: false };
-    this.skipped = false; this.inspecting = null; this.valveDrag = null;
+    this.skipped = false; this.valveDrag = null;
     this.puffs = puffSys(48); this.deluge = puffSys(80);
     this.lite = this.w.quality === 'phone' || this.w.quality === 'low';
     this.radio = new Radio(this);
     setWestYard(() => this.gateUp);
     const st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
-    this.factEl = this.mk('ixFact'); this.walkEl = this.mk('ixWalk');
+    this.walkEl = this.mk('ixWalk');
   }
   mk(id) { const d = document.createElement('div'); d.id = id; document.body.appendChild(d); return d; }
   get ix() { return this.g.interact; }
@@ -641,104 +638,27 @@ export class Hands {
     t.toggleFire();
   }
 
-  // ---------- inspect (click a built part) ----------
+  // ---------- pointer: test-stand fire lever (radio / valve also end their drag here) ----------
   bindPointers() {
     const c = this.w.renderer.domElement;
     let down = null;
     c.addEventListener('pointerdown', e => {
       if (e.button !== 0) return;
-      down = { x: e.clientX, y: e.clientY, t: performance.now(), alt: e.altKey, moved: 0 };
-      this._ptr = down;
+      down = { x: e.clientX, y: e.clientY, t: performance.now(), moved: 0 };
     });
     c.addEventListener('pointermove', e => {
       if (!down) return;
       down.moved += Math.abs(e.clientX - down.x) + Math.abs(e.clientY - down.y);
     });
     const up = e => {
-      const p = down; down = this._ptr = null;
+      const p = down; down = null;
       this.radio.endDrag();
       if (this.valveDrag) { this.valveDrag = null; this.ix.sfx.tapFx(); }
       if (!p || p.moved > 11 || performance.now() - p.t > 600) return;
       if (this.g.mode === 'test') this.clickTest(p.x, p.y);
-      else this.maybeInspect(p.x, p.y, p.alt);
     };
     c.addEventListener('pointerup', up); c.addEventListener('pointercancel', up);
   }
-  hitPart(x, y) {
-    const b = this.g.build, rg = b?.rocketGroup; if (!rg) return null;
-    const locked = document.pointerLockElement === this.w.renderer.domElement;
-    const ndc = locked || (x == null) ? new THREE.Vector2(0, 0) : new THREE.Vector2(x / innerWidth * 2 - 1, -(y / innerHeight) * 2 + 1);
-    const ray = this._ray || (this._ray = new THREE.Raycaster());
-    ray.setFromCamera(ndc, this.w.camera); ray.far = 40;
-    const h = ray.intersectObjects(rg.children, true).find(o => o.object.userData.target || o.object.parent?.userData.target);
-    if (!h) return null;
-    let o = h.object; while (o && !o.userData.target) o = o.parent;
-    return o?.userData.target ? { target: o.userData.target, point: h.point, object: o } : null;
-  }
-  // build.js calls this on mousedown so a part-click does not grab the mouse or place a part
-  blockLock() {
-    if (this.g.mode !== 'build' || !this.ready) return false;
-    if (this.ix?.ctl) return false;
-    const alt = this.g.input.down('AltLeft') || this.g.input.down('AltRight') || this._ptr?.alt;
-    const inp = this.g.input;
-    const x = inp.locked ? null : inp.mouse.x, y = inp.locked ? null : inp.mouse.y;
-    if (!this.hitPart(x, y)) return false;
-    if (alt) return true;
-    if (this.g.build.sel) return false;
-    return true;
-  }
-  inspectTap(tap) {
-    if (this.g.build?.sel) return false;
-    const hit = this.hitPart(tap.x, tap.y); if (!hit) return false;
-    this.openInspect(hit); return true;
-  }
-  maybeInspect(x, y, alt) {
-    if (this.g.mode !== 'build' || this.g.menuOpen || this.g.panelOpen || this.ix?.ctl) return;
-    if (this.g.build?.sel && !alt) return;
-    const hit = this.hitPart(x, y); if (!hit) return;
-    this.openInspect(hit);
-  }
-  partId(t) {
-    if (t.type === 'stack') return this.g.rocket.stack[t.index]?.p;
-    if (t.type === 'engine') return this.g.rocket.engine;
-    return t.type;
-  }
-  factFor(id) {
-    const p = PARTS[id], facts = this.g.build?.tutFacts || {};
-    const kind = p?.kind;
-    const by = kind === 'mount' ? facts.mount : kind === 'engine' ? facts.engine : kind === 'tank' ? facts.tank
-      : kind === 'nose' ? facts.nose : kind === 'fins' ? facts.fins : kind === 'legs' ? facts.legs : null;
-    const title = p?.name || 'Part';
-    const body = by?.body || p?.blurb || 'A piece of your rocket.';
-    return { title, body, blurb: p?.blurb, factTitle: by?.title };
-  }
-  openInspect(hit) {
-    const id = this.partId(hit.target); if (!id || !PARTS[id]) return;
-    const fact = this.factFor(id);
-    const bb = new THREE.Box3().setFromObject(hit.object);
-    const c = bb.getCenter(new THREE.Vector3());
-    const size = bb.getSize(new THREE.Vector3());
-    const r = Math.max(0.35, size.length() * 0.7);
-    const cam = this.w.camera;
-    const away = cam.position.clone().sub(c); if (away.lengthSq() < 0.01) away.set(0.6, 0.4, 0.6);
-    away.normalize();
-    const pos = c.clone().addScaledVector(away, r + 0.55); pos.y = Math.max(pos.y, c.y + 0.15);
-    this.inspecting = { fact, pos, look: c, t: 0 };
-    this.ix.sfx.clunk(0.2);
-    this.g.audio.tone(1900, 0.07, 'sine', 0.035, 0.2);
-    this.g.audio.tone(520, 0.1, 'sine', 0.04, 0.15);
-    this.factEl.innerHTML = `<span class="k">${fact.factTitle ? 'Did you know?' : 'Part'}</span><b>${fact.title}</b>${fact.body}`;
-    this.factEl.classList.add('on');
-    this.ix.take(this.inspectCtl);
-  }
-  get inspectCtl() {
-    return this._inspCtl || (this._inspCtl = {
-      camPose: () => this.inspecting ? { pos: this.inspecting.pos, look: this.inspecting.look } : { pos: this.w.camera.position, look: this.w.camera.position.clone().add(V3(0, 0, -1)) },
-      onTake: () => {},
-      onRelease: () => { this.inspecting = null; this.factEl.classList.remove('on'); },
-    });
-  }
-
   clickTest(x, y) {
     if (!this.lever || this.g.menuOpen || this.g.resultsOpen) return;
     const ndc = new THREE.Vector2(x / innerWidth * 2 - 1, -(y / innerHeight) * 2 + 1);
@@ -869,12 +789,6 @@ export class Hands {
     }
     if (!paused) this.syncWalkUI();
     else this.walkEl?.classList.remove('on');
-
-    // inspect auto-release after a short look (Esc also works)
-    if (this.inspecting && this.ix.ctl === this.inspectCtl) {
-      this.inspecting.t += dt;
-      if (this.inspecting.t > 5.5) this.ix.release();
-    }
 
     // test lever + deluge
     if (this.lever) {

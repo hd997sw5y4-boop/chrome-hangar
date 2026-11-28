@@ -396,18 +396,14 @@ export class BuildMode {
     const tap = inp.taps[0];
     if (tap) {
       this.aimXY = { x: tap.x, y: tap.y };
-      if (this.g.hands?.inspectTap?.(tap)) { inp.taps.shift(); this.aimXY = null; }
-      else if (this.sel) this.place();
+      if (this.sel) this.place();
       else this.tryPickDelete(true);
       this.aimXY = null;
     }
     if (inp.mouse.clicked) {
-      if (this.g.hands?.blockLock?.()) inp.mouse.clicked = false;
-      else {
-        const hoveringSomething = a.cand || a.del;
-        if (inp.locked || hoveringSomething) this.place();
-        else if (!this.view.on) inp.requestLock();   // while the tray view frames the work, a click on empty floor keeps the cursor
-      }
+      const hoveringSomething = a.cand || a.del;
+      if (inp.locked || hoveringSomething) this.place();
+      else if (!this.view.on) inp.requestLock();   // while the tray view frames the work, a click on empty floor keeps the cursor
     }
     if (inp.hit('Pad0') || inp.hit('Enter')) this.place();
     if (inp.mouse.right || inp.hit('KeyX')) this.tryPickDelete(false);
