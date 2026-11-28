@@ -21,6 +21,7 @@ import { Cockpit } from './cockpit.js';
 import * as FL from './freelook.js';
 import { applyKeys, applyAbs, cut as cutThr, toggle as toggleEng, snapshot, engineState } from './throttle.js';
 import { Gb5Flight } from './rcs-ui.js';   // GB5-RCS
+import { MoonRocketFlight } from './moonrocket.js';   // gb3-moon-rocket: staging + Moon autopilot (keys, buttons, HUD, stage rebuild)
 
 const $ = id => document.getElementById(id);
 // Flight views (keys 1-8, V cycles). Index order is what the picker and the saved setting use.
@@ -63,6 +64,7 @@ export class FlightMode {
     this.guideLine.frustumCulled = false; this.guideLine.visible = false; this.w.scene.add(this.guideLine);
     this.health = new RocketHealth(); this.hpUI = new HealthPanel(game); this.fr = new FlightResults(game); this.kit = new LandingKit(game); this.slow = new SlowMo(); this.shards = new ShardPool(game.world.scene); this.wreckFx = new WreckSettle(); this.rec = new FlightRecorder(); this.rp = new ReplayPlayer(game); this.fr.onReplay = () => this.startReplay();
     this.moon = new MoonFlight(this);   // Moon flight (moon.js): space leg, time warp, lunar landing
+    this.mr = new MoonRocketFlight(this);   // gb3-moon-rocket
     this.syncButtons();
   }
   syncButtons() {
@@ -108,9 +110,10 @@ export class FlightMode {
     $('thrTouch').querySelector('em').style.bottom = (eng.minThrottle * 100) + '%';
     this.syncPose(); this.syncButtons(); this.setCam(this.cam, true); this.zoomT = this.zoom = 1;
     this.moon.reset();
+    this.mr.reset();   // gb3-moon-rocket
     if (this.g.mission && !this.g.training?.active) this.g.prompt(IS_TOUCH ? 'Tap <b>Launch</b>. Throttle on the right, <b>ENGINE ON/OFF</b> to cut or relight, steer with the left stick. Views includes Cockpit.' : 'Press <b>Space</b> to launch. Shift / R throttle up, Ctrl / F down, Z full, X cut, WASD steer, 5 or C for cockpit, V cycles views.');
   }
-  exit() { this.g.input.flightKeys = false; this.cockpit.off(); this.moon?.exit(); this.w.post.setDOF(false); this.w.post.setBlur(0); this.w.post.setHeat(new THREE.Vector4(0, 0, 0, 0)); this.w.setAltitude(0); this.w.followSun(SPOTS.pad); this.w.camera.near = 0.1; this.w.camera.far = 60000; this.w.camera.updateProjectionMatrix(); this.clear(); $('camPicker').classList.add('hidden'); this.w.camera.up.set(0, 1, 0); this.guideLine.visible = false; this.hpUI.detach(); this.g.prompt(null); $('landGuide').classList.add('hidden'); this.g.audio.setEngine(0); this.padRel?.reset(null); this.fr.hide(); this.kit.hide(); this.slow.reset(); this.g.fxScale = 1; this.endReplay(); }
+  exit() { this.mr?.clear();   /* gb3-moon-rocket */ this.g.input.flightKeys = false; this.cockpit.off(); this.moon?.exit(); this.w.post.setDOF(false); this.w.post.setBlur(0); this.w.post.setHeat(new THREE.Vector4(0, 0, 0, 0)); this.w.setAltitude(0); this.w.followSun(SPOTS.pad); this.w.camera.near = 0.1; this.w.camera.far = 60000; this.w.camera.updateProjectionMatrix(); this.clear(); $('camPicker').classList.add('hidden'); this.w.camera.up.set(0, 1, 0); this.guideLine.visible = false; this.hpUI.detach(); this.g.prompt(null); $('landGuide').classList.add('hidden'); this.g.audio.setEngine(0); this.padRel?.reset(null); this.fr.hide(); this.kit.hide(); this.slow.reset(); this.g.fxScale = 1; this.endReplay(); }
   st0Top() { return stats(this.g.rocket, this.g.fill).top; }
   clear() { clearTimeout(this.cdTimer); this.shards?.clear(); this.wreckFx?.clear(); if (this.wreck) { this.wreck.removeFromParent(); disposeTree(this.wreck); this.wreck = null; } if (this.crashFlash) { this.crashFlash.light.removeFromParent(); this.crashFlash = null; } if (this.group) { this.group.removeFromParent(); disposeTree(this.group); this.group = null; } }
   back() {
@@ -188,6 +191,7 @@ export class FlightMode {
     if (!blocked) {
       this.gb5.input(inp, dt);   // GB5-RCS: N / Create toggle; Tab+WASD, I/M, U/O, touchpad+stick/D-pad translate / roll
       if (inp.hit('Space') || inp.hit('Pad0')) this.launch();
+      this.mr.input(inp);   // gb3-moon-rocket: Space / ✕ = stage once flying, J / R3 = autopilot
       this.cockpit.input(inp);   // C jumps to the cockpit slot; Q / R3 recenter, look
       if (inp.hit('Pad3') || inp.hit('Pad15')) this.nextCam(1);
       if (inp.hit('Pad14')) this.nextCam(-1);
@@ -217,8 +221,10 @@ export class FlightMode {
       }
       // steering in the camera's frame
       this.shapeSteer(inp.steer.x, inp.steer.y, dt);
+      this.mr.checkTakeover(inp, prev);   // gb3-moon-rocket: any player throttle / stick / control / RCS input hands the rocket back
       this.orbit.yaw -= inp.look.x; this.orbit.pitch = THREE.MathUtils.clamp(this.orbit.pitch - inp.look.y, -0.45, 1.5);
     } else { inp.flightKeys = false; this.shapeSteer(0, 0, dt); }   // menus / results open: let go of the stick instead of holding the last value
+    this.mr.update(dt);   // gb3-moon-rocket: autopilot (only throttle / steer / hold upright / pointing / staging / warp)
     // countdown
     if (this.countdown != null) {
       this.countdown -= dt;
@@ -269,6 +275,7 @@ export class FlightMode {
     if (ev.type === 'chuteTorn') { a.noise(0.3, 2400, 1, 0.25, 0, 'highpass', 0.2); a.bad(); this.g.toast(`Chute torn: opened at ${Math.round(ev.speed)} m/s (under 140 holds)`, 3000); }
     if (ev.type === 'landed') { a.clamp(); a.coolTicks(); cutThr(this); if (this.g.mission) this.endFlight('landed'); else { this.rec.event(this.f, this.f.soft ? 'Soft landing' : 'Touchdown'); if (!this.landedToast) { this.landedToast = true; this.g.toast('Touched down — throttle up to take off, or End flight when you are done'); } } }
     if (ev.type === 'crash') this.crash(ev.kind);
+    if (ev.type === 'stage') this.mr.onStage(ev);   // gb3-moon-rocket
   }
   // a cluster bell that quit goes dark; fins that tore off leave the stack (sim + mesh) and tumble away
   partLost(p) {
@@ -455,6 +462,7 @@ export class FlightMode {
     const engEl = $('fEng'); if (engEl) engEl.className = st === 'ON' ? 'on' : st === 'NO FUEL' ? 'dry' : 'off';
     this.syncEngBtn(st);
     this.windArrow(f);
+    this.mr.hud(this.mrDt);   // gb3-moon-rocket: stage + autopilot lines, buttons, spent stages
     // cockpit (gb5): CH.engine / game.engine / flight.engine — { thr, thrCmd, on, state, failed, fuelFrac }
     this.engine = this.g.engine = snapshot(this.thr, f.e, f.fuelFrac);
     const q = x => Math.round(x * 10) / 10;

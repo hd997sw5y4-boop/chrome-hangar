@@ -1,0 +1,25 @@
+{
+ "id": "saturn_engine",
+ "name": "Saturn Booster Engine",
+ "section": "propulsion",
+ "kind": "engine",
+ "attach": "engine",
+ "length": 2.8,
+ "radius": 1.3,
+ "dryMass": 6000,
+ "thrust": 3400000,
+ "isp": 265,
+ "minThrottle": 0.6,
+ "gimbalDeg": 5,
+ "heat": {
+  "safeThrottle": 1.0,
+  "risePerSec": 0,
+  "coolPerSec": 6,
+  "baseTemp": 700,
+  "spanTemp": 2500,
+  "limitTemp": 3600
+ },
+ "color": "#ffb347",
+ "blurb": "One huge kerosene bell, 3.4 MN at full throttle: a first stage for Saturn Booster Tanks. Thirsty (265 s Isp), so stage it away once its tanks run dry.",
+ "unlockStars": 7
+}

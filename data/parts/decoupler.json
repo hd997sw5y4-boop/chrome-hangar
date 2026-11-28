@@ -1,0 +1,16 @@
+{
+ "id": "decoupler",
+ "name": "Decoupler",
+ "section": "structure",
+ "kind": "decoupler",
+ "attach": "stack",
+ "length": 0.6,
+ "radius": 0.9,
+ "dryMass": 160,
+ "fuelMass": 0,
+ "cnAlpha": 0.15,
+ "cd": 0.0,
+ "finish": "dark",
+ "blurb": "A ring of explosive bolts between two stages. Stack the next stage's Engine Mount (with its own engine) on top; staging (Space in flight) drops everything below it, so the empty stage stops being dead weight.",
+ "unlockStars": 7
+}

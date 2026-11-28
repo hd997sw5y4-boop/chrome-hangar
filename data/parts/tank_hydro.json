@@ -1,0 +1,17 @@
+{
+ "id": "tank_hydro",
+ "name": "Hydrogen Tank",
+ "section": "structure",
+ "kind": "tank",
+ "attach": "stack",
+ "fuel": "hydrogen",
+ "length": 10.0,
+ "radius": 0.9,
+ "dryMass": 650,
+ "fuelMass": 8300,
+ "cnAlpha": 1.6,
+ "cd": 0.0,
+ "finish": "mirror",
+ "blurb": "Liquid hydrogen and oxygen for the Hydrogen Upper Engine: light fuel, so a big tank (8.3 t on 0.65 t). Only that engine can burn it.",
+ "unlockStars": 7
+}

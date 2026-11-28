@@ -1,0 +1,26 @@
+{
+ "id": "hydro_upper",
+ "name": "Hydrogen Upper Engine",
+ "section": "propulsion",
+ "kind": "engine",
+ "attach": "engine",
+ "fuel": "hydrogen",
+ "length": 3.0,
+ "radius": 0.9,
+ "dryMass": 1700,
+ "thrust": 900000,
+ "isp": 400,
+ "minThrottle": 0.4,
+ "gimbalDeg": 5,
+ "heat": {
+  "safeThrottle": 1.0,
+  "risePerSec": 0,
+  "coolPerSec": 8,
+  "baseTemp": 600,
+  "spanTemp": 2000,
+  "limitTemp": 3200
+ },
+ "color": "#a9d8ff",
+ "blurb": "Burns liquid hydrogen with oxygen: 900 kN and about 440 s of Isp in vacuum, the most push per kilogram of fuel of any engine here. Needs Hydrogen Tanks. An upper stage: mount it above a Decoupler.",
+ "unlockStars": 7
+}
