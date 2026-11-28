@@ -153,6 +153,8 @@ export class World {
     this.sun.visible = !v;   // no unshadowed sunlight leaking through the hangar roof
     if (!v) this.hemi.intensity = this.sky ? this.sky.hemi * (1 - THREE.MathUtils.smoothstep(this.alt || 0, 1500, 40000)) : this.hemi.intensity;
     for (const l of this.bays || []) l.visible = v;
+    this._intHidden = undefined; this._sleepInterior?.();
+    this._shadowHold = 2; this.markShadow();
   }
 
   applyQuality(q, w, h, aa) {
@@ -162,6 +164,8 @@ export class World {
     this.shadowSize = p.shadow;
     this.renderer.shadowMap.enabled = p.shadow > 0;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.renderer.shadowMap.autoUpdate = false;
+    this._shadowHold = 3; this.markShadow();
     for (const l of [this.sun, this.bayDir, this.spot]) {
       if (!l?.shadow) continue;
       l.shadow.mapSize.set(p.shadow || 512, p.shadow || 512); l.shadow.radius = q === 'high' || q === 'ultra' ? 4 : 2; l.shadow.blurSamples = 12;
@@ -185,6 +189,35 @@ export class World {
     const r = this.renderer;
     try { r.compile(this.scene, this.camera); } catch (_) {}
   }
+  markShadow() { this._shadowDirty = true; }
+  _updateShadows() {
+    const r = this.renderer;
+    r.shadowMap.autoUpdate = false;
+    if (!r.shadowMap.enabled) return;
+    if (this._shadowDirty || (this._shadowHold || 0) > 0) {
+      r.shadowMap.needsUpdate = true;
+      this._shadowHold = Math.max(0, (this._shadowHold || 0) - 1);
+      this._shadowDirty = false;
+    }
+  }
+  _sleepInterior() {
+    if (!this.hangar) return;
+    const d = this.camera.position.length();
+    const hide = !this.indoor && d > (this._intHidden ? 220 : 300);
+    if (hide === this._intHidden) return;
+    this._intHidden = hide;
+    this.interiorLive = !hide;
+    const on = !hide;
+    if (this.floor) this.floor.visible = on;
+    if (this.stand) this.stand.visible = on;
+    if (this.standGlow) this.standGlow.visible = on;
+    if (this.workTower) this.workTower.visible = on;
+    const shell = this.hangar.getObjectByName('shell'); if (shell) shell.visible = on;
+    const props = this.hangar.getObjectByName('props'); if (props) props.visible = on;
+    const ix = this.hangar.getObjectByName('interactive');
+    if (ix) for (const ch of ix.children) if (ch.name !== 'bayDoors') ch.visible = on;
+    this.markShadow();
+  }
   // headless / settings diagnostics: AA config plus last-frame draw stats
   gfxInfo() {
     const r = this.renderer, post = this.post?.info?.() || {};
@@ -201,8 +234,9 @@ export class World {
   render() {
     const r = this.renderer, cam = this.camera, now = performance.now(), dt = Math.min(0.1, (now - this._rt) / 1000); this._rt = now;
     const alt = cam.position.y, gf = THREE.MathUtils.smoothstep(alt, 7000, 22000);
-    // loose set dressing is skipped far out; the interior shell (walls, roof) is part of the building and always drawn
-    this._props ??= this.hangar.getObjectByName('props'); if (this._props) this._props.visible = this.indoor || cam.position.length() < 300;
+    // hangar interior (floor, stand, dressing, crane) sleeps once the player is far above it; the outer
+    // cladding, roof and bay doors stay so the building does not vanish. Wakes early so the doorway never pops.
+    this._sleepInterior();
     // outdoors the planet pass draws sky + ground to the horizon; the local terrain and sea hand over to it 7-10 km out,
     // and dissolve completely on the way up (7-22 km)
     if (!this.indoor) this.earth.prepare(cam, dt);
@@ -218,6 +252,7 @@ export class World {
       if (this.indoor) this.scene.environment = this.localIn.rt.texture;
     }
     this.pickEnv();
+    this._updateShadows();
     if (this.post.enabled) this.post.render(dt);
     else { r.setRenderTarget(null); this.renderScene(); }
   }

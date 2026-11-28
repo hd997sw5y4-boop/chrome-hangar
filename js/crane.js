@@ -209,6 +209,12 @@ export class Crane {
   }
   update(dt, controlling) {
     if (!this.ready) return;
+    const falling = this.liftables?.some(L => L.held || Math.abs(L.vy || 0) > 1e-4);
+    const stirring = controlling || Math.abs(this.vx) > 1e-4 || Math.abs(this.vz) > 1e-4 || Math.abs(this.vL) > 1e-4
+      || Math.abs(this.sw?.x) > 1e-3 || Math.abs(this.sw?.z) > 1e-3 || Math.abs(this.sw?.vx) > 1e-3 || Math.abs(this.sw?.vz) > 1e-3
+      || falling;
+    if (!stirring) return;
+    this.ix.w?.markShadow?.();
     const c = controlling && this.cmd ? this.cmd : { vx: 0, vz: 0, vL: 0 }; if (!controlling) this.cmd = null;
     const acc = (v, t, a) => v + clamp(t - v, -a * dt, a * dt);
     const ovx = this.vx, ovz = this.vz;

@@ -363,7 +363,7 @@ class Game {
       this.smoke.update(fxDt, this.windNow || { x: 0, z: 0 }, this.world.h * this.world.renderer.getPixelRatio() / Math.tan(this.world.camera.fov * Math.PI / 360) / 2);
       this.robots?.update(dt);
       this.cart?.late(dt);
-      this.world.assembly?.update(dt);
+      if (this.world.interiorLive !== false) this.world.assembly?.update(dt);
       this.debris.update(fxDt); this.sparks.update(fxDt, this.world.h * this.world.renderer.getPixelRatio() / Math.tan(this.world.camera.fov * Math.PI / 360) / 2);
       if (this.windNow) this.world.wind = this.windNow;
       this.world.update(dt);

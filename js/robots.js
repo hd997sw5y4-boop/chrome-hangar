@@ -14,6 +14,8 @@ import { groundAt, rampEdges } from './ground.js';
 
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const UP = V3(0, 1, 0);
+const _frustum = new THREE.Frustum(), _proj = new THREE.Matrix4(), _sph = new THREE.Sphere();
+const SLEEP_NEAR = 18, SLEEP_PAD = 8;   // always tick if closer than 18 m; wake 8 m before the frustum edge
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const damp = (a, b, k, dt) => a + (b - a) * (1 - Math.exp(-k * dt));
@@ -634,14 +636,27 @@ export class Robots {
     if (!this.hangar.visible) return;
     const P = g.mode === 'build' ? g.build?.player : null;
     const base = hangarFrame(g), wide = this.list.some(r => r.jobKey === 'follow') ? playerFrame(g).concat(rampEdges()) : null;
+    _proj.multiplyMatrices(w.camera.projectionMatrix, w.camera.matrixWorldInverse);
+    _frustum.setFromProjectionMatrix(_proj);
     for (const r of this.list) {
       if (!r.enabled) continue;
       const follow = r.jobKey === 'follow';
+      const busy = follow || r.greet || r.boarding || r.seat || r.helping || r.broken || r.job?.type === 'custom';
+      const dist = Math.hypot(r.pos.x - cam.x, (r.pos.y || 0) - cam.y, r.pos.z - cam.z);
+      _sph.center.set(r.pos.x, (r.pos.y || 0) + 0.9, r.pos.z);
+      _sph.radius = 1.4 + SLEEP_PAD;
+      if (!busy && dist > SLEEP_NEAR && !_frustum.intersectsSphere(_sph)) {
+        if (!r.asleep) { r.asleep = true; r.sleepT = 0; }
+        r.sleepT += dt;
+        continue;
+      }
+      if (r.asleep) { r.t += r.sleepT || 0; r.asleep = false; r.sleepT = 0; }   // catch up idle breathing; no mixer to scrub
       // a follower may step out onto the apron with you, so he uses your full collision frame
       const obs = (follow ? wide : base).slice();
       if (P) obs.push(C(P.x, P.z, R_PLAYER));
       for (const o of this.list) if (o !== r) obs.push(C(o.pos.x, o.pos.z, R_ROBOT));
       r.update(dt, { cam, obs, player: follow && P ? P : null });
+      if (r.v > 0.02 || r.walkK > 0.01 || r.greet) w.markShadow?.();
     }
   }
 }
