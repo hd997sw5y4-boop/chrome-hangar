@@ -1,7 +1,7 @@
 // Cockpit view: an original crew-capsule interior that rides at the top of the stack, with live glass displays,
 // annunciators, stage lights, panel / dome lighting and clamped head-look. All geometry is built in code
 // (no external models); the capsule frame is: eye at the origin, looking down -Z along the rocket's nose, +Y = top of the window.
-// Input-agnostic: input() maps keys / pad to toggle(), recenter() and look(dx, dy); a phone layout can call those directly.
+// Input-agnostic: input() maps C to the cockpit camera slot, plus recenter() and look(dx, dy); a phone layout can call those directly.
 import * as THREE from 'three';
 import { mergeGeometries } from '../vendor/three/addons/utils/BufferGeometryUtils.js';
 import { layout } from './rocket.js';
@@ -103,32 +103,29 @@ export class Cockpit {
     const st = document.createElement('style');
     st.textContent = 'body.ckpt #fStats,body.ckpt #fMeters{display:none}';
     document.head.appendChild(st);
-    const pk = document.getElementById('camPicker');
-    if (pk) { const b = document.createElement('button'); b.innerHTML = '<b>C</b>Cockpit'; b.onclick = () => { pk.classList.add('hidden'); this.toggle(true); }; pk.appendChild(b); }
   }
 
   // ---- input (keyboard / DualSense); look() and recenter() are the device-free entry points ----
   input(inp) {
-    if (inp.hit('KeyC')) this.toggle();   // C toggles; DualSense L3 is engine cut (throttle.js)
+    if (inp.hit('KeyC')) this.fm.setCam(4);   // C jumps to the cockpit camera slot (L3 is engine cut)
     if (!this.on) return;
     if (inp.hit('KeyQ') || inp.hit('Pad11')) this.recenter(); // Q / R3
     this.look(inp.look.x, inp.look.y);
   }
   look(dx, dy) { this.yawT = THREE.MathUtils.clamp(this.yawT - dx, -YAW_MAX, YAW_MAX); this.pitchT = THREE.MathUtils.clamp(this.pitchT - dy, PITCH_MIN, PITCH_MAX); }
   recenter() { this.yawT = 0; this.pitchT = REST_PITCH; }
-  toggle(force) {
-    const want = force ?? !this.on, f = this.fm.f;
+  // enter() is called from FlightMode.setCam when the cockpit slot is selected
+  enter() { this.setOn(true); }
+  setOn(want) {
+    const f = this.fm.f;
     if (want && (!f || f.phase === 'crashed' || !this.fm.group)) return;
     if (want === this.on) return;
     this.on = want;
     if (want) { this.build(); this.recenter(); this.yaw = 0; this.pitch = REST_PITCH; this.prevVel.set(f.vel.x, f.vel.y, f.vel.z); this.inst.update(0, this.data(1 / 60), true); }
     else this.hide();
     document.body.classList.toggle('ckpt', this.on);
-    const el = document.getElementById('camName');
-    if (el) { el.textContent = this.on ? 'C \u00b7 Cockpit' : `${this.fm.cam + 1} \u00b7 ${document.getElementById('btnCam')?.textContent.replace('View: ', '') || ''}`; el.classList.remove('show'); void el.offsetWidth; el.classList.add('show'); }
-    this.g.audio?.tap?.();
   }
-  off() { if (this.on) { this.on = false; this.hide(); document.body.classList.remove('ckpt'); } }
+  off() { this.setOn(false); }
   hide() { if (!this.built) return; this.root.visible = false; for (const l of this.lights) l.intensity = 0; this.fm.camInit = false; }
 
   // steering reference for flight.shapeSteer: stick up = nose toward the top of the window, right = right.
