@@ -16,6 +16,7 @@ import { LandingKit } from './landing.js';
 import { SlowMo } from './slowmo.js';
 import { ShardPool, WreckSettle } from './wreck.js';
 import { FlightRecorder, ReplayPlayer } from './replay.js';
+import { applyKeys, applyAbs, cut as cutThr, toggle as toggleEng, snapshot, engineState } from './throttle.js';
 
 const $ = id => document.getElementById(id);
 // Flight views (keys 1-8, C cycles). Index order is what the picker and the saved setting use.
@@ -45,8 +46,10 @@ export class FlightMode {
     $('btnFlightBack').onclick = () => this.back();
     // touch throttle: absolute slider
     const tt = $('thrTouch'), track = tt.querySelector('.track');
-    const setT = e => { const r = track.getBoundingClientRect(); for (const t of e.changedTouches) { this.touchThr = THREE.MathUtils.clamp(1 - (t.clientY - r.top) / r.height, 0, 1); } e.preventDefault(); };
+    const setT = e => { const r = track.getBoundingClientRect(); for (const t of e.changedTouches) { this.touchThr = THREE.MathUtils.clamp(1 - (t.clientY - r.top) / r.height, 0, 1); } if (e.type === 'touchstart') this.touchFresh = true; e.preventDefault(); };
     tt.addEventListener('touchstart', setT, { passive: false }); tt.addEventListener('touchmove', setT, { passive: false });
+    const engBtn = $('btnEngCut');
+    if (engBtn) engBtn.onclick = () => this.toggleEngine();
     const line = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 1, 0)]);
     this.guideLine = new THREE.Line(line, new THREE.LineDashedMaterial({ color: 0x7fe7ff, dashSize: 3, gapSize: 2, transparent: true, opacity: 0.8 }));
     this.guideLine.frustumCulled = false; this.guideLine.visible = false; this.w.scene.add(this.guideLine);
@@ -88,15 +91,15 @@ export class FlightMode {
     // build the smoke depth pre-pass target and its shader now (first smoke would otherwise allocate it on the ignition frame)
     this.g.smoke.emit(SPOTS.pad.x, 0.3, SPOTS.pad.z, 0, 0, 0, 0.01, 0.12, 0, 0, 0);
     this.flash = 0; this.armT = 0; this.w.captureLocal('out', new THREE.Vector3(SPOTS.pad.x, 8, SPOTS.pad.z), [this.group]);
-    this.thr = Math.min(1, eng.heat.safeThrottle); this.touchThr = null; this.hotWarned = false; this.countdown = null; this.acc = 0; this.ended = false; this.endT = 0; this.freeEnd = null; this.landedToast = false; this.fr.hide(); this.kit.reset(this.f); try { localStorage.removeItem('ch_goal_idx'); } catch (_) {} this.syncEndBtn(); this.slow.reset(); this.g.fxScale = 1; this.rec.reset(); this.endReplay(); this.reached = null; this.shake = 0; this.camInit = false; this.armed = false;
+    this.thr = Math.min(1, eng.heat.safeThrottle); this.lastThr = this.thr; this.touchThr = null; this.cutLatch = false; this.padThrHeld = false; this.hotWarned = false; this.countdown = null; this.acc = 0; this.ended = false; this.endT = 0; this.freeEnd = null; this.landedToast = false; this.fr.hide(); this.kit.reset(this.f); try { localStorage.removeItem('ch_goal_idx'); } catch (_) {} this.syncEndBtn(); this.slow.reset(); this.g.fxScale = 1; this.rec.reset(); this.endReplay(); this.reached = null; this.shake = 0; this.camInit = false; this.armed = false;
     $('btnLaunch').classList.remove('hidden'); $('countdown').classList.add('hidden');
     this.st0 = stats(this.g.rocket, this.g.fill);
     $('mThr').querySelector('em').style.bottom = (eng.minThrottle * 100) + '%';
     $('thrTouch').querySelector('em').style.bottom = (eng.minThrottle * 100) + '%';
     this.syncPose(); this.syncButtons(); this.setCam(this.cam, true); this.zoomT = this.zoom = 1;
-    if (this.g.mission && !this.g.training?.active) this.g.prompt(IS_TOUCH ? 'Tap <b>Launch</b>. Throttle on the right, steer with the left stick.' : 'Press <b>Space</b> to launch. Shift / R throttle up, F down, WASD steer, C camera.');
+    if (this.g.mission && !this.g.training?.active) this.g.prompt(IS_TOUCH ? 'Tap <b>Launch</b>. Throttle on the right, <b>ENGINE ON/OFF</b> to cut or relight, steer with the left stick.' : 'Press <b>Space</b> to launch. Shift / R throttle up, Ctrl / F down, Z full, X cut, WASD steer, C camera.');
   }
-  exit() { this.w.post.setDOF(false); this.w.post.setBlur(0); this.w.post.setHeat(new THREE.Vector4(0, 0, 0, 0)); this.w.setAltitude(0); this.w.followSun(SPOTS.pad); this.w.camera.near = 0.1; this.w.camera.far = 60000; this.w.camera.updateProjectionMatrix(); this.clear(); $('camPicker').classList.add('hidden'); this.w.camera.up.set(0, 1, 0); this.guideLine.visible = false; this.hpUI.detach(); this.g.prompt(null); $('landGuide').classList.add('hidden'); this.g.audio.setEngine(0); this.padRel?.reset(null); this.fr.hide(); this.kit.hide(); this.slow.reset(); this.g.fxScale = 1; this.endReplay(); }
+  exit() { this.g.input.flightKeys = false; this.w.post.setDOF(false); this.w.post.setBlur(0); this.w.post.setHeat(new THREE.Vector4(0, 0, 0, 0)); this.w.setAltitude(0); this.w.followSun(SPOTS.pad); this.w.camera.near = 0.1; this.w.camera.far = 60000; this.w.camera.updateProjectionMatrix(); this.clear(); $('camPicker').classList.add('hidden'); this.w.camera.up.set(0, 1, 0); this.guideLine.visible = false; this.hpUI.detach(); this.g.prompt(null); $('landGuide').classList.add('hidden'); this.g.audio.setEngine(0); this.padRel?.reset(null); this.fr.hide(); this.kit.hide(); this.slow.reset(); this.g.fxScale = 1; this.endReplay(); }
   st0Top() { return stats(this.g.rocket, this.g.fill).top; }
   clear() { clearTimeout(this.cdTimer); this.shards?.clear(); this.wreckFx?.clear(); if (this.wreck) { this.wreck.removeFromParent(); disposeTree(this.wreck); this.wreck = null; } if (this.crashFlash) { this.crashFlash.light.removeFromParent(); this.crashFlash = null; } if (this.group) { this.group.removeFromParent(); disposeTree(this.group); this.group = null; } }
   back() {
@@ -112,6 +115,20 @@ export class FlightMode {
     const pad = this.g.input.lastDevice === 'pad', kb = !pad && this.g.input.lastDevice !== 'touch';
     const html = flying ? 'End flight' + (pad ? ' <kbd>○</kbd>' : kb ? ' <kbd>B</kbd>' : '') : 'Back to hangar';
     if (this._endBtn === html) return; this._endBtn = html; b.innerHTML = html;
+  }
+  toggleEngine() {
+    const f = this.f; if (!f || this.ended) return;
+    const r = toggleEng(this, f.e, f.fuelFrac, f.eng?.minThrottle || 0);
+    if (!r.ok) this.g.toast(f.e.failed ? 'Engine failed — cannot relight' : 'No fuel — cannot relight');
+    else this.g.audio.tap();
+    this.syncEngBtn();
+  }
+  syncEngBtn(st) {
+    const b = $('btnEngCut'); if (!b) return;
+    st = st || (this.f ? engineState(this.f.e, this.f.fuelFrac) : 'OFF');
+    const html = st === 'ON' ? 'ENGINE ON' : st === 'NO FUEL' ? 'NO FUEL' : 'ENGINE OFF';
+    const cls = 'touchOnly ' + (st === 'ON' ? 'on' : st === 'NO FUEL' ? 'dry' : 'off');
+    if (this._engBtn === html + cls) return; this._engBtn = html + cls; b.textContent = html; b.className = cls;
   }
   launch() {
     if (this.countdown != null || this.f.phase !== 'pad' || this.f.e.on) return;
@@ -149,6 +166,7 @@ export class FlightMode {
 
   update(dt, blocked) {
     const inp = this.g.input, f = this.f, eng = f.eng;
+    inp.flightKeys = false;
     if (this.rp.on) { this.rp.update(dt, inp); this.shards.update(dt); this.wreckFx.update(dt); return; }   // replay owns the camera; the sim is over
     if (this.fr.open) this.fr.poll(inp, dt);
     // slow-mo beat: any key / button / tap eases it out early; ts scales sim + effects time (the sim still takes fixed DT steps)
@@ -170,17 +188,21 @@ export class FlightMode {
       if (inp.hit('KeyP')) this.hpUI.toggle();
       if (inp.hit('KeyG')) { this.g.settings.guide = !this.g.settings.guide; this.g.applySettingsLight(); }
       if (inp.hit('KeyB') || inp.hit('Pad1')) { this.back(); return; }
-      // throttle: keys are incremental, R2 / touch slider are absolute
-      const k = c => inp.down(c) ? 1 : 0;
-      const d = k('ShiftLeft') + k('ShiftRight') + k('KeyR') - k('KeyF');
-      if (d) { this.thr = THREE.MathUtils.clamp(this.thr + d * 0.7 * dt, 0, 1); this.touchThr = null; }
-      if (inp.hit('KeyZ')) this.thr = 1; if (inp.hit('KeyX')) this.thr = 0;
-      if (inp.pad && (inp.pad.b[7] > 0.04 || this.padThrHeld)) { this.thr = inp.pad.b[7]; this.padThrHeld = inp.pad.b[7] > 0.04; }
-      if (this.touchThr != null) this.thr = this.touchThr;
+      // throttle: keys are incremental (~50%/s), R2 / the touch slider are absolute; X / L3 cut
+      inp.flightKeys = true;
+      const prev = this.thr;
+      if (inp.hit('KeyX') || inp.hit('Pad10')) cutThr(this);
+      else {
+        this.thr = applyKeys(this.thr, inp, dt);
+        if (this.thr !== prev) this.touchThr = null;
+        if (inp.hit('KeyZ')) this.cutLatch = false;
+        this.thr = applyAbs(this.thr, inp, this);
+        if (this.thr > 0) this.lastThr = this.thr;
+      }
       // steering in the camera's frame
       this.shapeSteer(inp.steer.x, inp.steer.y, dt);
       this.orbit.yaw -= inp.look.x; this.orbit.pitch = THREE.MathUtils.clamp(this.orbit.pitch - inp.look.y, -0.45, 1.5);
-    } else this.shapeSteer(0, 0, dt);   // menus / results open: let go of the stick instead of holding the last value
+    } else { inp.flightKeys = false; this.shapeSteer(0, 0, dt); }   // menus / results open: let go of the stick instead of holding the last value
     // countdown
     if (this.countdown != null) {
       this.countdown -= dt;
@@ -225,7 +247,7 @@ export class FlightMode {
     if (ev.type === 'cutoff') a.coolTicks();
     if (ev.type === 'chute') { a.noise(0.5, 700, 0.8, 0.25, 0, 'bandpass', 0.3); this.g.toast('Chute out'); }
     if (ev.type === 'chuteTorn') { a.noise(0.3, 2400, 1, 0.25, 0, 'highpass', 0.2); a.bad(); this.g.toast(`Chute torn: opened at ${Math.round(ev.speed)} m/s (under 140 holds)`, 3000); }
-    if (ev.type === 'landed') { a.clamp(); a.coolTicks(); if (this.g.mission) this.endFlight('landed'); else { this.rec.event(this.f, this.f.soft ? 'Soft landing' : 'Touchdown'); if (!this.landedToast) { this.landedToast = true; this.g.toast('Touched down — throttle up to take off, or End flight when you are done'); } } }
+    if (ev.type === 'landed') { a.clamp(); a.coolTicks(); cutThr(this); if (this.g.mission) this.endFlight('landed'); else { this.rec.event(this.f, this.f.soft ? 'Soft landing' : 'Touchdown'); if (!this.landedToast) { this.landedToast = true; this.g.toast('Touched down — throttle up to take off, or End flight when you are done'); } } }
     if (ev.type === 'crash') this.crash(ev.kind);
   }
   // a cluster bell that quit goes dark; fins that tore off leave the stack (sim + mesh) and tumble away
@@ -407,7 +429,13 @@ export class FlightMode {
     const bar = (el, key, pct) => { const v = pct + '%'; if (H[key] !== v) { H[key] = v; el.style.height = v; } };
     txt('fAlt', fmt(f.alt)); txt('fVs', f.vs.toFixed(1)); txt('fSpd', fmt(f.speed));
     txt('fTilt', fmt(f.tilt)); txt('fWind', Math.hypot(f.windNow.x, f.windNow.z).toFixed(1));
+    txt('fThr', Math.round(this.thr * 100));
+    const st = engineState(f.e, f.fuelFrac); txt('fEng', st);
+    const engEl = $('fEng'); if (engEl) engEl.className = st === 'ON' ? 'on' : st === 'NO FUEL' ? 'dry' : 'off';
+    this.syncEngBtn(st);
     this.windArrow(f);
+    // cockpit (gb5): CH.engine / game.engine / flight.engine — { thr, thrCmd, on, state, failed, fuelFrac }
+    this.engine = this.g.engine = snapshot(this.thr, f.e, f.fuelFrac);
     const q = x => Math.round(x * 10) / 10;
     bar(this.thrI ??= $('mThr').querySelector('i'), 'thr', q(this.thr * 100)); bar(this.thrTI ??= $('thrTouch').querySelector('i'), 'thrT', q(this.thr * 100));
     bar(this.fuelI ??= $('mFuel').querySelector('i'), 'fuel', q(f.fuelFrac * 100)); bar(this.heatI ??= $('mHeat').querySelector('i'), 'heat', q(Math.min(100, f.e.heat)));

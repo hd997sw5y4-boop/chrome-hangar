@@ -11,12 +11,18 @@ export class Input {
     this.taps = []; this.throttleAbs = null; this.padArmed = false; this.padPrev = []; this.padActive = false;
     this.sens = 1; this.invertY = false; this.locked = false; this.enabled = true;
     this.touchMove = { x: 0, y: 0 }; this.zoom = 0;
+    this.flightKeys = false;   // flight sets this so Ctrl can lower the throttle without tripping browser shortcuts
     addEventListener('keydown', e => {
       if (e.target.tagName === 'INPUT' && e.target.type === 'text') return;
       if (['Tab', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
       if (!this.keys.has(e.code)) this.pressed.add((e.ctrlKey || e.metaKey ? 'Ctrl+' : '') + (e.shiftKey && e.code !== 'ShiftLeft' && e.code !== 'ShiftRight' ? 'Shift+' : '') + e.code);
       this.keys.add(e.code); this.lastDevice = 'kb';
       if ((e.ctrlKey || e.metaKey) && (e.code === 'KeyZ' || e.code === 'KeyY')) e.preventDefault();
+      // Flight: Ctrl lowers throttle. Block page shortcuts (Ctrl+S/P/F/R/…) but never Ctrl+W / T / N / Q —
+      // those can close or open tabs and the browser often will not honour preventDefault.
+      if (this.flightKeys && e.code !== 'ControlLeft' && e.code !== 'ControlRight') {
+        if (e.ctrlKey && !e.metaKey && !['KeyW', 'KeyT', 'KeyN', 'KeyQ'].includes(e.code)) e.preventDefault();
+      }
     });
     addEventListener('keyup', e => this.keys.delete(e.code));
     const clear = () => { this.keys.clear(); this.throttleAbs = null; this.touchMove = { x: 0, y: 0 }; };

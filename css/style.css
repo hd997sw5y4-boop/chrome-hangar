@@ -126,6 +126,11 @@ input[type=text]{font:inherit;background:#1d242b;color:var(--ink);border:1px sol
 #thrTouch{position:fixed;right:calc(18px + var(--sr));bottom:calc(24px + var(--sb));width:70px;height:200px;pointer-events:auto;touch-action:none;text-align:center;font-size:11px;color:var(--dim)}
 #thrTouch .track{position:relative;width:56px;height:180px;margin:0 auto;border-radius:16px;background:rgba(255,255,255,.08);border:1px solid var(--line);overflow:hidden}
 #thrTouch .track i{position:absolute;left:0;right:0;bottom:0;background:rgba(127,231,255,.45)}#thrTouch .track em{position:absolute;left:0;right:0;height:2px;background:var(--warn)}
+#btnEngCut{position:fixed;right:calc(14px + var(--sr));bottom:calc(236px + var(--sb));width:78px;min-height:72px;padding:8px 6px;border-radius:16px;font-size:12px;font-weight:700;letter-spacing:.04em;line-height:1.25;z-index:6;text-align:center;white-space:pre-line}
+#btnEngCut.on{background:rgba(40,180,90,.35);border-color:#5dff9a;color:#e8ffe8}
+#btnEngCut.off{background:rgba(255,255,255,.08);color:var(--ink)}
+#btnEngCut.dry{background:rgba(255,174,46,.2);border-color:#ffae2e;color:#ffd59a}
+#fEng.on{color:#5dff9a}#fEng.off{color:var(--dim)}#fEng.dry{color:#ffae2e}
 body.touch.build #tray{left:calc(160px + var(--sl))}body.touch.build #standCtl{top:calc(60px + var(--st));transform:none}
 body.menuopen #hud,body.menuopen #buildUI,body.menuopen #testUI,body.menuopen #flightUI,body.menuopen #stickL,body.menuopen #crosshair{display:none!important}
 body.touch #fBtns{max-width:calc(100% - 320px - var(--sl) - var(--sr))}
@@ -152,7 +157,7 @@ body.touch #fBtns{max-width:calc(100% - 320px - var(--sl) - var(--sr))}
  .ctlRow{padding:4px 8px;gap:6px}#testCtl1{bottom:calc(56px + var(--sb))}.ctlRow button{min-height:34px;padding:5px 10px;font-size:13px}.thrCtl{min-width:120px}#tFill{width:130px}
  #fBtns{padding:4px;gap:4px}#fBtns button{min-height:34px;padding:5px 8px;font-size:12px}#landGuide b{font-size:24px}#countdown{font-size:60px}
  #prompt{top:calc(48px + var(--st));padding:6px 12px;font-size:13px;max-width:min(520px,86vw);gap:6px}#prompt .factCard{padding:6px 9px}#prompt .factCard b{font-size:13px;margin:1px 0 2px}#prompt .factCard p{font-size:12px}#topRight button{width:40px;height:40px}
- .stick{width:110px;height:110px}#thrTouch{height:160px}#thrTouch .track{height:140px}
+ .stick{width:110px;height:110px}#thrTouch{height:160px}#thrTouch .track{height:140px}#btnEngCut{bottom:calc(196px + var(--sb));min-height:58px;width:70px;font-size:11px}
 }
 
 /* flight view picker + view name flash */
@@ -208,5 +213,5 @@ body.intro #hud,body.intro #menu,body.intro #buildUI,body.intro #testUI,body.int
 #replayBar i{display:block;width:160px;height:4px;border-radius:2px;background:rgba(255,255,255,.12);overflow:hidden}#replayBar em{display:block;height:100%;width:0;background:var(--accent)}
 #replayBar button{min-height:32px;padding:4px 12px;font-size:13px}#replayBar kbd{font:inherit;font-size:11px;color:var(--dim);border:1px solid var(--line);border-radius:5px;padding:0 5px;margin-left:6px}
 #replayBar small{flex-basis:100%;text-align:center;color:#ffd34d;font-size:13px;min-height:1em}
-#flightUI.replaying #fBtns,#flightUI.replaying #landGuide,#flightUI.replaying #thrTouch{display:none!important}
+#flightUI.replaying #fBtns,#flightUI.replaying #landGuide,#flightUI.replaying #thrTouch,#flightUI.replaying #btnEngCut{display:none!important}
 #fWindArrow{display:inline-block;margin-left:4px;color:var(--accent);font-weight:900;font-size:17px;vertical-align:-2px;line-height:1;transition:transform .25s ease}

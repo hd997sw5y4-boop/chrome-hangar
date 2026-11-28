@@ -96,6 +96,8 @@
     <div><label>Speed</label><b id="fSpd">0</b><i>m/s</i></div>
     <div><label>Tilt</label><b id="fTilt">0</b><i>°</i></div>
     <div><label>Wind <span id="fWindArrow" class="hidden" title="Wind direction, relative to the view">↑</span></label><b id="fWind">0</b><i>m/s</i></div>
+    <div><label>Throttle</label><b id="fThr">0</b><i>%</i></div>
+    <div><label>Engine</label><b id="fEng">OFF</b><i id="fEngUnit"></i></div>
   </div>
   <div id="fMeters">
     <div class="vmeter" id="mThr"><i></i><em></em><span>THR</span></div>
@@ -121,6 +123,7 @@
   <div id="camPicker" class="hidden"></div>
   <div id="camName"></div>
   <div id="thrTouch" class="touchOnly"><div class="track"><i></i><em></em></div><span>Throttle</span></div>
+  <button id="btnEngCut" class="touchOnly" type="button" title="Cut or relight the engine">ENGINE OFF</button>
 </div>
 
 <div id="stickL" class="stick touchOnly hidden"><div class="knob"></div></div>
