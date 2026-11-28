@@ -15,7 +15,7 @@ import { groundAt, rampEdges } from './ground.js';
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const UP = V3(0, 1, 0);
 const _frustum = new THREE.Frustum(), _proj = new THREE.Matrix4(), _sph = new THREE.Sphere();
-const SLEEP_NEAR = 18, SLEEP_PAD = 8;   // always tick if closer than 18 m; wake 8 m before the frustum edge
+const SLEEP_NEAR = 28, SLEEP_PAD = 16;   // always live if closer than 28 m; wake 16 m before the frustum edge so they never pop in
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const damp = (a, b, k, dt) => a + (b - a) * (1 - Math.exp(-k * dt));

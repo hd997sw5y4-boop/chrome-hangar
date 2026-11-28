@@ -551,12 +551,13 @@ export class Outdoor {
   update(dt, cam, wind = { x: 2, z: 0.6 }) {
     const indoor = this.w.indoor;
     const doors = this.w.bayOpen ?? 1;            // 0 closed, 1 open; default open (build starts with doors open)
-    const sealed = indoor && doors < 0.08;        // hangar sealed: nothing outside can be seen
-    // keep terrain through an open door; hide it only once the leaves have actually shut (hysteresis via 0.08 / 0.15)
+    const want = this.w.bayWant ?? 1;
+    // hide outdoor only when the leaves are fully shut and not already opening, so the apron is back
+    // before the first gap is visible; wake the instant the player pulls the lever
+    const sealed = indoor && doors <= 0 && want <= 0;
     if (this.terrain) {
-      const hideT = indoor && doors < (this._hideT ? 0.15 : 0.08);
+      const hideT = sealed;
       if (this.terrain.visible !== !hideT) this.terrain.visible = !hideT;
-      this._hideT = hideT;
     }
     if (sealed) {
       if (!this._sealed) {

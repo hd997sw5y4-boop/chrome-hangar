@@ -266,15 +266,15 @@ class Doors {
     const v = open ? 1 : 0; if (v === this.target) return;
     this.target = v; this.from = this.t; this.u = 0; this.delay = 0.35; this.ix.sfx.lever();
   }
-  forceOpen() { if (this.t === 1 && this.target === 1) { this.ix.w.bayOpen = 1; return; } this.target = 1; this.t = 1; this.u = 1; this.rumble?.stop(); this.rumble = null; this.place(); }
+  forceOpen() { if (this.t === 1 && this.target === 1) { this.ix.w.bayOpen = 1; this.ix.w.bayWant = 1; return; } this.target = 1; this.t = 1; this.u = 1; this.rumble?.stop(); this.rumble = null; this.place(); }
   place() {
     const k = this.t;
     for (const l of this.leaves) { const { s, w } = l.userData; l.position.x = s * (w / 2 - 0.12) + s * k * (H.door + 0.6); }
-    if (this.ix?.w) this.ix.w.bayOpen = k;
+    if (this.ix?.w) { this.ix.w.bayOpen = k; this.ix.w.bayWant = this.target; }
   }
   update(dt) {
     if (!this.leaves.length) return;
-    if (this.ix?.w) this.ix.w.bayOpen = this.t;
+    if (this.ix?.w) { this.ix.w.bayOpen = this.t; this.ix.w.bayWant = this.target; }
     if (this.moving) this.ix.w?.markShadow?.();
     // lever: springy swing toward its target angle
     const tgtA = this.target ? 1 : -1; this.leverV += ((tgtA - this.leverA) * 160 - this.leverV * 14) * dt; this.leverA += this.leverV * dt;
