@@ -549,11 +549,29 @@ export class Outdoor {
 
   // ---------- per frame ----------
   update(dt, cam, wind = { x: 2, z: 0.6 }) {
+    const indoor = this.w.indoor;
+    const doors = this.w.bayOpen ?? 1;            // 0 closed, 1 open; default open (build starts with doors open)
+    const want = this.w.bayWant ?? 1;
+    // hide outdoor only when the leaves are fully shut and not already opening, so the apron is back
+    // before the first gap is visible; wake the instant the player pulls the lever
+    const sealed = indoor && doors <= 0 && want <= 0;
+    if (this.terrain) {
+      const hideT = sealed;
+      if (this.terrain.visible !== !hideT) this.terrain.visible = !hideT;
+    }
+    if (sealed) {
+      if (!this._sealed) {
+        this._sealed = true;
+        for (const ch of this.group.children) ch.visible = false;
+        for (const ch of this.chunks || []) ch.visible = false;
+      }
+      return;   // no refine, wind-sock or scatter work while sealed
+    }
+    this._sealed = false;
     this.time += dt;
-    this.terrain?.refine(cam.position, 2);
+    if (!indoor) this.terrain?.refine(cam.position, 2);
     if (this.oceanMat) this.oceanMat.uniforms.uT.value = this.time;
     if (this.surf) for (const s of this.surf) { s.material.map.offset.x = (Math.sin(this.time * 0.5 + s.userData.surf) * 0.18); }
-    const indoor = this.w.indoor;
     if (indoor !== this._hidIndoor) {
       this._hidIndoor = indoor;
       for (const ch of this.group.children) {
@@ -570,6 +588,7 @@ export class Outdoor {
       let any = false; for (const im of ch.userData.items) { im.visible = d < im.userData.far; any ||= im.visible; }
       ch.visible = any;
     }
+    if (indoor) return;   // socks and far scatter are already hidden
     const ws = Math.hypot(wind.x, wind.z), dir = Math.atan2(-wind.z, wind.x);
     for (const s of this.socks) {
       s.pivot.rotation.y = dir + Math.sin(this.time * 0.7 + s.ph) * 0.12;

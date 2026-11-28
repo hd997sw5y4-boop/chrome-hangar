@@ -9,6 +9,7 @@ import { Outdoor, bake } from './outdoor.js';
 import './haze.js';   // height-integrated blue haze for every fogged material
 import { Earth, GLOBE_FADE, TERRAIN_FADE } from './earth.js';
 import { Post } from './post.js';
+import { applyVideo, applyShadows, videoPixelRatio } from './video-settings.js';
 import { buildInterior, HANGAR } from './hangar.js';
 import { buildPadComplex, TRENCH } from './pad.js';
 import { buildAssemblyStand, DECK as STAND_DECK, HALF as STAND_HALF } from './stand.js';
@@ -49,7 +50,7 @@ let s0 = 3; const rnd = () => (s0 = (s0 * 16807) % 2147483647) / 2147483647;
 
 export class World {
   constructor(canvas, quality = 'high') {
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: false });
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: false });
     const r = this.renderer;
     r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 1.0;
     r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFShadowMap;
@@ -121,6 +122,7 @@ export class World {
     if (o) { o.uSun.value.copy(this.sunDir); o.uSunCol.value.copy(this.sun.color).multiplyScalar(S.soft ? 0.25 : 1);
       o.uHorizon.value.copy(this.skyHorizon).multiplyScalar(this.skyNorm * 0.85); o.uZenith.value.copy(this.skyZenith).multiplyScalar(this.skyNorm); }   // the sea still reflects the sky when we are high up
     this.followSun(this.sun.target.position);
+    if (this._video) applyVideo(this, this._video);
   }
   // Local reflection probe: the real surroundings (lamps, floor, tower, terrain) rendered into a PMREM cube, so chrome
   // reflects what is actually around it instead of a distant HDRI. Indoors: once per hangar build; outdoors: at the pad.
@@ -153,24 +155,36 @@ export class World {
     this.sun.visible = !v;   // no unshadowed sunlight leaking through the hangar roof
     if (!v) this.hemi.intensity = this.sky ? this.sky.hemi * (1 - THREE.MathUtils.smoothstep(this.alt || 0, 1500, 40000)) : this.hemi.intensity;
     for (const l of this.bays || []) l.visible = v;
+    this._shadowHold = 2; this.markShadow();
+    if (this._video) applyVideo(this, this._video);
   }
 
-  applyQuality(q, w, h) {
+  applyQuality(q, w, h, aa) {
     const p = PRESETS[q] || PRESETS.high;
     this.quality = q; this.preset = p;
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, p.pr));
-    this.shadowSize = p.shadow;
-    this.renderer.shadowMap.enabled = p.shadow > 0;
+    this.renderer.setPixelRatio(this._video ? videoPixelRatio(this._video, q, p) : Math.min(window.devicePixelRatio || 1, p.pr));
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.renderer.shadowMap.autoUpdate = false;
+    if (this._video) applyShadows(this, this._video, q, p);
+    else {
+      this.shadowSize = p.shadow;
+      this.renderer.shadowMap.enabled = p.shadow > 0;
+      this._shadowHold = 3; this.markShadow();
+    }
+    const sh = this.shadowSize || p.shadow || 512;
     for (const l of [this.sun, this.bayDir, this.spot]) {
       if (!l?.shadow) continue;
-      l.shadow.mapSize.set(p.shadow || 512, p.shadow || 512); l.shadow.radius = q === 'high' || q === 'ultra' ? 4 : 2; l.shadow.blurSamples = 12;
+      l.shadow.mapSize.set(sh, sh); l.shadow.radius = q === 'high' || q === 'ultra' ? 4 : 2; l.shadow.blurSamples = 12;
       if (l.shadow.map) { l.shadow.map.dispose(); l.shadow.map = null; }
     }
     this.setIndoor(this.indoor ?? true);
     this.scene.traverse(o => { if (o.material) [].concat(o.material).forEach(m => m.needsUpdate = true); });
     this.resize(w, h);
-    this.post.setup(q, w, h);
+    this.post.setup(q, w, h, aa);
+    // first call is during boot; Game Builder 2's loader warmup covers that. Re-warm after a later quality change.
+    if (this._didWarm) this.warmup();
+    else this._didWarm = true;
+    if (this._video) applyVideo(this, this._video);
     if (p.hdri !== (this.hdriSize || '1k') && this.envs.hangar) this.loadHDRIs(p.hdri, this.skyKey).catch(() => {});
   }
   resize(w, h) {
@@ -178,6 +192,35 @@ export class World {
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
     this.post?.resize(w, h);
+  }
+  // Compile the active programs so the first real frame does not hitch on shader compile.
+  warmup() {
+    const r = this.renderer;
+    try { r.compile(this.scene, this.camera); } catch (_) {}
+  }
+  markShadow() { this._shadowDirty = true; }
+  _updateShadows() {
+    const r = this.renderer;
+    r.shadowMap.autoUpdate = false;
+    if (!r.shadowMap.enabled) return;
+    if (this._shadowDirty || (this._shadowHold || 0) > 0) {
+      r.shadowMap.needsUpdate = true;
+      this._shadowHold = Math.max(0, (this._shadowHold || 0) - 1);
+      this._shadowDirty = false;
+    }
+  }
+  // headless / settings diagnostics: AA config plus last-frame draw stats
+  gfxInfo() {
+    const r = this.renderer, post = this.post?.info?.() || {};
+    let casters = 0;
+    this.scene.traverse(o => { if ((o.isMesh || o.isInstancedMesh) && o.castShadow && o.visible !== false) casters++; });
+    return {
+      quality: this.quality, indoor: !!this.indoor, alt: this.alt || 0,
+      ...post,
+      draws: r.info.render.calls, triangles: r.info.render.triangles,
+      points: r.info.render.points, lines: r.info.render.lines,
+      casters, programs: r.info.programs?.length ?? 0,
+    };
   }
   render() {
     const r = this.renderer, cam = this.camera, now = performance.now(), dt = Math.min(0.1, (now - this._rt) / 1000); this._rt = now;
@@ -199,6 +242,7 @@ export class World {
       if (this.indoor) this.scene.environment = this.localIn.rt.texture;
     }
     this.pickEnv();
+    this._updateShadows();
     if (this.post.enabled) this.post.render(dt);
     else { r.setRenderTarget(null); this.renderScene(); }
   }

@@ -422,6 +422,7 @@ export class Cart {
     const moving = this.driving || this.v.lengthSq() > 0.0004 || this.w3.lengthSq() > 0.0004 || this.awake > 0;
     this.crashCd -= dt;
     if (moving) {
+      this.w.markShadow?.();
       this.awake = this.driving ? 1 : Math.max(0, (this.awake || 0) - dt);
       this._self = true; const all = playerFrame(this.g); this._self = false;
       const R = 3.2, obs = all.filter(o => Math.abs(o.x - this.p.x) < R + (o.r || o.hx || 0) && Math.abs(o.z - this.p.z) < R + (o.r || o.hz || 0));
